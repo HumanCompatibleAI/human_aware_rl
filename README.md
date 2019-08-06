@@ -1,9 +1,8 @@
-# Human-Robot Coordination
+# Human-Aware Reinforcement Learning
 
 ## Installation
 
-When cloning the repository, make sure you also clone the submodules.
-
+When cloning the repository, make sure you also clone the submodules:
 ```
 git clone --recursive git@github.com:HumanCompatibleAI/human_aware_rl.git
 ```
@@ -14,19 +13,17 @@ git clone --single-branch --branch BRANCH_NAME --recursive git@github.com:HumanC
 ```
 
 It is useful to setup a conda environment with Python 3.7:
-
 ```
-conda create -n hrc python=3.7
-conda activate hrc
+conda create -n harl python=3.7
+conda activate harl
 ```
 
 To complete the installation, run:
-
 ```
 install.sh
 ```
 
-Then install tensorflow (the GPU or non-GPU version depending on your setup):
+Then install tensorflow (the GPU **or** non-GPU version depending on your setup):
 ```
 pip install tensorflow==1.13.1
 ```
@@ -40,7 +37,7 @@ pip install tensorflow-gpu==1.13.1
 To verify your installation, you can try running the following command from the inner `human_aware_rl` folder:
 
 ```
-python run_tests.py -f
+python run_tests.py
 ```
 
 ## Repo Structure Overview
