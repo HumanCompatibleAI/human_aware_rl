@@ -13,6 +13,8 @@ setup(name='human_aware_rl',
         'memory_profiler',
         'sacred==0.7.4',
         'pymongo',
-        'numpy==1.15.1'
+        'numpy==1.15.1',
+        'matplotlib==3.0.3',
+        'seaborn==0.9.0'
       ],
     )

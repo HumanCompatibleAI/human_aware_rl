@@ -5,6 +5,7 @@ from collections import defaultdict
 
 from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
+from overcooked_ai_py.utils import load_dict_from_txt
 
 from human_aware_rl.human.data_processing_utils import PYTHON_LAYOUT_NAME_TO_JS_NAME
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
@@ -12,7 +13,7 @@ from human_aware_rl.imitation.behavioural_cloning import get_bc_agent_from_saved
 from human_aware_rl.ppo.ppo import get_ppo_agent
 from human_aware_rl.pbt.pbt import PBT_DATA_DIR
 from human_aware_rl.baselines_utils import get_pbt_agent_from_config
-from human_aware_rl.utils import accuracy, reset_tf, cross_entropy, load_dict_from_txt
+from human_aware_rl.utils import accuracy, reset_tf, cross_entropy
 
 
 def get_trajs_losses_for_model(trajs, agent, eps=None):
