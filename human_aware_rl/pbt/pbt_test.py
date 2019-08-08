@@ -1,5 +1,5 @@
 import unittest
-from hr_coordination.utils import reset_tf
+from human_aware_rl.utils import reset_tf
 
 class TestPBT(unittest.TestCase):
 

@@ -15,6 +15,7 @@ setup(name='human_aware_rl',
         'pymongo',
         'numpy==1.15.1',
         'matplotlib==3.0.3',
-        'seaborn==0.9.0'
+        'seaborn==0.9.0',
+        'pygame==1.9.5'
       ],
     )

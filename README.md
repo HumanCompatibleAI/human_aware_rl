@@ -62,3 +62,36 @@ python run_tests.py
 `baselines_utils.py`: utility functions used for `pbt.py`
 `overcooked_interactive.py`: script to play Overcooked in terminal against trained agents
 `run_tests.py`: script to run all tests
+
+# Playing with trained agents
+
+## In terminal-graphics
+
+## With javascript graphics
+
+This requires transferring the trained models to the [Overcooked-Demo](https://github.com/HumanCompatibleAI/overcooked-demo) code.
+
+### Converting models to JS format
+
+Unfortunately, converting models requires creating a new conda environment to avoid module conflicts.
+
+Create and activate a new conda environment.
+
+Run the base `setup.py` (from `human_aware_rl`) and then install `tensorflowjs`:
+```
+pip install tensorflowjs==0.8.5
+```
+
+To convert models in the right format, use the `convert_model_to_web.sh` script. Example usage:
+```
+convert_model_to_web.sh ppo_runs ppo_sp_simple 193
+```
+where 193 is the seed number of the DRL run.
+
+### Transferring agents to Overcooked-Demo
+
+The converted models can be found in `human_aware_rl/data/web_models/` and should be transferred to the `static/assets` folder with the same naming as the standard models.
+
+### Playing with agents
+
+To play with the trained agents, just follow the instructions in the [Overcooked-Demo](https://github.com/HumanCompatibleAI/overcooked-demo) README.
