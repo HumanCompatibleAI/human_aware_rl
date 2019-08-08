@@ -153,7 +153,6 @@ class ImitationAgentFromPolicy(AgentFromPolicy):
         self.stochastic = stochastic
         self.action_probs = False
         self.no_waits = no_waits
-        # TODO: verify whether we have this on
         self.will_unblock_if_stuck = False if stuck_time == 0 else True
         self.mlp = mlp
         self.reset()

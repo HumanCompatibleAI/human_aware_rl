@@ -172,7 +172,6 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, worker_ids, layout_
         human_idx = [get_human_player_index_for_df(one_traj_df)] if human_ai_trajs else [0, 1]
 
         # Convert joint trajectories to single agent trajectories, appending recovered info to the `trajectories` dict
-        # TODO: Not the right way to deal with processed
         joint_state_trajectory_to_single(single_agent_trajectories, joint_traj_data, traj_metadata, human_idx, processed=(not human_ai_trajs))
 
     return single_agent_trajectories

@@ -257,7 +257,6 @@ def configure_other_agent(params, gym_env, mlp, mdp):
             assert v == params["mdp_params"][k], "{} did not match. mdp_params: {} \t PPO params: {}".format(k, v, params[k])
 
     elif params["OTHER_AGENT_TYPE"] == "rnd":
-        # TODO: test this
         agent = RandomAgent()
 
     elif params["OTHER_AGENT_TYPE"] == "sp":
