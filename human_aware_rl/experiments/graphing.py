@@ -6,6 +6,7 @@ def get_algorithm_color(alg):
     other_col = '#4BACC6' # thiel
     other_other_col = "#2d6777"
     human_baseline_col = "#aeaeae"#"#c1c1c1"
+
     if alg == 'CP+CP' or alg == 'PPO_SP+PPO_SP' or alg == 'PBT+PBT' or alg == "H+H" or alg == "avg_bc_train+bc_train":
         return opt_baseline_col
     elif alg in ["CP+BC_test", 'PPO_SP+BC_test_0', 'PPO_SP+BC_test_1', 'ppo_sp_no_advers_0', 'ppo_sp_no_advers_1', 'ppo_sp_base_0', 'ppo_sp_base_1']:
@@ -21,8 +22,10 @@ def get_algorithm_color(alg):
 
 def get_texture(alg):
     if alg in ['PBT+PBT', 'avg_bc_train+bc_train']:
-        return '/'
+        return '\\\\'
     elif alg == 'CP+CP':
+        return '\\\\'
+    elif alg[-1:] == '1': #'-', '+', 'x', '\\', '*', 'o', 'O', '.'
         return '/'
     else:
         return ''
