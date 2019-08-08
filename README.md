@@ -95,3 +95,9 @@ The converted models can be found in `human_aware_rl/data/web_models/` and shoul
 ### Playing with agents
 
 To play with the trained agents, just follow the instructions in the [Overcooked-Demo](https://github.com/HumanCompatibleAI/overcooked-demo) README.
+
+# Reproducing results
+
+All DRL results can be reproduced by running the `.sh` scripts under `human_aware_rl/experiments/`.
+
+All non-DRL results can be reproduced by running cells in `NeurIPS Experiments and Visualizations.ipynb`.
