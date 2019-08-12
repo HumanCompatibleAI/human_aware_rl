@@ -67,6 +67,12 @@ python run_tests.py
 
 ## In terminal-graphics
 
+To play with trained agents in the terminal, use `overcooked_interactive.py`. A sample command is:
+
+`python overcooked_interactive.py -t bc -r simple_bc_test_seed4`
+
+Playing requires not clicking away from the terminal window.
+
 ## With javascript graphics
 
 This requires transferring the trained models to the [Overcooked-Demo](https://github.com/HumanCompatibleAI/overcooked-demo) code.
