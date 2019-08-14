@@ -338,16 +338,11 @@ def plot_ppo_run(name, sparse=False, limit=None, print_config=False, seeds=None,
 # @profile
 def ppo_run(params):
 
-    # from sys import getsizeof
-    # g = dict(globals())
-    # for k, v in g.items():
-    #     print(k, getsizeof(v))
-
     create_dir_if_not_exists(params["SAVE_DIR"])
     save_pickle(params, params["SAVE_DIR"] + "config")
 
     #############
-    # pbt SETUP #
+    # PPO SETUP #
     #############
 
     train_infos = []

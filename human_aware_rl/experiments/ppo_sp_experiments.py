@@ -32,7 +32,7 @@ def evaluate_sp_ppo_and_bc(layout, ppo_sp_path, bc_test_path, num_rounds, seeds,
     for seed in seeds:
         agent_ppo, _ = get_ppo_agent(ppo_sp_path, seed, best=best)
 
-        ppo_and_ppo = evaluator.evaluate_agent_pair(AgentPair(agent_ppo, agent_ppo), num_games=num_rounds, display=display)
+        ppo_and_ppo = evaluator.evaluate_agent_pair(AgentPair(agent_ppo, agent_ppo, allow_duplicate_agents=True), num_games=num_rounds, display=display)
         avg_ppo_and_ppo = np.mean(ppo_and_ppo['ep_returns'])
         sp_ppo_performance[layout]["PPO_SP+PPO_SP"].append(avg_ppo_and_ppo)
 

@@ -83,7 +83,7 @@ def evaluate_pbt_for_layout(layout_name, num_rounds, pbt_performance, pbt_model_
 def eval_pbt_over_seeds(pbt_agents, bc_agent, layout_name, num_rounds, pbt_performance, agent_evaluator):
     ae = agent_evaluator
     for i in range(len(pbt_agents)):
-        pbt_and_pbt = ae.evaluate_agent_pair(AgentPair(pbt_agents[i], pbt_agents[i]), num_games=num_rounds)
+        pbt_and_pbt = ae.evaluate_agent_pair(AgentPair(pbt_agents[i], pbt_agents[i], allow_duplicate_agents=True), num_games=num_rounds)
         avg_pbt_and_pbt = np.mean(pbt_and_pbt['ep_returns'])
         pbt_performance[layout_name]["PBT+PBT"].append(avg_pbt_and_pbt)
         

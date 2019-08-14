@@ -40,6 +40,8 @@ To verify your installation, you can try running the following command from the 
 python run_tests.py
 ```
 
+Note that most of the DRL tests rely on having the exact randomness settings that were used to generate the tests.
+
 ## Repo Structure Overview
 
 
