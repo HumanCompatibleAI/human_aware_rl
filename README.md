@@ -4,6 +4,8 @@ This code can be used to reproduce the results in the paper [On the Utility of L
 
 To play the game with trained agents, you can use [Overcooked-Demo](https://github.com/HumanCompatibleAI/overcooked-demo).
 
+For more information about the Overcooked-AI environment, check out [this](https://github.com/HumanCompatibleAI/overcooked_ai) repo.
+
 ## Installation
 
 When cloning the repository, make sure you also clone the submodules:
@@ -62,7 +64,6 @@ On OSX, you may run into an error saying that Python must be installed as a fram
 
 `imitation/`:
 - `behaviour_cloning.py`:  simple script to perform BC on trajectory data using baselines
-- `gail.py`: script to perform GAIL using stable-baselines
 
 `human/`:
 - `process_data.py` script to process human data in specific formats to be used by DRL algorithms
