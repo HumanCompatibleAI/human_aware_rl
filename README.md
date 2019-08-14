@@ -2,6 +2,8 @@
 
 This code can be used to reproduce the results in the paper [On the Utility of Learning about Humans for Human-AI Coordination](https://drive.google.com/drive/folders/137uRyohdH8ZvnGz_vP7HpwVGHN8nLHLw). *Note that this repository uses a specific older commit of the [overcooked_ai repository](https://github.com/HumanCompatibleAI/overcooked_ai)*, and should not be expected to work with the current version of that repository.
 
+To play the game with trained agents, you can use [Overcooked-Demo](https://github.com/HumanCompatibleAI/overcooked-demo).
+
 ## Installation
 
 When cloning the repository, make sure you also clone the submodules:
@@ -113,9 +115,9 @@ where 193 is the seed number of the DRL run.
 
 The converted models can be found in `human_aware_rl/data/web_models/` and should be transferred to the `static/assets` folder with the same naming as the standard models.
 
-### Playing with agents
+### Playing with newly trained agents
 
-To play with the trained agents, just follow the instructions in the [Overcooked-Demo](https://github.com/HumanCompatibleAI/overcooked-demo) README.
+To play with newly trained agents, just follow the instructions in the [Overcooked-Demo](https://github.com/HumanCompatibleAI/overcooked-demo) README.
 
 # Reproducing results
 
