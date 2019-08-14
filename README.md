@@ -32,6 +32,8 @@ pip install tensorflow==1.13.1
 pip install tensorflow-gpu==1.13.1
 ```
 
+Note that using tensorflow-gpu will not enable to pass the DRL tests due to intrinsic randomness introduced by GPU computations. We recommend to first install tensorflow (non-GPU), run the tests, and then install tensorflow-gpu.
+
 ## Verify Installation
 
 To verify your installation, you can try running the following command from the inner `human_aware_rl` folder:
