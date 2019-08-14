@@ -1,6 +1,6 @@
 # Human-Aware Reinforcement Learning
 
-This code can be used to reproduce the results in the paper [On the Utility of Learning about Humans for Human-AI Coordination](https://drive.google.com/drive/folders/137uRyohdH8ZvnGz_vP7HpwVGHN8nLHLw). *Note that this repository uses a specific older commit of the [overcooked_ai repository](https://github.com/HumanCompatibleAI/overcooked_ai)*, and should not be expected to work with the current version of that repository.
+This code can be used to reproduce the results in the paper [On the Utility of Learning about Humans for Human-AI Coordination](https://bit.ly/2XoYHAm). *Note that this repository uses a specific older commit of the [overcooked_ai repository](https://github.com/HumanCompatibleAI/overcooked_ai)*, and should not be expected to work with the current version of that repository.
 
 To play the game with trained agents, you can use [Overcooked-Demo](https://github.com/HumanCompatibleAI/overcooked-demo).
 
