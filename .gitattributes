@@ -1,0 +1,4 @@
+*.ipynb linguist-vendored
+human_aware_rl/data/human/anonymized/trials_hh.csv filter=lfs diff=lfs merge=lfs -text
+*.csv filter=lfs diff=lfs merge=lfs -text
+human_aware_rl/data/human/anonymized/filtered_humanai_trials.pkl filter=lfs diff=lfs merge=lfs -text
