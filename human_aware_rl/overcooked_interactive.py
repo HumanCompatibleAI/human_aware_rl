@@ -151,12 +151,14 @@ def setup_game(run_type, run_dir, run_seed, agent_num, player_idx):
 if __name__ == "__main__" :
     """
     Sample commands
-    -> pbt
-    python overcooked_interactive.py -t pbt -r pbt_simple -a 0 -s 8015
-    ->
-    python overcooked_interactive.py -t ppo -r ppo_sp_simple -s 386
-    -> BC
+    -> BC (will work directly after cloning repo)
     python overcooked_interactive.py -t bc -r simple_bc_test_seed4
+    
+    -> pbt (requires having reproduced pbt agents)
+    python overcooked_interactive.py -t pbt -r pbt_simple -a 0 -s 8015
+    
+    -> ppo (requires having reproduced ppo agents)
+    python overcooked_interactive.py -t ppo -r ppo_sp_simple -s 386
     """
     parser = ArgumentParser()
     parser.add_argument("-t", "--type", dest="type",
