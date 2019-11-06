@@ -4,11 +4,11 @@ RUN_NAME="$2"
 SEED="$3"
 if [ "$#" -eq 3 ]
 then
-    if [ "$1" == "ppo_runs" ]
+    if [ "$1" = "ppo_runs" ]
     then
         tensorflowjs_converter --input_format=tf_saved_model --output_node_names='ppo_agent/ppo2_model/action_probs' --saved_model_tags=serve human_aware_rl/data/$RUN_TYPE/$RUN_NAME/seed$SEED/ppo_agent \
             human_aware_rl/data/web_models/$RUN_NAME\_seed$SEED\_temp
-    elif [ "$1" == "pbt_runs" ]
+    elif [ "$1" = "pbt_runs" ]
     then
         tensorflowjs_converter --input_format=tf_saved_model --output_node_names='agent0/ppo2_model/action_probs' --saved_model_tags=serve human_aware_rl/data/$RUN_TYPE/$RUN_NAME/seed_$SEED/agent0/best \
             human_aware_rl/data/web_models/$RUN_NAME\_seed$SEED\_temp
