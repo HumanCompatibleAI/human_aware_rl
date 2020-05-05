@@ -8,7 +8,7 @@ For more information about the Overcooked-AI environment, check out [this](https
 
 ## Installation
 
-When cloning the repository, make sure you also clone the submodules:
+When cloning the repository, make sure you also clone the submodules (this implementation is linked to specific commits of the submodules, and will mostly not work with more recent ones):
 ```
 $ git clone --recursive git@github.com:HumanCompatibleAI/human_aware_rl.git
 ```
