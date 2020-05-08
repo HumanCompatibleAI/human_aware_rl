@@ -30,13 +30,15 @@ To complete the installation, run:
 human_aware_rl $ ./install.sh
 ```
 
-Then install tensorflow (the GPU **or** non-GPU version depending on your setup):
+Then install tensorflow and mpi4py (the GPU **or** non-GPU version depending on your setup):
 ```
 $ pip install tensorflow==1.13.1
+$ conda install mpi4py
 ```
 
 ```
 $ pip install tensorflow-gpu==1.13.1
+$ conda install mpi4py
 ```
 
 Note that using tensorflow-gpu will not enable to pass the DRL tests due to intrinsic randomness introduced by GPU computations. We recommend to first install tensorflow (non-GPU), run the tests, and then install tensorflow-gpu.
@@ -49,7 +51,7 @@ To verify your installation, you can try running the following command from the 
 python run_tests.py
 ```
 
-Note that most of the DRL tests rely on having the exact randomness settings that were used to generate the tests.
+Note that most of the DRL tests rely on having the exact randomness settings that were used to generate the tests (and thus will not pass on a GPU-enabled device).
 
 On OSX, you may run into an error saying that Python must be installed as a framework. You can fix it by [telling Matplotlib to use a different backend](https://markhneedham.com/blog/2018/05/04/python-runtime-error-osx-matplotlib-not-installed-as-framework-mac/).
 
