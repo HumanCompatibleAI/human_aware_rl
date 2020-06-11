@@ -16,11 +16,11 @@ from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 
 # Currently Amazon Turk data has different names for some of the layouts
 PYTHON_LAYOUT_NAME_TO_JS_NAME = {
-    "unident_s": "asymmetric_advantages",
-    "simple": "cramped_room",
-    "random1": "coordination_ring",
-    "random0": "random0",
-    "random3": "random3"
+    "cramped_room": "cramped_room",
+    "asymmetric_advantages": "asymmetric_advantages",
+    "coordination_ring": "coordination_ring",
+    "forced_coordination": "random0",
+    "counter_circuit": "random3"
 }
 
 JS_LAYOUT_NAME_TO_PYTHON_NAME = {v:k for k, v in PYTHON_LAYOUT_NAME_TO_JS_NAME.items()}
@@ -101,7 +101,7 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
     python_layout_name = JS_LAYOUT_NAME_TO_PYTHON_NAME[datapoint['layout_name']]
     agent_evaluator = AgentEvaluator(
         mdp_params={"layout_name": python_layout_name}, 
-        env_params={"horizon": 1250}
+        env_params={"horizon": 1250} # Defining the horizon of the mdp of origin of the trajectories
     )
     mdp = agent_evaluator.env.mdp
     env = agent_evaluator.env
@@ -116,28 +116,26 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
         "ep_observations": [overcooked_states],
         "ep_actions": [overcooked_actions],
         "ep_rewards": [overcooked_rewards], # Individual (dense) reward values
-
         "ep_dones": [[False] * len(overcooked_states)], # Individual done values
+        "ep_infos": [{}] * len(overcooked_states),
 
         "ep_returns": [sum(overcooked_rewards)], # Sum of dense rewards across each episode
-        "ep_returns_sparse": [sum(overcooked_rewards)], # Sum of sparse rewards across each episode
         "ep_lengths": [len(overcooked_states)], # Lengths of each episode
         "mdp_params": [mdp.mdp_params],
-        "env_params": [env.env_params]
+        "env_params": [env.env_params],
+        "metadatas": {
+                'worker_id': [datapoint['workerid_num']],
+                'round_num': [datapoint['round_num']],
+                'mdp': [agent_evaluator.env.mdp]
+        }
     }
-    trajectories = {k: np.array(v) if k != "ep_actions" else v for k, v in trajectories.items() }
+    trajectories = {k: np.array(v) if k not in ["ep_actions", "metadatas"] else v for k, v in trajectories.items() }
 
     if complete_traj:
         agent_evaluator.check_trajectories(trajectories)
+    return trajectories
 
-    traj_metadata = {
-        'worker_id': datapoint['workerid_num'],
-        'round_num': datapoint['round_num'],
-        'mdp': agent_evaluator.env.mdp
-    }
-    return trajectories, traj_metadata
-
-def convert_joint_df_trajs_to_overcooked_single(main_trials, worker_ids, layout_names, ordered_pairs=True, human_ai_trajs=False):
+def convert_joint_df_trajs_to_overcooked_single(main_trials, worker_ids, layout_names, ordered_pairs=True, human_ai_trajs=False, processed=False, silent=False):
     """
     Takes in a dataframe `main_trials` containing joint trajectories, and extract trajectories of workers `worker_ids` 
     on layouts `layout_names`, with specific options.
@@ -148,40 +146,45 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, worker_ids, layout_
         "ep_observations": [],
         "ep_actions": [],
         "ep_rewards": [], # Individual reward values
-        "ep_dones": [], # Individual done values,
+        "ep_dones": [], # Individual done values
+        "ep_infos": [],
 
         # With shape (n_episodes, ):
         "ep_returns": [], # Sum of rewards across each episode
         "ep_lengths": [], # Lengths of each episode
-        "ep_agent_idxs": [], # Agent index for current episode
         "mdp_params": [],
-        "env_params": []
+        "env_params": [],
+        "metadatas": {"ep_agent_idxs": []} # Agent index for current episode
     }
 
+    human_indices = []
+    missing_pairs = []
     for worker_id, layout_name in itertools.product(worker_ids, layout_names):
         # Get an single game
         one_traj_df = extract_df_for_worker_on_layout(main_trials, worker_id, layout_name)
 
         if len(one_traj_df) == 0:
-            print("Layout {} is missing from worker {}".format(layout_name, worker_id))
+            missing_pairs.append((layout_name, worker_id))
             continue
 
         # Get python trajectory data and information on which player(s) was/were human
-        joint_traj_data, traj_metadata = df_traj_to_python_joint_traj(one_traj_df, complete_traj=ordered_pairs)
+        joint_traj_data = df_traj_to_python_joint_traj(one_traj_df, complete_traj=ordered_pairs)
 
         human_idx = [get_human_player_index_for_df(one_traj_df)] if human_ai_trajs else [0, 1]
+        human_indices.append(human_idx)
 
         # Convert joint trajectories to single agent trajectories, appending recovered info to the `trajectories` dict
-        joint_state_trajectory_to_single(single_agent_trajectories, joint_traj_data, traj_metadata, human_idx, processed=(not human_ai_trajs))
+        joint_state_trajectory_to_single(single_agent_trajectories, joint_traj_data, human_idx, processed=processed, silent=silent)
 
-    return single_agent_trajectories
+    if not silent: print("Missing (layout, worker_id) pairs: {}".format(missing_pairs))
+    return single_agent_trajectories, human_indices
 
 def get_human_player_index_for_df(one_traj_df):
     """Determines which player index had a human player"""
     assert len(one_traj_df['workerid_num'].unique()) == 1
     return (one_traj_df.groupby('workerid_num')['player_index'].sum() > 0).iloc[0]
 
-def joint_state_trajectory_to_single(trajectories, joint_traj_data, traj_metadata, player_indices_to_convert=None, processed=True):
+def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indices_to_convert=None, processed=True, silent=False):
     """
     Take a joint trajectory and split it into two single-agent trajectories, adding data to the `trajectories` dictionary
 
@@ -189,11 +192,12 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, traj_metadat
     """
     from overcooked_ai_py.planning.planners import MediumLevelPlanner, NO_COUNTERS_PARAMS
 
-    mdp = traj_metadata['mdp']
+    mdp = joint_traj_data['metadatas']['mdp'][0]
     mlp = MediumLevelPlanner.from_pickle_or_compute(
             mdp=mdp,
             mlp_params=NO_COUNTERS_PARAMS,
-            force_compute=False
+            force_compute=False,
+            info=False
     )
 
     assert len(joint_traj_data['ep_observations']) == 1, "This method only takes in one trajectory"
@@ -219,7 +223,7 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, traj_metadat
             ep_acts.append(action)
             ep_dones.append(False)
 
-        if len(ep_obs) == 0:
+        if len(ep_obs) == 0 and not silent:
             worker_id, layout_name = traj_metadata['workerid_num'], mdp.layout_name
             print("{} on layout {} had an empty traj?. Excluding from dataset.".format(worker_id, layout_name))
 
@@ -227,10 +231,11 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, traj_metadat
 
         trajectories["ep_observations"].append(ep_obs)
         trajectories["ep_actions"].append(ep_acts)
-        trajectories["ep_dones"].append(ep_dones)
         trajectories["ep_rewards"].append(rewards)
+        trajectories["ep_dones"].append(ep_dones)
+        trajectories["ep_infos"].append([{}] * len(rewards))
         trajectories["ep_returns"].append(sum(rewards))
         trajectories["ep_lengths"].append(length)
-        trajectories["ep_agent_idxs"].append(agent_idx)
         trajectories["mdp_params"].append(mdp.mdp_params)
         trajectories["env_params"].append({})
+        trajectories["metadatas"]["ep_agent_idxs"].append(agent_idx)
