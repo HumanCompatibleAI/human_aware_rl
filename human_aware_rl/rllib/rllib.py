@@ -30,15 +30,15 @@ class RlLibAgent(Agent):
     """ 
     Class for wrapping a trained RLLib Policy object into an Overcooked compatible Agent
     """
-    ### TODO: Figure out how to reset rnn_state at start of episode
     def __init__(self, policy, agent_index, featurize_fn):
         self.policy = policy
         self.agent_index = agent_index
         self.featurize = featurize_fn
 
+    def reset(self):
         # Get initial rnn states and add batch dimension to each
-        if hasattr(policy.model, 'get_initial_state'):
-            self.rnn_state = [np.expand_dims(state, axis=0) for state in policy.model.get_initial_state()]
+        if hasattr(self.policy.model, 'get_initial_state'):
+            self.rnn_state = [np.expand_dims(state, axis=0) for state in self.policy.model.get_initial_state()]
         else:
             self.rnn_state = []
 
@@ -323,7 +323,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         multi_agent_params = env_config["multi_agent_params"]
 
         base_env = get_base_env(mdp_params, env_params)
-        mlp = get_mlp(base_env)
+        mlp = get_mlp(mdp_params, env_params)
 
         ppo_featurize_fn = base_env.mdp.lossless_state_encoding
         bc_featurize_fn = lambda state : base_env.mdp.featurize_state(state, mlp)
@@ -435,7 +435,7 @@ def get_rllib_eval_function(eval_params, mdp_params, env_params, agent_0_policy_
         agent_0_feat_fn = agent_1_feat_fn = None
         if 'bc' in policies:
             base_env = get_base_env(mdp_params, env_params)
-            mlp = get_mlp(base_env)
+            mlp = get_mlp(mdp_params, env_params)
             bc_featurize_fn = lambda state : base_env.mdp.featurize_state(state, mlp)
             if policies[0] == 'bc':
                 agent_0_feat_fn = bc_featurize_fn

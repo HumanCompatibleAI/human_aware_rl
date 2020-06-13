@@ -1,6 +1,4 @@
-from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
-from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
-from overcooked_ai_py.planning.planners import MediumLevelPlanner, NO_COUNTERS_PARAMS
+from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import numpy as np
 import inspect
 
@@ -9,12 +7,12 @@ def softmax(logits):
     return (e_x / np.sum(e_x, axis=0)).T
 
 def get_base_env(mdp_params, env_params):
-    mdp_fn = lambda: OvercookedGridworld.from_layout_name(**mdp_params)
-    base_env = OvercookedEnv(mdp_fn, **env_params)
-    return base_env
+    ae = AgentEvaluator(mdp_params=mdp_params, env_params=env_params)
+    return ae.env
 
-def get_mlp(env):
-    return MediumLevelPlanner.from_pickle_or_compute(env.mdp, NO_COUNTERS_PARAMS, force_compute=False)
+def get_mlp(mdp_params, env_params):
+    ae = AgentEvaluator(mdp_params=mdp_params, env_params=env_params)
+    return ae.mlp
 
 # Returns the required arguments as inspect.Parameter objects in a list
 def get_required_arguments(fn):

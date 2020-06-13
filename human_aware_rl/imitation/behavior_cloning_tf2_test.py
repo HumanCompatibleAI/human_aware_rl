@@ -1,10 +1,9 @@
 import unittest, os, shutil, copy, pickle, random
 import numpy as np
 import tensorflow as tf
-from human_aware_rl.imitation.behavior_cloning_tf2 import BC_SAVE_DIR, DEFAULT_BC_PARAMS, train_bc_model, build_bc_model, save_bc_model, load_bc_model, evaluate_bc_model
+from human_aware_rl.imitation.behavior_cloning_tf2 import BC_SAVE_DIR, get_default_bc_params, train_bc_model, build_bc_model, save_bc_model, load_bc_model, evaluate_bc_model
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
-
-EXPECTED_DATA_PATH = os.path.join(BC_SAVE_DIR, "testing", "expected.pickle")
+from human_aware_rl.static import BC_EXPECTED_DATA_PATH
 
 def set_global_seed(seed):
     random.seed(seed)
@@ -15,7 +14,7 @@ class TestBCTraining(unittest.TestCase):
     
     def setUp(self):
         set_global_seed(0)
-        self.bc_params = copy.deepcopy(DEFAULT_BC_PARAMS)
+        self.bc_params = get_default_bc_params()
         self.bc_params["mdp_params"]["layout_name"] = "cramped_room"
         self.bc_params["training_params"]["epochs"] = 1
         self.model_dir = os.path.join(BC_SAVE_DIR, "test_model")
@@ -25,7 +24,7 @@ class TestBCTraining(unittest.TestCase):
 
         processed_trajs, _ = get_trajs_from_data(**self.bc_params["data_params"], silent=True)
         self.dummy_input = np.vstack(processed_trajs["ep_observations"])[:1, :]
-        with open(EXPECTED_DATA_PATH, "rb") as f:
+        with open(BC_EXPECTED_DATA_PATH, "rb") as f:
             self.expected = pickle.load(f)
 
     def tearDown(self):

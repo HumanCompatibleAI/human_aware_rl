@@ -3,7 +3,9 @@ from tensorflow import keras
 import tensorflow as tf
 import numpy as np
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
+from human_aware_rl.static import HUMAN_DATA_PATH
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_env, get_mlp
+from human_aware_rl.data_dir import DATA_DIR
 from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.agents.agent import AgentPair
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
@@ -12,13 +14,11 @@ from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.planning.planners import MediumLevelPlanner, NO_COUNTERS_PARAMS
 from overcooked_ai_py.mdp.overcooked_env import DEFAULT_ENV_PARAMS
 from ray.rllib.policy import Policy as RllibPolicy
-from human_ai_msr.data_dir import DATA_DIR
 
 #################
 # Configuration #
 #################
 
-HUMAN_DATA_PATH = os.path.join(DATA_DIR, "clean_train_trials.pkl")
 BC_SAVE_DIR = os.path.join(DATA_DIR, "bc_runs")
 
 DEFAULT_DATA_PARAMS = {
@@ -57,11 +57,18 @@ DEFAULT_BC_PARAMS = {
     "mdp_fn_params": {},
     "mlp_params" : DEFAULT_MLP_PARAMS,
     "training_params" : DEFAULT_TRAINING_PARAMS,
-    "evaluation_params" : DEFAULT_EVALUATION_PARAMS
+    "evaluation_params" : DEFAULT_EVALUATION_PARAMS,
+    "action_shape" :  (len(Action.ALL_ACTIONS), )
 }
+
+# Boolean indicating whether all param dependencies have been loaded. Used to prevent re-loading unceccesarily
+_params_initalized = False
 
 def _get_base_env(bc_params):
     return get_base_env(bc_params['mdp_params'], bc_params['env_params'])
+
+def _get_mlp(bc_params):
+    return get_mlp(bc_params['mdp_params'], bc_params['env_params'])
 
 def _get_observation_shape(bc_params):
     """
@@ -69,13 +76,18 @@ def _get_observation_shape(bc_params):
     in bc_params and returning the shape of the observation space
     """
     base_env = _get_base_env(bc_params)
+    mlp = _get_mlp(bc_params)
     dummy_state = base_env.mdp.get_standard_start_state()
-    mlp = get_mlp(base_env)
     obs_shape = base_env.mdp.featurize_state(dummy_state, mlp)[0].shape
     return obs_shape
 
-DEFAULT_BC_PARAMS["action_shape"] = (len(Action.ALL_ACTIONS), )
-DEFAULT_BC_PARAMS['observation_shape'] = _get_observation_shape(DEFAULT_BC_PARAMS)
+# For lazing loading the default params. Prevents loading on every import of this module 
+def get_default_bc_params():
+    global _params_initalized, DEFAULT_BC_PARAMS
+    if not _params_initalized:
+        DEFAULT_BC_PARAMS['observation_shape'] = _get_observation_shape(DEFAULT_BC_PARAMS)
+        _params_initalized = False
+    return copy.deepcopy(DEFAULT_BC_PARAMS)
 
 
 
@@ -212,7 +224,7 @@ def evaluate_bc_model(model, bc_params):
 
     # Get reference to state encoding function used by bc agents, with compatible signature
     base_env = _get_base_env(bc_params)
-    mlp = get_mlp(base_env)
+    mlp = _get_mlp(bc_params)
     def featurize_fn(state):
         return base_env.mdp.featurize_state(state, mlp)
 
@@ -260,13 +272,11 @@ class BehaviorCloningPolicy(RllibPolicy):
             assert 'model_dir' in config, "must specify model directory if model not specified"
             # Construct a private graph unique to this instance to run forward pass (so it doesn't conflict with rllib graphs)
             self._graph = tf.Graph()
-            with self._graph.as_default():
-                model, bc_params = load_bc_model(config['model_dir'])
+            self._sess = tf.compat.v1.Session(graph=self._graph)
+            with self._sess.as_default():
+                    model, bc_params = load_bc_model(config['model_dir'])
 
-        # This is here to make the class compatible with both tuples or gym.Space objs for the spaces
-        # Note: action_space = (len(Action.ALL_ACTIONS,)) is technically NOT the action space shape, which would be () since actions are scalars
-        self.observation_shape = observation_space if type(observation_space) == tuple else self.observation_space.shape
-        self.action_shape = action_space if type(action_space) == tuple else (self.action_space.n,)
+        self._setup_shapes()
 
         # Basic check to make sure model dimensions match
         assert self.observation_shape == bc_params['observation_shape']
@@ -274,6 +284,14 @@ class BehaviorCloningPolicy(RllibPolicy):
 
         self.model = model
         self.stochastic = config['stochastic']
+
+    def _setup_shapes(self):
+        # This is here to make the class compatible with both tuples or gym.Space objs for the spaces
+        # Note: action_space = (len(Action.ALL_ACTIONS,)) is technically NOT the action space shape, which would be () since actions are scalars
+        self.observation_shape = self.observation_space if type(self.observation_space) == tuple else self.observation_space.shape
+        self.action_shape = self.action_space if type(self.action_space) == tuple else (self.action_space.n,)
+
+        
 
     @classmethod
     def from_model_dir(cls, model_dir, stochastic=True):
@@ -317,7 +335,7 @@ class BehaviorCloningPolicy(RllibPolicy):
 
         # Run the model
         if self._graph:
-            with self._graph.as_default():
+            with self._sess.as_default():
                 action_logits = self.model.predict(obs_batch)
         else:
             action_logits = self.model.predict(obs_batch)
@@ -353,6 +371,7 @@ class BehaviorCloningPolicy(RllibPolicy):
 
 
 if __name__ == "__main__":
-    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'foo'), DEFAULT_BC_PARAMS, verbose=True)
+    params = get_default_bc_params()
+    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'default'), params, verbose=True)
     # Evaluate our model's performance in a rollout
-    evaluate_bc_model(model, DEFAULT_BC_PARAMS)
+    evaluate_bc_model(model, params)

@@ -1,12 +1,11 @@
 import unittest, os, shutil, pickle, ray, random
 os.environ['RUN_ENV'] = 'local'
 from human_aware_rl.ppo.ppo_rllib_client import ex
-from human_aware_rl.imitation.behavior_cloning_tf2 import DEFAULT_BC_PARAMS, train_bc_model
-from human_ai_msr.data_dir import DATA_DIR
+from human_aware_rl.imitation.behavior_cloning_tf2 import get_default_bc_params, train_bc_model
+from human_aware_rl.static import PPO_EXPECTED_DATA_PATH
+from human_aware_rl.data_dir import DATA_DIR
 import tensorflow as tf
 import numpy as np
-
-EXPECTED_DATA_PATH = os.path.join(DATA_DIR, 'testing', 'expected.pickle')
 
 def set_global_seed(seed):
     random.seed(seed)
@@ -26,7 +25,7 @@ class TestPPORllib(unittest.TestCase):
         if not os.path.exists(self.temp_results_dir):
             os.makedirs(self.temp_results_dir)
 
-        with open(EXPECTED_DATA_PATH, 'rb') as f:
+        with open(PPO_EXPECTED_DATA_PATH, 'rb') as f:
             self.expected = pickle.load(f)
 
     def tearDown(self):
@@ -41,8 +40,9 @@ class TestPPORllib(unittest.TestCase):
     def test_ppo_bc(self):
         # Train bc model
         model_dir = self.temp_model_dir
-        DEFAULT_BC_PARAMS['training_params']['epochs'] = 10
-        train_bc_model(model_dir, DEFAULT_BC_PARAMS)
+        bc_params = get_default_bc_params()
+        bc_params['training_params']['epochs'] = 10
+        train_bc_model(model_dir, bc_params)
 
         # Train rllib model
         results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], "num_training_iters" : 10, "bc_model_dir" : model_dir}).result

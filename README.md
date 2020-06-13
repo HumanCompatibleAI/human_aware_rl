@@ -155,20 +155,10 @@ Finally, install the latest stable version of tensorflow compatible with rllib
 ```bash
 (harl_rllib) $ pip install tensorflow==2.1.0
 ```
-Or, if working on the BAIR servers, install a version of tensorflow and cuDNN that is compatible with the available nvidia drivers to use GPUs
+Or, if working with gpus, install a version of tensorflow 2.*.* and cuDNN that is compatible with the available Cuda drivers. The following example works for Cuda 10.0.0. You can verify what version of Cuda is installed by running `nvcc --version`. For a full list of driver compatibility, refer [here](https://www.tensorflow.org/install/source#gpu)
 ```bash
 (harl_rllib) $ pip install tensorflow-gpu==2.0.0
 (harl_rllib) $ conda install -c anaconda cudnn=7.6.0
-```
-
-
-The behavior cloning model (and reproducibility tests) requires data from a different git repo. Thus, it must be installed from source.
-From outside the `human_ai_coord` repo:
-```bash
-(harl_rllib) $ git clone https://github.com/HumanCompatibleAI/human_ai_MSR.git
-(harl_rllib) $ cd human_ai_MSR
-human_ai_MSR $ git checkout nathan_dev
-(harl_rllib) $ human_ai_MSR $ pip install -e .
 ```
 
 Your virtual environment should now be configured to run the rllib training code. Verify it by running the following command 
@@ -176,7 +166,6 @@ Your virtual environment should now be configured to run the rllib training code
 ```bash
 python -c "from ray import rllib"
 ```
-If no errors are reported, you're good to go! If you get the error `ModuleNotFoundError: No module named 'google.protobuf'`, run `conda install protobuf`. Note: you MUST use conda for this fix to work; trying to use pip here doesn't fix the issue.
 
 ## Testing
 
