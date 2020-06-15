@@ -24,6 +24,7 @@ jobs:
     - name: Install dependencies
       run: |
         conda init bash
+        source ~/.bash_profile
         conda create -n harl python=3.7
         conda activate harl
         python -m pip install --upgrade pip
