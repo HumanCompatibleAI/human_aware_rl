@@ -1,0 +1,28 @@
+name: Human Aware Rllib
+
+on:
+  push:
+    branches: "*"
+  pull_request:
+    branches: "*"
+
+jobs:
+  build_osx:
+
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.7
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        ./install.sh
+        pip install tensorflow==2.1.0a
+    - name: Test with unittest
+      run: |
+        ./run_tests.sh
+    

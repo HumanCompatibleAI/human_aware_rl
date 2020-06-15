@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+export RUN_ENV=local
+cd ./human_aware_rl/imitation
+python behavior_cloning_tf2_test.py
+cd ..
+cd ./rllib
+python tests.py
+cd ..
+cd ./ppo
+python ppo_rllib_test.py
