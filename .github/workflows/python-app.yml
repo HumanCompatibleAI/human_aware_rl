@@ -35,5 +35,6 @@ jobs:
         conda init bash
         source ~/.bash_profile
         conda activate harl
+        sudo chmod 777 ./run_tests.sh
         ./run_tests.sh
     
