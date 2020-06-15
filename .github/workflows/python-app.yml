@@ -21,9 +21,9 @@ jobs:
       run: |
         echo ::add-path::$CONDA/condabin
         sudo chown -R runner $CONDA
-        conda init bash
     - name: Install dependencies
       run: |
+        conda init bash
         conda create -n harl python=3.7
         conda activate harl
         python -m pip install --upgrade pip
