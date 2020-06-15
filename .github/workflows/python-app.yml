@@ -21,10 +21,13 @@ jobs:
       run: echo ::add-path::$CONDA/condabin
     - name: Install dependencies
       run: |
+        conda create -n harl python=3.7
+        conda activate harl
         python -m pip install --upgrade pip
         ./install.sh
-        pip install tensorflow==2.1.0a
+        pip install tensorflow==2.1.0
     - name: Test with unittest
       run: |
+        conda activate harl
         ./run_tests.sh
     
