@@ -32,6 +32,8 @@ jobs:
         pip install tensorflow==2.1.0
     - name: Test with unittest
       run: |
+        conda init bash
+        source ~/.bash_profile
         conda activate harl
         ./run_tests.sh
     
