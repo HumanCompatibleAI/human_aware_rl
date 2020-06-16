@@ -272,8 +272,7 @@ class BehaviorCloningPolicy(RllibPolicy):
             assert 'model_dir' in config, "must specify model directory if model not specified"
             # Construct a private graph unique to this instance to run forward pass (so it doesn't conflict with rllib graphs)
             self._graph = tf.Graph()
-            self._sess = tf.compat.v1.Session(graph=self._graph)
-            with self._sess.as_default():
+            with self._graph.as_default():
                     model, bc_params = load_bc_model(config['model_dir'])
 
         self._setup_shapes()
@@ -335,7 +334,7 @@ class BehaviorCloningPolicy(RllibPolicy):
 
         # Run the model
         if self._graph:
-            with self._sess.as_default():
+            with self._graph.as_default():
                 action_logits = self.model.predict(obs_batch)
         else:
             action_logits = self.model.predict(obs_batch)

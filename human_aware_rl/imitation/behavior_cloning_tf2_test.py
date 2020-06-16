@@ -20,7 +20,7 @@ class TestBCTraining(unittest.TestCase):
         self.model_dir = os.path.join(BC_SAVE_DIR, "test_model")
 
         if not os.path.exists(self.model_dir):
-            os.mkdir(self.model_dir)
+            os.makedirs(self.model_dir)
 
         processed_trajs, _ = get_trajs_from_data(**self.bc_params["data_params"], silent=True)
         self.dummy_input = np.vstack(processed_trajs["ep_observations"])[:1, :]
