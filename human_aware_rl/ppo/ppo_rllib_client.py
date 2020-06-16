@@ -337,4 +337,5 @@ def main(params):
 
     # Return value gets sent to our slack observer for notification
     average_sparse_reward = np.mean([res['custom_metrics']['sparse_reward_mean'] for res in results])
-    return { "average_sparse_reward" : average_sparse_reward }
+    average_episode_reward = np.mean([res['episode_reward_mean'] for res in results])
+    return { "average_sparse_reward" : average_sparse_reward, "average_total_reward" : average_episode_reward }

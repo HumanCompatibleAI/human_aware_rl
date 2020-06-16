@@ -148,33 +148,3 @@ class RllibUtilsTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-# from human_aware_rl.rllib.rllib import load_trainer, evaluate, OvercookedMultiAgent
-# from human_aware_rl.ppo.ppo_rllib import RllibPPOModel
-# from ray.tune.registry import register_env
-# from ray.rllib.models import ModelCatalog
-# from ray.tune.result import DEFAULT_RESULTS_DIR
-# import ray
-# import os
-
-# TRAINER_PATH = os.path.join(DEFAULT_RESULTS_DIR, "ppo_sp_vf-4_2229_2020-06-04_11-02-13bsw3fr9l", "checkpoint_500", "checkpoint-500")
-
-# eval_params = {
-#     "num_games" : 1,
-#     "ep_length" : 400,
-#     "display" : True
-# }
-
-# mdp_params = {
-#     "layout_name" : "cramped_room"
-# }
-
-# def _env_creater(env_config):
-#     return OvercookedMultiAgent.from_config(env_config)
-
-# ray.init()
-# register_env("overcooked_multi_agent", _env_creater)
-# ModelCatalog.register_custom_model("MyPPOModel", RllibPPOModel)
-
-# trainer = load_trainer(TRAINER_PATH)
-# ppo_policy = trainer.get_policy('ppo')
-# evaluate(eval_params, mdp_params, ppo_policy, ppo_policy)
