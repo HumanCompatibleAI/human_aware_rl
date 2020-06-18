@@ -2,6 +2,7 @@ import os, pickle, copy
 from tensorflow import keras
 import tensorflow as tf
 import numpy as np
+from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
 from human_aware_rl.static import HUMAN_DATA_PATH
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_env, get_mlp
@@ -51,6 +52,9 @@ DEFAULT_EVALUATION_PARAMS = {
 }
 
 DEFAULT_BC_PARAMS = {
+    "eager" : True,
+    "use_lstm" : False,
+    "cell_size" : 256,
     "data_params": DEFAULT_DATA_PARAMS,
     "mdp_params": {'layout_name': "cramped_room"},
     "env_params": DEFAULT_ENV_PARAMS,
@@ -91,33 +95,49 @@ def get_default_bc_params():
 
 
 
-
 ##############
 # Model code #
 ##############
 
-def build_bc_model(observation_shape, action_shape, mlp_params, **kwargs):
-    ## Inputs
-    inputs = keras.Input(shape=observation_shape, name="Overcooked_observation")
-    x = inputs
+class LstmStateResetCallback(keras.callbacks.Callback):
 
-    ## Build fully connected layers
-    assert len(mlp_params["net_arch"]) == mlp_params["num_layers"], "Invalid Fully Connected params"
+    def on_epoch_end(self, epoch, logs=None):
+        self.model.reset_states()
 
-    for i in range(mlp_params["num_layers"]):
-        units = mlp_params["net_arch"][i]
-        x = keras.layers.Dense(units, activation="relu", name="fc_{0}".format(i))(x)
 
-    ## output layer
-    logits = keras.layers.Dense(action_shape[0], name="logits")(x)
+def _pad(sequences, maxlen=None, default=0):
+    if not maxlen:
+        maxlen = max([len(seq) for seq in sequences])
+    for seq in sequences:
+        pad_len = maxlen - len(seq)
+        seq.extend([default]*pad_len)
+    return sequences
 
-    return keras.Model(inputs=inputs, outputs=logits)
-
-def train_bc_model(model_dir, bc_params, verbose=False):
+def load_data(bc_params, verbose):
     processed_trajs, _ = get_trajs_from_data(**bc_params["data_params"], silent=not verbose)
     inputs, targets = processed_trajs["ep_observations"], processed_trajs["ep_actions"]
-    inputs = np.vstack(inputs)
-    targets = np.vstack(targets)
+
+    if bc_params['use_lstm']:
+        seq_lens = np.array([len(seq) for seq in inputs])
+        seq_padded = _pad(inputs, default=np.zeros((len(inputs[0][0],))))
+        targets_padded = _pad(targets, default=np.zeros(1))
+        seq_t = np.dstack(seq_padded).transpose((2, 0, 1))
+        targets_t = np.dstack(targets_padded).transpose((2, 0, 1))
+        return seq_t, seq_lens, targets_t
+    else:
+        return np.vstack(inputs), None, np.vstack(targets)
+
+def build_bc_model(use_lstm=True, eager=False, **kwargs):
+    if not eager:
+        tf.compat.v1.disable_eager_execution()
+    if use_lstm:
+        return _build_lstm_model(**kwargs)
+    else:
+        return _build_model(**kwargs)
+    
+
+def train_bc_model(model_dir, bc_params, verbose=False):
+    inputs, seq_lens, targets = load_data(bc_params, verbose)
 
     training_params = bc_params["training_params"]
 
@@ -132,12 +152,14 @@ def train_bc_model(model_dir, bc_params, verbose=False):
         class_weights = None
 
     # Retrieve un-initialized keras model
-    model = build_bc_model(**bc_params)
+    model = build_bc_model(**bc_params, max_seq_len=np.max(seq_lens))
 
     # Initialize the model
     model.compile(optimizer=keras.optimizers.Adam(training_params["learning_rate"]),
-                  loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                  metrics=["sparse_categorical_accuracy"])
+                  loss={
+                    "logits" : keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+                  },
+                  metrics={ "logits" : "sparse_categorical_accuracy" })
 
 
     # Customize our training loop with callbacks
@@ -163,8 +185,22 @@ def train_bc_model(model_dir, bc_params, verbose=False):
         )
     ]
 
-    # Actually train our model
-    model.fit(inputs, targets, callbacks=callbacks, batch_size=training_params["batch_size"], 
+    ## Actually train our model
+
+    # Create input dict for both models
+    N = inputs.shape[0]
+    inputs = { "Overcooked_observation" : inputs }
+    targets = { "logits" : targets }
+
+    # Inputs unique to lstm model
+    if bc_params['use_lstm']:
+        inputs['seq_in'] = seq_lens
+        inputs['hidden_in'] = np.zeros((N, bc_params['cell_size']))
+        inputs['memory_in'] = np.zeros((N, bc_params['cell_size']))
+
+    # Batch size doesn't include time dimension (seq_len) so it should be smaller for rnn model
+    batch_size = 1 if bc_params['use_lstm'] else training_params['batch_size']
+    model.fit(inputs, targets, callbacks=callbacks, batch_size=batch_size, 
                 epochs=training_params['epochs'], validation_split=training_params["validation_split"],
                 class_weight=class_weights,
                 verbose=2 if verbose else 0)
@@ -199,7 +235,7 @@ def load_bc_model(model_dir):
     used to create the model
     """
     print("Loading bc model from ", model_dir)
-    model = keras.models.load_model(model_dir)
+    model = keras.models.load_model(model_dir, custom_objects={ 'tf' : tf })
     with open(os.path.join(model_dir, "metadata.pickle"), "rb") as f:
         bc_params = pickle.load(f)
     return model, bc_params
@@ -239,11 +275,83 @@ def evaluate_bc_model(model, bc_params):
     reward = np.mean(results['ep_returns'])
     return reward
 
+def _build_model(observation_shape, action_shape, mlp_params, **kwargs):
+    ## Inputs
+    inputs = keras.Input(shape=observation_shape, name="Overcooked_observation")
+    x = inputs
+
+    ## Build fully connected layers
+    assert len(mlp_params["net_arch"]) == mlp_params["num_layers"], "Invalid Fully Connected params"
+
+    for i in range(mlp_params["num_layers"]):
+        units = mlp_params["net_arch"][i]
+        x = keras.layers.Dense(units, activation="relu", name="fc_{0}".format(i))(x)
+
+    ## output layer
+    logits = keras.layers.Dense(action_shape[0], name="logits")(x)
+
+    return keras.Model(inputs=inputs, outputs=logits)
+
+def _build_lstm_model(observation_shape, action_shape, mlp_params, cell_size, max_seq_len=20, **kwargs):
+    ## Inputs
+    obs_in = keras.Input(shape=(None, *observation_shape), name="Overcooked_observation")
+    seq_in = keras.Input(shape=(), name="seq_in", dtype=tf.int32)
+    h_in = keras.Input(shape=(cell_size,), name="hidden_in")
+    c_in = keras.Input(shape=(cell_size,), name="memory_in")
+    x = obs_in
+
+    ## Build fully connected layers
+    assert len(mlp_params["net_arch"]) == mlp_params["num_layers"], "Invalid Fully Connected params"
+
+    for i in range(mlp_params["num_layers"]):
+        units = mlp_params["net_arch"][i]
+        x = keras.layers.TimeDistributed(keras.layers.Dense(units, activation="relu", name="fc_{0}".format(i)))(x)
+
+    mask = keras.layers.Lambda(lambda x : tf.sequence_mask(x, maxlen=max_seq_len))(seq_in)
+
+    ## LSTM layer
+    lstm_out, h_out, c_out = keras.layers.LSTM(cell_size, return_sequences=True, return_state=True, stateful=False, name="lstm")(
+        inputs=x,
+        mask=mask,
+        initial_state=[h_in, c_in]
+    )
+
+    ## output layer
+    logits = keras.layers.TimeDistributed(keras.layers.Dense(action_shape[0]), name="logits")(lstm_out)
+
+    return keras.Model(inputs=[obs_in, seq_in, h_in, c_in], outputs=[logits, h_out, c_out])
+
 
 
 ################
 # Rllib Policy #
 ################
+
+class NullContextManager:
+    """
+    No-op context manager that does nothing
+    """
+    def __init__(self):
+        pass
+    def __enter__(self):
+        pass
+    def __exit__(self, *args):
+        pass
+
+class TfContextManager:
+    """
+    Properly sets the execution graph and session of the keras backend given a "session" object as input
+
+    Used for isolating tf execution in graph mode. Do not use with eager models or with eager mode on
+    """
+    def __init__(self, session):
+        self.session = session
+    def __enter__(self):
+        self.ctx = self.session.graph.as_default()
+        self.ctx.__enter__()
+        set_session(self.session)
+    def __exit__(self, *args):
+        self.ctx.__exit__(*args)
 
 class BehaviorCloningPolicy(RllibPolicy):
 
@@ -258,23 +366,20 @@ class BehaviorCloningPolicy(RllibPolicy):
             - stochastic (bool)                 Whether action should return logit argmax or sample over distribution
             - bc_model (keras.Model)            Pointer to loaded policy model. Overrides model_dir
             - bc_params (dict)                  Dictionary of parameters used to train model. Required if "model" is present
+            - eager (bool)                      Whether the model should run in eager (or graph) mode. Overrides bc_params['eager'] if present
         """
         super(BehaviorCloningPolicy, self).__init__(observation_space, action_space, config)
 
-        
-
         if 'bc_model' in config and config['bc_model']:
             assert 'bc_params' in config, "must specify params in addition to model"
-            assert type(config['bc_model']) == keras.Model, "model must be of type keras.Model"
-            self._graph = None
+            assert issubclass(type(config['bc_model']), keras.Model), "model must be of type keras.Model"
             model, bc_params = config['bc_model'], config['bc_params']
         else:
             assert 'model_dir' in config, "must specify model directory if model not specified"
-            # Construct a private graph unique to this instance to run forward pass (so it doesn't conflict with rllib graphs)
-            self._graph = tf.Graph()
-            with self._graph.as_default():
-                    model, bc_params = load_bc_model(config['model_dir'])
-
+            model, bc_params = load_bc_model(config['model_dir'])
+        
+        # Save the session that the model was loaded into so it is available at inference time if necessary
+        self._sess = get_session()
         self._setup_shapes()
 
         # Basic check to make sure model dimensions match
@@ -283,6 +388,10 @@ class BehaviorCloningPolicy(RllibPolicy):
 
         self.model = model
         self.stochastic = config['stochastic']
+        self.use_lstm = bc_params['use_lstm']
+        self.cell_size = bc_params['cell_size']
+        self.eager = config['eager'] if 'eager' in config else bc_params['eager']
+        self.context = self._create_execution_context()
 
     def _setup_shapes(self):
         # This is here to make the class compatible with both tuples or gym.Space objs for the spaces
@@ -333,12 +442,9 @@ class BehaviorCloningPolicy(RllibPolicy):
         obs_batch = np.array(obs_batch)
 
         # Run the model
-        if self._graph:
-            with self._graph.as_default():
-                action_logits = self.model.predict(obs_batch)
-        else:
-            action_logits = self.model.predict(obs_batch)
-
+        with self.context:
+            action_logits, states = self._forward(obs_batch, state_batches)
+        
         # Softmax in numpy to convert logits to probabilities
         action_probs = softmax(action_logits)
         if self.stochastic:
@@ -347,7 +453,22 @@ class BehaviorCloningPolicy(RllibPolicy):
         else:
             actions = np.argmax(action_logits, axis=1)
 
-        return actions,  [], { "action_dist_inputs" : action_logits }
+        return actions,  states, { "action_dist_inputs" : action_logits }
+
+    def get_initial_state(self):
+        """
+        Returns the initial hidden and memory states for the model if it is recursive
+
+        Note, this shadows the rllib.Model.get_initial_state function, but had to be added here as
+        keras does not allow mixins in custom model classes
+
+        Also note, either this function or self.model.get_initial_state (if it exists) must be called at 
+        start of an episode
+        """
+        if self.use_lstm:
+            return [np.zeros(self.cell_size,), np.zeros(self.cell_size,)]
+        return []
+
 
     def get_weights(self):
         """
@@ -367,6 +488,27 @@ class BehaviorCloningPolicy(RllibPolicy):
         Static policy requires no learning
         """
         return {}
+
+    def _forward(self, obs_batch, state_batches):
+        if self.use_lstm:
+            obs_batch = np.expand_dims(obs_batch, 1)
+            seq_lens = np.ones(len(obs_batch))
+            model_out = self.model.predict([obs_batch, seq_lens] + state_batches)
+            logits, states = model_out[0], model_out[1:]
+            logits = logits.reshape((logits.shape[0], -1))
+            return logits, states
+        else:
+            return self.model.predict(obs_batch), []
+
+    def _create_execution_context(self):
+        """
+        Creates a private execution context for the model 
+
+        Necessary if using with rllib in order to isolate this policy model from others
+        """
+        if self.eager:
+            return NullContextManager()
+        return TfContextManager(self._sess)
 
 
 if __name__ == "__main__":

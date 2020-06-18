@@ -39,6 +39,8 @@ class RlLibAgent(Agent):
         # Get initial rnn states and add batch dimension to each
         if hasattr(self.policy.model, 'get_initial_state'):
             self.rnn_state = [np.expand_dims(state, axis=0) for state in self.policy.model.get_initial_state()]
+        elif hasattr(self.policy, "get_initial_state"):
+            self.rnn_state = [np.expand_dims(state, axis=0) for state in self.policy.get_initial_state()]
         else:
             self.rnn_state = []
 

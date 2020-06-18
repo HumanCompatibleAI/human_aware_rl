@@ -156,6 +156,9 @@ def my_config():
     # Where to store model checkpoints and training stats
     results_dir = DEFAULT_RESULTS_DIR
 
+    # Whether tensorflow should execute eagerly or not
+    eager = False
+
 
     ### BC Params ###
     # path to pickled policy model for behavior cloning
@@ -231,7 +234,8 @@ def my_config():
         "num_gpus" : num_gpus,
         "seed" : seed,
         "evaluation_interval" : evaluation_interval,
-        "entropy_coeff_schedule" : [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)]
+        "entropy_coeff_schedule" : [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
+        "eager" : eager
     }
 
     # To be passed into AgentEvaluator constructor and _evaluate function
@@ -265,7 +269,8 @@ def my_config():
         "bc_policy_cls" : BehaviorCloningPolicy,
         "bc_config" : {
             "model_dir" : bc_model_dir,
-            "stochastic" : bc_stochastic
+            "stochastic" : bc_stochastic,
+            "eager" : eager
         }
     }
 
