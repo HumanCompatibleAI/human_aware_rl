@@ -4,6 +4,7 @@
 [submodule "overcooked_ai"]
 	path = overcooked_ai
 	url = git@github.com:HumanCompatibleAI/overcooked_ai.git
+	branch = overcooked_ai_improvements
 [submodule "stable-baselines"]
 	path = stable-baselines
 	url = git@github.com:micahcarroll/stable-baselines.git

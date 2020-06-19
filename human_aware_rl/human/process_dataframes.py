@@ -1,5 +1,4 @@
-import json
-import random
+import random, json, copy
 import numpy as np
 import pandas as pd
 from collections import defaultdict
@@ -7,14 +6,36 @@ from collections import defaultdict
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.utils import mean_and_std_err
 
+from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to_overcooked_single, extract_df_for_worker_on_layout, df_traj_to_python_joint_traj
 
+
+######################
+# HIGH LEVEL METHODS #
+######################
+
+def get_human_human_trajectories(layouts, dataset_type, processed=False):
+    """Get human-human trajectories"""
+    assert dataset_type in ["train", "test"]
+    from human_aware_rl.imitation.behavioural_cloning import DEFAULT_BC_PARAMS
+
+    expert_data = {}
+    for layout in layouts:
+        print(layout)
+        bc_params = copy.deepcopy(DEFAULT_BC_PARAMS)
+        bc_params["data_params"]['train_mdps'] = [layout]
+        bc_params["data_params"]['data_path'] = DATA_DIR + "human/anonymized/clean_{}_trials.pkl".format(dataset_type)
+        bc_params["mdp_params"]['layout_name'] = layout
+        bc_params["mdp_params"]['start_order_list'] = None
+        expert_data[layout] = get_trajs_from_data(**bc_params["data_params"], silent=True, processed=processed)[0]
+
+    return expert_data
 
 #############################
 # DATAFRAME TO TRAJECTORIES #
 #############################
 
-def get_trajs_from_data(data_path, train_mdps, ordered_trajs, human_ai_trajs):
+def get_trajs_from_data(data_path, train_mdps, ordered_trajs, human_ai_trajs, processed, silent=False):
     """
     Converts and returns trajectories from dataframe at `data_path` to overcooked trajectories.
     """
@@ -23,28 +44,28 @@ def get_trajs_from_data(data_path, train_mdps, ordered_trajs, human_ai_trajs):
     main_trials = pd.read_pickle(data_path)
     all_workers = list(main_trials['workerid_num'].unique())
 
-    trajs = convert_joint_df_trajs_to_overcooked_single(
+    trajs, info = convert_joint_df_trajs_to_overcooked_single(
         main_trials,
         all_workers,
         train_mdps,
         ordered_pairs=ordered_trajs,
-        human_ai_trajs=human_ai_trajs
+        human_ai_trajs=human_ai_trajs,
+        processed=processed,
+        silent=silent
     )
     
-    return trajs
+    return trajs, info
 
-def get_overcooked_traj_for_worker_layout(main_trials, worker_id, layout_name, complete_traj=True):
-    """
-    Extract trajectory for specific worker-layout pair and then return trajectory data 
-    in standard format, plus some metadata
-    """
-    one_traj_df = extract_df_for_worker_on_layout(main_trials, worker_id, layout_name)
-    trajectory, metadata = df_traj_to_python_joint_traj(one_traj_df, complete_traj)
-    
-    if trajectory is None:
-        print("Layout {} is missing from worker {}".format(layout_name, worker_id))
-
-    return trajectory, metadata
+# NOTE: is this needed?
+# def get_overcooked_traj_for_worker_layout(main_trials, worker_id, layout_name, complete_traj=True):
+#     """
+#     Extract trajectory for specific worker-layout pair and then return trajectory data
+#     in standard format, plus some metadata
+#     """
+#     one_traj_df = extract_df_for_worker_on_layout(main_trials, worker_id, layout_name)
+#     trajectory = df_traj_to_python_joint_traj(one_traj_df, complete_traj)
+#     if trajectory is None: print("Layout {} is missing from worker {}".format(layout_name, worker_id))
+#     return trajectory
 
 def save_npz_file(trajs, output_filename):
     AgentEvaluator.save_traj_in_stable_baselines_format(trajs, output_filename)
@@ -55,7 +76,7 @@ def save_npz_file(trajs, output_filename):
 ############################
 
 def interactive_from_traj_df(df_traj):
-    python_traj, _ = df_traj_to_python_joint_traj(df_traj)
+    python_traj = df_traj_to_python_joint_traj(df_traj)
     AgentEvaluator.interactive_from_traj(python_traj, traj_idx=0)
     
 def display_interactive_by_workerid(main_trials, worker_id, limit=None):
