@@ -155,11 +155,16 @@ def train_bc_model(model_dir, bc_params, verbose=False):
     model = build_bc_model(**bc_params, max_seq_len=np.max(seq_lens))
 
     # Initialize the model
+    # Note: have to use lists for multi-output model support and not dicts because of tensorlfow 2.0.0 bug
+    if bc_params['use_lstm']:
+        loss = [keras.losses.SparseCategoricalCrossentropy(from_logits=True), None, None]
+        metrics = [["sparse_categorical_accuracy"], [], []]
+    else:
+        loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        metrics = ["sparse_categorical_accuracy"]
     model.compile(optimizer=keras.optimizers.Adam(training_params["learning_rate"]),
-                  loss={
-                    "logits" : keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-                  },
-                  metrics={ "logits" : "sparse_categorical_accuracy" })
+                  loss=loss,
+                  metrics=metrics)
 
 
     # Customize our training loop with callbacks
