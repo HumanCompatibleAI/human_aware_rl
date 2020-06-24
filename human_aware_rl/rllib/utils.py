@@ -7,12 +7,28 @@ def softmax(logits):
     return (e_x / np.sum(e_x, axis=0)).T
 
 def get_base_env(mdp_params, env_params):
-    ae = AgentEvaluator(mdp_params=mdp_params, env_params=env_params)
-    return ae.env
+    # modified to ensure backwards compatibility
+    ae = AgentEvaluator(mdp_params_lst=[mdp_params], env_params=env_params)
+    return ae.env_lst[0]
+
+def get_base_env_lst(mdp_params_lst, env_params):
+    """
+    mdp_params_lst (list): a list of mdp_params
+    """
+    ae = AgentEvaluator(mdp_params_lst=mdp_params_lst, env_params=env_params)
+    return ae.env_lst
 
 def get_mlp(mdp_params, env_params):
-    ae = AgentEvaluator(mdp_params=mdp_params, env_params=env_params)
-    return ae.mlp
+    # modified to ensure backwards compatibility
+    ae = AgentEvaluator(mdp_params_lst=[mdp_params], env_params=env_params)
+    return ae.mlp_lst[0]
+
+def get_mlp_lst(mdp_params_lst, env_params):
+    """
+    mdp_params_lst (list): a list of mdp_params
+    """
+    ae = AgentEvaluator(mdp_params_lst=mdp_params_lst, env_params=env_params)
+    return ae.mlp_lst
 
 # Returns the required arguments as inspect.Parameter objects in a list
 def get_required_arguments(fn):

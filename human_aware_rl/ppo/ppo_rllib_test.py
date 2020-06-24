@@ -63,7 +63,7 @@ class TestPPORllib(unittest.TestCase):
 
     def test_ppo_sp(self):
         # Train a self play agent for 20 iterations
-        results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "num_training_iters" : 20, "evaluation_interval" : 100, "entropy_coeff_start" : 0.0, "entropy_coeff_end" : 0.0}).result
+        results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "num_training_iters" : 20, "evaluation_interval" : 5, "entropy_coeff_start" : 0.0, "entropy_coeff_end" : 0.0}).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
         self.assertGreaterEqual(results['average_total_reward'], 10.0)
@@ -83,7 +83,7 @@ class TestPPORllib(unittest.TestCase):
         train_bc_model(model_dir, bc_params)
 
         # Train rllib model
-        results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], "num_training_iters" : 10, "bc_model_dir" : model_dir, "evaluation_interval" : 100}).result
+        results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], "num_training_iters" : 20, "bc_model_dir" : model_dir, "evaluation_interval" : 5}).result
 
         # Sanity check
         self.assertGreaterEqual(results['average_total_reward'], 20.0)

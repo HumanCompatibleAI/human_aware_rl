@@ -147,8 +147,7 @@ Now create a new conda environment and run the install script as before
 ```bash
 $ conda create -n harl_rllib python=3.7
 $ conda activate harl_rllib
-(harl_rllib) $ cd human_ai_coord
-(harl_rllib) human_ai_coord $ ./install.sh
+(harl_rllib) $ ./install.sh
 ```
 
 Finally, install the latest stable version of tensorflow compatible with rllib
@@ -165,6 +164,7 @@ Your virtual environment should now be configured to run the rllib training code
 
 ```bash
 python -c "from ray import rllib"
+./run_tests.sh
 ```
 
 ## Testing
@@ -174,8 +174,8 @@ If set-up was successful, all unit tests and local reproducibility tests should 
 ### PPO Tests
 Highest level integration tests that combine self play, bc training, and ppo_bc training
 ```bash
-$ cd ppo
-ppo $ python ppo_rllib_tests.py
+$ cd human_aware_rl/ppo
+human_aware_rl/ppo $ python ppo_rllib_test.py
 ```
 
 ### BC Tests
@@ -263,6 +263,17 @@ It is likely because the code you are running relies on tensorflow executing sym
 This can be fixed by either changing the order of imports. This is because `import tensorflow as tf` sets eager execution to true, while any `rllib` import disables eager execution. Once the execution state has been set, it cannot be changed. For example, if you require eager execution, make sure `import tensorflow as tf` comes BEFORE `from ray import rllib` and vise versa.
 
 
+## 'human_aware_rl.data_dir' not found
+If you encounter 
+```
+ModuleNotFoundError: No module named 'human_aware_rl.data_dir'
+```
 
+, please run 
 
+```
+./run_tests.sh
+``` 
+
+to initiate those variables
 
