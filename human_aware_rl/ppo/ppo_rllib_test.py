@@ -114,7 +114,7 @@ if __name__ == '__main__':
 
     suite = unittest.TestSuite()
     suite.addTest(TestPPORllib('test_ppo_sp', args.compute_pickle, args.strict))
-    suite.addTest(TestPPORllib('test_ppo_bc', args.compute_pickle, args.strict))
+    # suite.addTest(TestPPORllib('test_ppo_bc', args.compute_pickle, args.strict))
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)
         

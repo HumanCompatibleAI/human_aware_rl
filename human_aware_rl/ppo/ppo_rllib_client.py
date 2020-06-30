@@ -171,13 +171,13 @@ def my_config():
 
     ### Environment Params ###
     # Which overcooked level to use
-    layout_names = ["cramped_room_2", "cramped_room"]
-    # layout_names = ["cramped_room"]
+    # layout_names = ["cramped_room_2", "cramped_room"]
+    layout_name = "cramped_room"
 
-    all_layout_names = '_'.join(layout_names)
+    # all_layout_names = '_'.join(layout_names)
 
     # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
-    experiment_name = "{0}_{1}".format("PPO", all_layout_names)
+    experiment_name = "{0}_{1}".format("PPO", layout_name)
 
     # Rewards the agent will receive for intermediate actions
     rew_shaping_params = {
@@ -248,18 +248,14 @@ def my_config():
         "display" : evaluation_display
     }
 
-    mdp_params_lst = []
-    for lm in layout_names:
-        mdp_params_lst.append({
-            "layout_name": lm,
-            "rew_shaping_params": rew_shaping_params
-        })
 
     environment_params = {
         # To be passed into OvercookedGridWorld constructor
 
-        # mdp_params_lst is a list of multiple layouts
-        "mdp_params_lst" : mdp_params_lst,
+        "mdp_params" : {
+            "layout_name": layout_name,
+            "rew_shaping_params": rew_shaping_params
+        },
         # To be passed into OvercookedEnv constructor
         "env_params" : {
             "horizon" : horizon
