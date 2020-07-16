@@ -4,12 +4,12 @@ from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import numpy as np
 
 # environment variable that tells us whether this code is running on the server or not
-LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
-
+# LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
+LOCAL_TESTING = False
 
 # Sacred setup (must be before rllib imports)
 from sacred import Experiment
-ex = Experiment("PPO RLLib")
+ex_fp = Experiment("PPO RLLib From Params")
 
 # Necessary work-around to make sacred pickling compatible with rllib
 from sacred import SETTINGS
@@ -19,7 +19,7 @@ SETTINGS.CONFIG.READ_ONLY_CONFIG = False
 from sacred.observers import SlackObserver
 if os.path.exists('slack.json') and not LOCAL_TESTING:
     slack_obs = SlackObserver.from_config('slack.json')
-    ex.observers.append(slack_obs)
+    ex_fp.observers.append(slack_obs)
 
     # Necessary for capturing stdout in multiprocessing setting
     SETTINGS.CAPTURE_MODE = 'sys'
@@ -50,7 +50,30 @@ from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy,
 #                                                               #
 #################################################################
 
-@ex.config
+def naive_params_schedule_fn(outside_information):
+    """
+    In this preliminary version, the outside information is ignored
+    """
+    # Rewards the agent will receive for intermediate actions
+    rew_shaping_params = {
+        "PLACEMENT_IN_POT_REW": 3,
+        "DISH_PICKUP_REWARD": 3,
+        "SOUP_PICKUP_REWARD": 5,
+        "DISH_DISP_DISTANCE_REW": 0,
+        "POT_DISTANCE_REW": 0,
+        "SOUP_DISTANCE_REW": 0,
+    }
+    mdp_default_gen_params = {
+        "inner_shape": (5, 4),
+        "prop_empty": 0.95,
+        "prop_feats": 0.1,
+        "display": False,
+        "rew_shaping_params": rew_shaping_params
+    }
+    return mdp_default_gen_params
+
+
+@ex_fp.config
 def my_config():
     ### Model params ###
 
@@ -70,7 +93,7 @@ def my_config():
 
     ### Training Params ###
 
-    num_workers = 30 if not LOCAL_TESTING else 2
+    num_workers = 20 if not LOCAL_TESTING else 2
 
     # list of all random seeds to use for experiments, used to reproduce results
     seeds = [0]
@@ -83,11 +106,13 @@ def my_config():
 
     # How many environment timesteps will be simulated (across all environments)
     # for one set of gradient updates. Is divided equally across environments
-    train_batch_size = 12000 if not LOCAL_TESTING else 800
+    # train_batch_size = 40000 if not LOCAL_TESTING else 800
+    train_batch_size = 100000 if not LOCAL_TESTING else 800
 
     # size of minibatches we divide up each batch into before
     # performing gradient steps
-    sgd_minibatch_size = 2000 if not LOCAL_TESTING else 800
+    # sgd_minibatch_size = 10000 if not LOCAL_TESTING else 800
+    sgd_minibatch_size = 25000 if not LOCAL_TESTING else 800
 
     # Rollout length
     rollout_fragment_length = 400
@@ -99,7 +124,7 @@ def my_config():
     num_training_iters = 420 if not LOCAL_TESTING else 2
 
     # Stepsize of SGD.
-    lr = 5e-5
+    lr = 6e-4
 
     # Learning rate schedule.
     lr_schedule = None
@@ -121,8 +146,8 @@ def my_config():
     vf_loss_coeff = 1e-4
 
     # Entropy bonus coefficient, will anneal linearly from _start to _end over _horizon steps
-    entropy_coeff_start = 0.2
-    entropy_coeff_end = 0.1
+    entropy_coeff_start = 0.02
+    entropy_coeff_end = 0.0001
     entropy_coeff_horizon = 3e5
 
     # Initial coefficient for KL divergence.
@@ -136,25 +161,25 @@ def my_config():
     num_sgd_iter = 8 if not LOCAL_TESTING else 1
 
     # How many trainind iterations (calls to trainer.train()) to run before saving model checkpoint
-    save_freq = 25
+    save_freq = 250
 
     # How many training iterations to run between each evaluation
-    evaluation_interval = 100 if not LOCAL_TESTING else 1
+    evaluation_interval = 50 if not LOCAL_TESTING else 1
 
     # How many timesteps should be in an evaluation episode
     evaluation_ep_length = 400
 
     # Number of games to simulation each evaluation
-    evaluation_num_games = 1
+    evaluation_num_games = 5
 
     # Whether to display rollouts in evaluation
-    evaluation_display = False
+    evaluation_display = True
 
     # Where to log the ray dashboard stats
     temp_dir = os.path.join(os.path.abspath(os.sep), "tmp", "ray_tmp") if not LOCAL_TESTING else None
 
     # Where to store model checkpoints and training stats
-    results_dir = DEFAULT_RESULTS_DIR
+    results_dir = os.path.join(os.path.abspath('.'), 'results_client_temp')
 
     # Whether tensorflow should execute eagerly or not
     eager = False
@@ -170,27 +195,33 @@ def my_config():
 
 
     ### Environment Params ###
-    # Which overcooked level to use
-    # layout_names = ["cramped_room_2", "cramped_room"]
-    layout_name = "cramped_room_2"
 
-    # all_layout_names = '_'.join(layout_names)
+
+
+
+    outer_shape = (5, 4)
+
+
+    params_str = "nw=%d_vf=%f_es=%f_en=%f_kl=%f_outer_shape=%d_%d--inner_shape=%d_%d--prop_empty=%f--prop_feats=%f" % (
+        num_workers,
+        vf_loss_coeff,
+        entropy_coeff_start,
+        entropy_coeff_end,
+        kl_coeff,
+        outer_shape[0],
+        outer_shape[1],
+        5,
+        4,
+        0.95,
+        0.1
+    )
 
     # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
-    experiment_name = "{0}_{1}".format("PPO", layout_name)
+    experiment_name = "{0}_{1}".format("PPO_fp_", params_str)
 
-    # Rewards the agent will receive for intermediate actions
-    rew_shaping_params = {
-        "PLACEMENT_IN_POT_REW": 3,
-        "DISH_PICKUP_REWARD": 3,
-        "SOUP_PICKUP_REWARD": 5,
-        "DISH_DISP_DISTANCE_REW": 0,
-        "POT_DISTANCE_REW": 0,
-        "SOUP_DISTANCE_REW": 0,
-    }
 
     # Whether dense reward should come from potential function or not
-    use_phi = True
+    use_phi = False
 
     # Max episode length
     horizon = 400
@@ -251,15 +282,26 @@ def my_config():
 
     environment_params = {
         # To be passed into OvercookedGridWorld constructor
-
-        "mdp_params" : {
-            "layout_name": layout_name,
-            "rew_shaping_params": rew_shaping_params
-        },
+        "outer_shape" : outer_shape,
+        "mdp_params_schedule_fn" : naive_params_schedule_fn,
         # To be passed into OvercookedEnv constructor
         "env_params" : {
             "horizon" : horizon
         },
+
+        # evaluation mdp params
+
+        "eval_mdp_params" :{
+            "inner_shape": (5, 4),
+            "prop_empty": 0.95,
+            "prop_feats": 0.1,
+            "display": False
+        },
+
+        
+        #"eval_mdp_params" :{
+        #    "layout_name": "cramped_room"
+        #},
 
         # To be passed into OvercookedMultiAgent constructor
         "multi_agent_params" : {
@@ -322,7 +364,7 @@ def run(params):
     return result
 
 
-@ex.automain
+@ex_fp.automain
 def main(params):
     # All ray environment set-up
     ray.init(temp_dir=params['temp_dir'])

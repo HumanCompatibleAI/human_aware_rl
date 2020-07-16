@@ -5,7 +5,7 @@ import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
 from human_aware_rl.static import HUMAN_DATA_PATH
-from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_env, get_mlp
+from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
 from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.agents.agent import AgentPair
@@ -68,21 +68,18 @@ DEFAULT_BC_PARAMS = {
 # Boolean indicating whether all param dependencies have been loaded. Used to prevent re-loading unceccesarily
 _params_initalized = False
 
-def _get_base_env(bc_params):
-    return get_base_env(bc_params['mdp_params'], bc_params['env_params'])
-
-def _get_mlp(bc_params):
-    return get_mlp(bc_params['mdp_params'], bc_params['env_params'])
+def _get_base_ae(bc_params):
+    return get_base_ae(bc_params['mdp_params'], bc_params['env_params'])
 
 def _get_observation_shape(bc_params):
     """
     Helper function for creating a dummy environment from "mdp_params" and "env_params" specified
     in bc_params and returning the shape of the observation space
     """
-    base_env = _get_base_env(bc_params)
-    mlp = _get_mlp(bc_params)
+    base_ae = _get_base_ae(bc_params)
+    base_env = base_ae.env
     dummy_state = base_env.mdp.get_standard_start_state()
-    obs_shape = base_env.mdp.featurize_state(dummy_state, mlp)[0].shape
+    obs_shape = base_env.featurize_state_mdp(dummy_state)[0].shape
     return obs_shape
 
 # For lazing loading the default params. Prevents loading on every import of this module 
@@ -264,10 +261,10 @@ def evaluate_bc_model(model, bc_params):
     mdp_params = bc_params['mdp_params']
 
     # Get reference to state encoding function used by bc agents, with compatible signature
-    base_env = _get_base_env(bc_params)
-    mlp = _get_mlp(bc_params)
+    base_ae = _get_base_ae(bc_params)
+    base_env = base_ae.env
     def featurize_fn(state):
-        return base_env.mdp.featurize_state(state, mlp)
+        return base_env.featurize_state_mdp(state)
 
     # Wrap Keras models in rllib policies
     agent_0_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)

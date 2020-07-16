@@ -1,4 +1,5 @@
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
+from overcooked_ai_py.mdp.layout_generator import LayoutGenerator
 import numpy as np
 import inspect
 
@@ -6,15 +7,20 @@ def softmax(logits):
     e_x = np.exp(logits.T - np.max(logits))
     return (e_x / np.sum(e_x, axis=0)).T
 
-def get_base_env(mdp_params, env_params):
-    # modified to ensure backwards compatibility
-    ae = AgentEvaluator(mdp_params=mdp_params, env_params=env_params)
-    return ae.env
 
-def get_mlp(mdp_params, env_params):
-    # modified to ensure backwards compatibility
-    ae = AgentEvaluator(mdp_params=mdp_params, env_params=env_params)
-    return ae.mlp
+def get_base_ae(mdp_params, env_params, outer_shape=None, mdp_params_schedule_fn=None):
+    """
+    mdp_params: one set of fixed mdp parameter used by the enviroment
+    env_params: env parameters (horizon, etc)
+    outer_shape: outer shape of the environment
+    mdp_params_schedule_fn: the schedule for varying mdp params
+
+    return: the base agent evaluator
+    """
+    assert mdp_params == None or mdp_params_schedule_fn == None, "either of the two has to be null"
+    mdp_fn = LayoutGenerator.mdp_gen_fn_from_dict(mdp_params, outer_shape, mdp_params_schedule_fn)
+    ae = AgentEvaluator(env_params=env_params, mdp_fn=mdp_fn)
+    return ae
 
 # Returns the required arguments as inspect.Parameter objects in a list
 def get_required_arguments(fn):

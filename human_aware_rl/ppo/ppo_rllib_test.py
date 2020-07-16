@@ -1,6 +1,7 @@
 import unittest, os, shutil, pickle, ray, random, argparse, sys
-os.environ['RUN_ENV'] = 'local'
+os.environ['RUN_ENV'] = 'production'
 from human_aware_rl.ppo.ppo_rllib_client import ex
+from human_aware_rl.ppo.ppo_rllib_from_params_client import ex_fp
 from human_aware_rl.imitation.behavior_cloning_tf2 import get_default_bc_params, train_bc_model
 from human_aware_rl.static import PPO_EXPECTED_DATA_PATH
 from human_aware_rl.data_dir import DATA_DIR
@@ -63,7 +64,7 @@ class TestPPORllib(unittest.TestCase):
 
     def test_ppo_sp(self):
         # Train a self play agent for 20 iterations
-        results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "num_training_iters" : 20, "evaluation_interval" : 5, "entropy_coeff_start" : 0.0, "entropy_coeff_end" : 0.0}).result
+        results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "num_training_iters" : 400, "evaluation_interval" : 500, "entropy_coeff_start" : 0.0, "entropy_coeff_end" : 0.0}).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
         self.assertGreaterEqual(results['average_total_reward'], 10.0)
@@ -74,6 +75,22 @@ class TestPPORllib(unittest.TestCase):
         # Reproducibility test
         if self.strict:
             self.assertDictEqual(results, self.expected['test_ppo_sp'])
+
+    def test_ppo_fp_sp(self):
+        # Train a self play agent for 20 iterations
+        results = ex_fp.run(
+            config_updates={"results_dir": self.temp_results_dir, "num_training_iters": 400, "evaluation_interval": 100,
+                            "entropy_coeff_start": 0.0, "entropy_coeff_end": 0.0}).result
+
+        # Sanity check (make sure it begins to learn to receive dense reward)
+        self.assertGreaterEqual(results['average_total_reward'], 10.0)
+
+        if self.compute_pickle:
+            self.expected['test_ppo_fp_sp'] = results
+
+        # Reproducibility test
+        if self.strict:
+            self.assertDictEqual(results, self.expected['test_ppo_fp_sp'])
 
     def test_ppo_bc(self):
         # Train bc model
@@ -108,12 +125,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     assert not (args.compute_pickle and args.strict), "Cannot compute pickle and run strict reproducibility tests at same time"
-
+    print(args.compute_pickle, args.strict)
     if args.compute_pickle:
         _clear_pickle()
 
     suite = unittest.TestSuite()
-    suite.addTest(TestPPORllib('test_ppo_sp', args.compute_pickle, args.strict))
+    # suite.addTest(TestPPORllib('test_ppo_sp', args.compute_pickle, args.strict))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp', args.compute_pickle, args.strict))
     # suite.addTest(TestPPORllib('test_ppo_bc', args.compute_pickle, args.strict))
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)

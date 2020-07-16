@@ -100,11 +100,11 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
     datapoint = traj_df.iloc[0]
     python_layout_name = JS_LAYOUT_NAME_TO_PYTHON_NAME[datapoint['layout_name']]
     agent_evaluator = AgentEvaluator(
-        mdp_params_lst=[{"layout_name": python_layout_name}],
+        mdp_params={"layout_name": python_layout_name},
         env_params={"horizon": 1250} # Defining the horizon of the mdp of origin of the trajectories
     )
-    mdp = agent_evaluator.env_lst[0].mdp
-    env = agent_evaluator.env_lst[0]
+    mdp = agent_evaluator.env.mdp
+    env = agent_evaluator.env
 
     overcooked_states = [json_state_to_python_state(mdp, s) for s in traj_df.state]
     overcooked_actions = [json_joint_action_to_python_action(joint_action) for joint_action in traj_df.joint_action]
@@ -126,7 +126,7 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
         "metadatas": {
                 'worker_id': [datapoint['workerid_num']],
                 'round_num': [datapoint['round_num']],
-                'mdp': [agent_evaluator.env_lst[0].mdp]
+                'mdp': [agent_evaluator.env.mdp]
         }
     }
     trajectories = {k: np.array(v) if k not in ["ep_actions", "metadatas"] else v for k, v in trajectories.items() }
