@@ -173,8 +173,10 @@ class OvercookedMultiAgent(MultiAgentEnv):
         dummy_state = self.base_env.mdp.get_standard_start_state()
         featurize_fn_ppo = lambda state: self.base_env.lossless_state_encoding_mdp(state)
         obs_shape = featurize_fn_ppo(dummy_state)[0].shape
-        high = np.ones(obs_shape) * max(self.base_env.mdp.soup_cooking_time, self.base_env.mdp.num_items_for_soup, 5)
-        self.ppo_observation_space = gym.spaces.Box(high * 0, high, dtype=np.float32)
+        high = np.ones(obs_shape) * float("inf")
+        low = np.ones(obs_shape) * 0
+
+        self.ppo_observation_space = gym.spaces.Box(low, high, dtype=np.float32)
 
         if False:
             featurize_fn_bc = lambda state: self.base_env.featurize_state_mdp(state)

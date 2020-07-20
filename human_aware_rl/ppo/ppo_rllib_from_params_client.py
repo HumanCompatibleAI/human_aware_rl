@@ -221,7 +221,7 @@ def my_config():
 
 
     # Whether dense reward should come from potential function or not
-    use_phi = False
+    use_phi = True
 
     # Max episode length
     horizon = 400
