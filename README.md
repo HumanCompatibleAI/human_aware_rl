@@ -128,9 +128,26 @@ All DRL results can be reproduced by running the `.sh` scripts under `human_awar
 
 All non-DRL results can be reproduced by running cells in `NeurIPS Experiments and Visualizations.ipynb`.
 
-# Rllib
+# Rllib-Multi Layout
 
-Some of the agents are now compatible to be trained with rllib, using Tensorflow 2. This requires alternative installation. Make sure you are on the branch `rllib`
+Some of the agents are now compatible to be trained with rllib, using Tensorflow 2. This requires alternative installation. Make sure you are on the branch `mlt_dev`
+
+## CUDA 10.0 Installation on Ubuntu 18.04
+For Ubuntu 18.04, follow the direction [here](https://www.pugetsystems.com/labs/hpc/How-To-Install-CUDA-10-together-with-9-2-on-Ubuntu-18-04-with-support-for-NVIDIA-20XX-Turing-GPUs-1236/)
+
+The only difference being the very last step. 
+
+Instead of running 
+
+```bash
+$ sudo apt-get install cuda
+```
+
+Please run 
+```bash
+$ sudo apt-get install cuda-libraries-10-0
+$ sudo apt-get install cuda-10-0
+```
 
 ## Installation
 
@@ -138,11 +155,13 @@ Ensure that have the correct `overcooked-ai` submodule code (if you cloned direc
 
 ```bash
 $ cd overcooked_ai
-overcooked_ai $ git checkout overcooked_ai_improvements
+overcooked_ai $ git checkout mtlu_dev
 overcooked_ai $ cd ..
 ```
 
 Now create a new conda environment and run the install script as before
+
+[Optional Conda Installation for 18.04](https://www.digitalocean.com/community/tutorials/how-to-install-the-anaconda-python-distribution-on-ubuntu-18-04)
 
 ```bash
 $ conda create -n harl_rllib python=3.7
