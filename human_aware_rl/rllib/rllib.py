@@ -118,8 +118,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
         }
     }
 
-    def __init__(self, base_env, featurize_fns, reward_shaping_factor=0.0, reward_shaping_horizon=0, 
-                            bc_schedule=None, use_phi=True):
+    def __init__(self, base_env, featurize_fns, mlp=None, reward_shaping_factor=0.0, reward_shaping_horizon=0, 
+                            bc_schedule=None, use_phi=True, gamma=0.99):
         """
         base_env: OvercookedEnv
         featurize_fn (dict): dictionary mapping agent names to featurization functions of type state -> list(np.array)
@@ -134,6 +134,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self._validate_featurize_fns(featurize_fns)
         self._validate_schedule(self.bc_schedule)
         self.base_env = base_env
+        self.mlp = mlp
+        self.gamma = gamma
         self.featurize_fn_map = featurize_fns
         self._initial_reward_shaping_factor = reward_shaping_factor
         self.reward_shaping_factor = reward_shaping_factor
@@ -170,8 +172,9 @@ class OvercookedMultiAgent(MultiAgentEnv):
         if 'ppo' in self.featurize_fn_map:
             featurize_fn = self.featurize_fn_map['ppo']
             obs_shape = featurize_fn(dummy_state)[0].shape
-            high = np.ones(obs_shape) * max(self.base_env.mdp.soup_cooking_time, self.base_env.mdp.num_items_for_soup, 5)
-            self.ppo_observation_space = gym.spaces.Box(high * 0, high, dtype=np.float32)
+            high = np.ones(obs_shape) * np.inf
+            low = np.zeros(obs_shape)
+            self.ppo_observation_space = gym.spaces.Box(low, high, dtype=np.float32)
         if 'bc' in self.featurize_fn_map:
             featurize_fn = self.featurize_fn_map['bc']
             obs_shape = featurize_fn(dummy_state)[0].shape
@@ -235,9 +238,10 @@ class OvercookedMultiAgent(MultiAgentEnv):
         joint_action = [Action.INDEX_TO_ACTION[a] for a in action]
         next_state, sparse_reward, done, info = self.base_env.step(joint_action)
         ob_p0, ob_p1 = self._get_obs(next_state)
+        phi_s_prime = self.base_env.potential(mlp=self.mlp, gamma=self.gamma)
 
         if self.use_phi:
-            potential = info['phi_s_prime'] - info['phi_s']
+            potential = self.gamma * phi_s_prime - self.phi_s
             dense_reward = (potential, potential)
         else:
             dense_reward = info["shaped_r_by_agent"]
@@ -249,6 +253,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         rewards = { self.curr_agents[0]: shaped_reward_p0, self.curr_agents[1]: shaped_reward_p1 }
         dones = { self.curr_agents[0]: done, self.curr_agents[1]: done, "__all__": done }
         infos = { self.curr_agents[0]: info, self.curr_agents[1]: info }
+        self.phi_s = phi_s_prime
         return obs, rewards, dones, infos
 
     def reset(self):
@@ -261,6 +266,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         have to deal with randomizing indices.
         """
         self.base_env.reset()
+        self.phi_s = self.base_env.potential(mlp=self.mlp, gamma=self.gamma)
         self.curr_agents = self._populate_agents()
         ob_p0, ob_p1 = self._get_obs(self.base_env.state)
         return { self.curr_agents[0] : ob_p0, self.curr_agents[1] : ob_p1 }
@@ -335,7 +341,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
             'bc' : bc_featurize_fn
         }
 
-        return cls(base_env, featurize_fn_map, **multi_agent_params)
+        return cls(base_env, featurize_fn_map, mlp, **multi_agent_params)
 
 
 
