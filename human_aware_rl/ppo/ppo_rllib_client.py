@@ -151,7 +151,7 @@ def my_config():
     evaluation_display = False
 
     # Where to log the ray dashboard stats
-    temp_dir = os.path.join(os.path.abspath(os.sep), "tmp", "ray_tmp") if not LOCAL_TESTING else None
+    temp_dir = os.path.join(os.path.abspath(os.sep), "tmp", "ray_tmp")
 
     # Where to store model checkpoints and training stats
     results_dir = DEFAULT_RESULTS_DIR
@@ -196,7 +196,7 @@ def my_config():
     reward_shaping_factor = 1.0
 
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-    reward_shaping_horizon = 1e6
+    reward_shaping_horizon = float('inf')
 
     # bc_factor represents that ppo agent gets paired with a bc agent for any episode
     # schedule for bc_factor is represented by a list of points (t_i, v_i) where v_i represents the 
