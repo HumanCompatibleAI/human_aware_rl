@@ -67,6 +67,11 @@ def naive_params_schedule_fn(outside_information):
         "inner_shape": (5, 4),
         "prop_empty": 0.95,
         "prop_feats": 0.1,
+        "start_all_orders": [
+            {"ingredients": ["onion", "onion", "onion"]}
+        ],
+        "recipe_values": [20],
+        "recipe_times": [20],
         "display": False,
         "rew_shaping_params": rew_shaping_params
     }
@@ -121,10 +126,10 @@ def my_config():
     shared_policy = True
 
     # Number of training iterations to run
-    num_training_iters = 420 if not LOCAL_TESTING else 2
+    num_training_iters = 400 if not LOCAL_TESTING else 2
 
     # Stepsize of SGD.
-    lr = 6e-4
+    lr = 5e-3
 
     # Learning rate schedule.
     lr_schedule = None
@@ -147,7 +152,7 @@ def my_config():
 
     # Entropy bonus coefficient, will anneal linearly from _start to _end over _horizon steps
     entropy_coeff_start = 0.02
-    entropy_coeff_end = 0.0001
+    entropy_coeff_end = 0.00005
     entropy_coeff_horizon = 3e5
 
     # Initial coefficient for KL divergence.
@@ -170,7 +175,7 @@ def my_config():
     evaluation_ep_length = 400
 
     # Number of games to simulation each evaluation
-    evaluation_num_games = 5
+    evaluation_num_games = 2
 
     # Whether to display rollouts in evaluation
     evaluation_display = True
@@ -295,6 +300,11 @@ def my_config():
             "inner_shape": (5, 4),
             "prop_empty": 0.95,
             "prop_feats": 0.1,
+            "start_all_orders": [
+                {"ingredients": ["onion", "onion", "onion"]}
+            ],
+            "recipe_values": [20],
+            "recipe_times": [20],
             "display": False
         },
 

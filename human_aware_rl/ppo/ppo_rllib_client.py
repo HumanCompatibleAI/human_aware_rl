@@ -103,7 +103,7 @@ def my_config():
     num_training_iters = 400 if not LOCAL_TESTING else 2
 
     # Stepsize of SGD.
-    lr = 5e-5
+    lr = 5e-3
 
     # Learning rate schedule.
     lr_schedule = None
@@ -126,14 +126,14 @@ def my_config():
 
     # Entropy bonus coefficient, will anneal linearly from _start to _end over _horizon steps
     entropy_coeff_start = 0.2
-    entropy_coeff_end = 0.1
+    entropy_coeff_end = 0.00005
     entropy_coeff_horizon = 3e5
 
     # Initial coefficient for KL divergence.
     kl_coeff = 0.2
 
     # PPO clipping factor
-    clip_param = 0.0005
+    clip_param = 0.05
 
     # Number of SGD iterations in each outer loop (i.e., number of epochs to
     # execute per train batch).
