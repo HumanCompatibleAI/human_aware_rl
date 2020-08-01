@@ -19,7 +19,7 @@ import ray
 import tempfile
 import gym
 import numpy as np
-import os, pickle, copy
+import os, copy, dill
 
 action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
 obs_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
@@ -494,6 +494,11 @@ def evaluate(eval_params, mdp_params, agent_0_policy, agent_1_policy, agent_0_fe
 
 
 def gen_trainer_from_params(params):
+    # All ray environment set-up
+    ray.init(ignore_reinit_error=True, temp_dir=params['ray_params']['temp_dir'])
+    register_env("overcooked_multi_agent", params['ray_params']['env_creator'])
+    ModelCatalog.register_custom_model(params['ray_params']['custom_model_id'], params['ray_params']['custom_model_cls'])
+
     # Parse params
     model_params = params['model_params']
     training_params = params['training_params']
@@ -529,11 +534,17 @@ def gen_trainer_from_params(params):
     def custom_logger_creator(config):
                 """Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
                 """
-                if not os.path.exists(params['results_dir']):
-                    os.makedirs(params['results_dir'])
+                results_dir = params['results_dir']
+                if not os.path.exists(results_dir):
+                    try:
+                        os.makedirs(results_dir)
+                    except Exception as e:
+                        print("error creating custom logging dir. Falling back to default logdir {}".format(DEFAULT_RESULTS_DIR))
+                        results_dir = DEFAULT_RESULTS_DIR
                 logdir = tempfile.mkdtemp(
-                    prefix=logdir_prefix, dir=params['results_dir'])
-                return UnifiedLogger(config, logdir, loggers=None)
+                    prefix=logdir_prefix, dir=results_dir)
+                logger = UnifiedLogger(config, logdir, loggers=None)
+                return logger
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
@@ -567,41 +578,83 @@ def gen_trainer_from_params(params):
     return trainer
 
 
-def save_trainer(trainer, params, path=None):
-    config = trainer.get_config()
-    save_path = trainer.save(path)
-    save_dir = os.path.dirname(save_path)
-    config_path = os.path.join(save_dir, "config.pkl")
-    config = copy.deepcopy(params)
-    with open(config_path, "wb") as f:
-        pickle.dump(config, f)
 
+### Serialization ###
+
+
+def save_trainer(trainer, params, path=None):
+    """
+    Saves a serialized trainer checkpoint at `path`. If none provided, the default path is
+    ~/ray_results/<experiment_results_dir>/checkpoint_<i>/checkpoint-<i>
+
+    Note that `params` should follow the same schema as the dict passed into `gen_trainer_from_params`
+    """
+    # Save trainer
+    save_path = trainer.save(path)
+
+    # Save params used to create trainer in /path/to/checkpoint_dir/config.pkl
+    config = copy.deepcopy(params)
+    config_path = os.path.join(os.path.dirname(save_path), "config.pkl")
+
+    # Note that we use dill (not pickle) here because it supports function serialization
+    with open(config_path, "wb") as f:
+        dill.dump(config, f)
     return save_path
 
-
-# TODO: Make trainer loading not depent on featurize_fn so client code can be cleaner (i.e. parse the 
-#   environment from the pickled trainer and grab the lossless_state_encoding from there)
-
 def load_trainer(save_path):
-    save_dir = os.path.dirname(save_path)
-    config_path = os.path.join(save_dir, "config.pkl")
+    """
+    Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
+    Note that `save_path` is the full path to the checkpoint FILE, not the checkpoint directory
+    """
+    # Read in params used to create trainer
+    config_path = os.path.join(os.path.dirname(save_path), "config.pkl")
     with open(config_path, "rb") as f:
-        config = pickle.load(f)
+        # We use dill (instead of pickle) here because we must deserialize functions
+        config = dill.load(f)
+    
     # Override this param to lower overhead in trainer creation
     config['training_params']['num_workers'] = 0
+
+    # Get un-trained trainer object with proper config
     trainer = gen_trainer_from_params(config)
+
+    # Load weights into dummy object
     trainer.restore(save_path)
     return trainer
 
-def get_agent_pair_from_trainer(trainer, featurize_fn):
-    central_policy = trainer.get_policy('agent')
-    agent0 = RlLibAgent(central_policy, agent_index=0, featurize_fn=featurize_fn)
-    agent1 = RlLibAgent(central_policy, agent_index=0, featurize_fn=featurize_fn)
+def get_agent_from_trainer(trainer, policy_id="ppo", agent_index=0):
+    policy = trainer.get_policy(policy_id)
+    dummy_env = trainer.env_creator(trainer.config['env_config'])
+    featurize_fn = dummy_env.featurize_fn_map[policy_id]
+    agent = RlLibAgent(policy, agent_index, featurize_fn=featurize_fn)
+    return agent
+
+def get_agent_pair_from_trainer(trainer, policy_id_0='ppo', policy_id_1='ppo'):
+    agent0 = get_agent_from_trainer(trainer, policy_id=policy_id_0)
+    agent1 = get_agent_from_trainer(trainer, policy_id=policy_id_1)
     return AgentPair(agent0, agent1)
 
 
-def load_agent_pair(save_path, featurize_fn):
+def load_agent_pair(save_path, policy_id_0='ppo', policy_id_1='ppo'):
+    """
+    Returns an Overcooked AgentPair object that has as player 0 and player 1 policies with 
+    ID policy_id_0 and policy_id_1, respectively
+    """
     trainer = load_trainer(save_path)
-    return get_agent_pair_from_trainer(trainer, featurize_fn)
+    return get_agent_pair_from_trainer(trainer, policy_id_0, policy_id_1)
+
+def load_agent(save_path, policy_id='ppo', agent_index=0):
+    """
+    Returns an RllibAgent (compatible with the Overcooked Agent API) from the `save_path` to a previously
+    serialized trainer object created with `save_trainer`
+
+    The trainer can have multiple independent policies, so extract the one with ID `policy_id` to wrap in
+    an RllibAgent
+
+    Agent index indicates whether the agent is player zero or player one (or player n in the general case)
+    as the featurization is not symmetric for both players
+    """
+    trainer = load_trainer(save_path)
+    return get_agent_from_trainer(trainer, policy_id=policy_id, agent_index=agent_index)
 
 

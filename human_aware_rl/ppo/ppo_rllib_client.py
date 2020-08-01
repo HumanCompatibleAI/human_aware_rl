@@ -50,6 +50,10 @@ from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy,
 #                                                               #
 #################################################################
 
+# Dummy wrapper to pass rllib type checks
+def _env_creator(env_config):
+    return OvercookedMultiAgent.from_config(env_config)
+
 @ex.config
 def my_config():
     ### Model params ###
@@ -274,6 +278,13 @@ def my_config():
         }
     }
 
+    ray_params = {
+        "custom_model_id" : "MyPPOModel",
+        "custom_model_cls" : RllibLSTMPPOModel if model_params['use_lstm'] else RllibPPOModel,
+        "temp_dir" : temp_dir,
+        "env_creator" : _env_creator
+    }
+
     params = {
         "model_params" : model_params,
         "training_params" : training_params,
@@ -285,13 +296,9 @@ def my_config():
         "experiment_name" : experiment_name,
         "save_every" : save_freq,
         "seeds" : seeds,
-        "temp_dir" : temp_dir,
-        "results_dir" : results_dir
+        "results_dir" : results_dir,
+        "ray_params" : ray_params
     }
-
-# Dummy wrapper to pass rllib type checks
-def _env_creater(env_config):
-    return OvercookedMultiAgent.from_config(env_config)
 
 
 def run(params):
@@ -319,11 +326,6 @@ def run(params):
 
 @ex.automain
 def main(params):
-    # All ray environment set-up
-    ray.init(temp_dir=params['temp_dir'])
-    register_env("overcooked_multi_agent", _env_creater)
-    ModelCatalog.register_custom_model("MyPPOModel", RllibLSTMPPOModel if params['model_params']['use_lstm'] else RllibPPOModel)
-
     # List of each random seed to run
     seeds = params['seeds']
     del params['seeds']
