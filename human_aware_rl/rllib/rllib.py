@@ -495,7 +495,8 @@ def evaluate(eval_params, mdp_params, agent_0_policy, agent_1_policy, agent_0_fe
 
 def gen_trainer_from_params(params):
     # All ray environment set-up
-    ray.init(ignore_reinit_error=True, temp_dir=params['ray_params']['temp_dir'])
+    if not ray.is_initialized():
+        ray.init(ignore_reinit_error=True, include_webui=False, temp_dir=params['ray_params']['temp_dir'])
     register_env("overcooked_multi_agent", params['ray_params']['env_creator'])
     ModelCatalog.register_custom_model(params['ray_params']['custom_model_id'], params['ray_params']['custom_model_cls'])
 
