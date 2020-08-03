@@ -52,6 +52,8 @@ from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy,
 
 # Dummy wrapper to pass rllib type checks
 def _env_creator(env_config):
+    # Re-import required here to work with serialization
+    from human_aware_rl.rllib.rllib import OvercookedMultiAgent 
     return OvercookedMultiAgent.from_config(env_config)
 
 @ex.config
