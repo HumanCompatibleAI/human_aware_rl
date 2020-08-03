@@ -113,8 +113,12 @@ def _pad(sequences, maxlen=None, default=0):
         seq.extend([default]*pad_len)
     return sequences
 
-def load_data(bc_params, verbose):
-    processed_trajs, _ = get_trajs_from_data(**bc_params["data_params"], silent=not verbose)
+def load_data(bc_params, verbose, trajs=None):
+    if trajs is None:
+        processed_trajs, _ = get_trajs_from_data(**bc_params["data_params"], silent=not verbose)
+    else:
+        processed_trajs = trajs
+    
     inputs, targets = processed_trajs["ep_observations"], processed_trajs["ep_actions"]
 
     if bc_params['use_lstm']:
@@ -136,8 +140,8 @@ def build_bc_model(use_lstm=True, eager=False, **kwargs):
         return _build_model(**kwargs)
     
 
-def train_bc_model(model_dir, bc_params, verbose=False):
-    inputs, seq_lens, targets = load_data(bc_params, verbose)
+def train_bc_model(model_dir, bc_params, verbose=False, trajs=None):
+    inputs, seq_lens, targets = load_data(bc_params, verbose, trajs=trajs)
 
     training_params = bc_params["training_params"]
 
