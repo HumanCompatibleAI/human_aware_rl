@@ -192,6 +192,16 @@ def my_config():
         "SOUP_DISTANCE_REW": 0,
     }
 
+    potential_constants = {
+        'min_coeff' : 0.7,
+        'max_delivery_steps' : 10,
+        'max_pickup_steps' : 20,
+        'pot_onion_steps' : 10,
+        'pot_tomato_steps' : 10,
+        'useful_counter_coeff' : 2,
+        'non_useful_counter_coeff' : 0
+    }
+
     # Whether dense reward should come from potential function or not
     use_phi = True
 
@@ -267,7 +277,8 @@ def my_config():
             "reward_shaping_factor" : reward_shaping_factor,
             "reward_shaping_horizon" : reward_shaping_horizon,
             "use_phi" : use_phi,
-            "bc_schedule" : bc_schedule
+            "bc_schedule" : bc_schedule,
+            "potential_constants" : potential_constants
         }
     }
 

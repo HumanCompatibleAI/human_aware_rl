@@ -114,12 +114,13 @@ class OvercookedMultiAgent(MultiAgentEnv):
             "reward_shaping_factor" : 0.0,
             "reward_shaping_horizon" : 0,
             "bc_schedule" : self_play_bc_schedule,
-            "use_phi" : True
+            "use_phi" : True,
+            "potential_constants" : {}
         }
     }
 
     def __init__(self, base_env, featurize_fns, mlp=None, reward_shaping_factor=0.0, reward_shaping_horizon=0, 
-                            bc_schedule=None, use_phi=True, gamma=0.99):
+                            bc_schedule=None, use_phi=True, gamma=0.99, potential_constants={}):
         """
         base_env: OvercookedEnv
         featurize_fn (dict): dictionary mapping agent names to featurization functions of type state -> list(np.array)
@@ -140,6 +141,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self._initial_reward_shaping_factor = reward_shaping_factor
         self.reward_shaping_factor = reward_shaping_factor
         self.reward_shaping_horizon = reward_shaping_horizon
+        self.potential_constants = potential_constants
         self.use_phi = use_phi
         self._setup_observation_space()
         self.action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
@@ -238,7 +240,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         joint_action = [Action.INDEX_TO_ACTION[a] for a in action]
         next_state, sparse_reward, done, info = self.base_env.step(joint_action)
         ob_p0, ob_p1 = self._get_obs(next_state)
-        phi_s_prime = self.base_env.potential(mlp=self.mlp, gamma=self.gamma)
+        phi_s_prime = self.base_env.potential(mlp=self.mlp, gamma=self.gamma, potential_constants=self.potential_constants)
 
         if self.use_phi:
             potential = self.gamma * phi_s_prime - self.phi_s
@@ -266,7 +268,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         have to deal with randomizing indices.
         """
         self.base_env.reset()
-        self.phi_s = self.base_env.potential(mlp=self.mlp, gamma=self.gamma)
+        self.phi_s = self.base_env.potential(mlp=self.mlp, gamma=self.gamma, potential_constants=self.potential_constants)
         self.curr_agents = self._populate_agents()
         ob_p0, ob_p1 = self._get_obs(self.base_env.state)
         return { self.curr_agents[0] : ob_p0, self.curr_agents[1] : ob_p1 }
