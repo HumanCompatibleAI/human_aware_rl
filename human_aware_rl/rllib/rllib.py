@@ -119,8 +119,9 @@ class OvercookedMultiAgent(MultiAgentEnv):
         }
     }
 
-    def __init__(self, base_env, featurize_fns, mlp=None, reward_shaping_factor=0.0, reward_shaping_horizon=0, 
-                            bc_schedule=None, use_phi=True, gamma=0.99, potential_constants={}):
+    def __init__(self, base_env, featurize_fns, mlp=None, use_reward_shaping=False, reward_shaping_schedule=None,
+                            use_potential_shaping=False, potential_shaping_schedule=None,
+                            bc_schedule=None, gamma=0.99, potential_constants={}):
         """
         base_env: OvercookedEnv
         featurize_fn (dict): dictionary mapping agent names to featurization functions of type state -> list(np.array)
@@ -132,20 +133,24 @@ class OvercookedMultiAgent(MultiAgentEnv):
         """
         if bc_schedule:
             self.bc_schedule = bc_schedule
+        self.reward_shaping_schedule = reward_shaping_schedule
+        self.potential_shaping_schedule = potential_shaping_schedule
         self._validate_featurize_fns(featurize_fns)
         self._validate_schedule(self.bc_schedule)
+        self._validate_schedule(self.reward_shaping_schedule)
+        self._validate_schedule(self.potential_shaping_schedule)
         self.base_env = base_env
         self.mlp = mlp
         self.gamma = gamma
         self.featurize_fn_map = featurize_fns
-        self._initial_reward_shaping_factor = reward_shaping_factor
-        self.reward_shaping_factor = reward_shaping_factor
-        self.reward_shaping_horizon = reward_shaping_horizon
         self.potential_constants = potential_constants
-        self.use_phi = use_phi
+        self.use_potential_shaping = use_potential_shaping
+        self.use_reward_shaping = use_reward_shaping
         self._setup_observation_space()
         self.action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
         self.anneal_bc_factor(0)
+        self.anneal_potential_shaping_factor(0)
+        self.anneal_reward_shaping_factor(0)
         self.reset()
     
     def _validate_featurize_fns(self, mapping):
@@ -225,6 +230,19 @@ class OvercookedMultiAgent(MultiAgentEnv):
             fraction = max(1 - float(off_t) / (end_t - start_t), 0)
             return fraction * start_v + (1 - fraction) * end_v
 
+    def _anneal_from_schedule(self, timestep, schedule):
+        p_0 = schedule[0]
+        p_1 = schedule[1]
+        i = 2
+        while timestep > p_1[0] and i < len(schedule):
+            p_0 = p_1
+            p_1 = schedule[i]
+            i += 1
+        start_t, start_v = p_0
+        end_t, end_v = p_1
+        new_factor = self._anneal(start_v, timestep, end_t, end_v, start_t)
+        return new_factor
+
 
     def step(self, action_dict):
         """
@@ -242,14 +260,14 @@ class OvercookedMultiAgent(MultiAgentEnv):
         ob_p0, ob_p1 = self._get_obs(next_state)
         phi_s_prime = self.base_env.potential(mlp=self.mlp, gamma=self.gamma, potential_constants=self.potential_constants)
 
-        if self.use_phi:
+        if self.use_potential_shaping:
             potential = self.gamma * phi_s_prime - self.phi_s
-            dense_reward = (potential, potential)
-        else:
+            potential_reward = (potential, potential)
+        if self.use_reward_shaping:
             dense_reward = info["shaped_r_by_agent"]
 
-        shaped_reward_p0 = sparse_reward + self.reward_shaping_factor * dense_reward[0]
-        shaped_reward_p1 = sparse_reward + self.reward_shaping_factor * dense_reward[1]
+        shaped_reward_p0 = sparse_reward + self.reward_shaping_factor * dense_reward[0] + self.potential_shaping_factor * potential_reward[0]
+        shaped_reward_p1 = sparse_reward + self.reward_shaping_factor * dense_reward[1] + self.potential_shaping_factor * potential_reward[1]
         
         obs = { self.curr_agents[0]: ob_p0, self.curr_agents[1]: ob_p1 }
         rewards = { self.curr_agents[0]: shaped_reward_p0, self.curr_agents[1]: shaped_reward_p1 }
@@ -278,7 +296,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         Set the current reward shaping factor such that we anneal linearly until self.reward_shaping_horizon
         timesteps, given that we are currently at timestep "timesteps"
         """
-        new_factor = self._anneal(self._initial_reward_shaping_factor, timesteps, self.reward_shaping_horizon)
+        new_factor = self._anneal_from_schedule(timesteps, self.reward_shaping_schedule)
         self.set_reward_shaping_factor(new_factor)
 
     def anneal_bc_factor(self, timesteps):
@@ -286,23 +304,27 @@ class OvercookedMultiAgent(MultiAgentEnv):
         Set the current bc factor such that we anneal linearly until self.bc_factor_horizon
         timesteps, given that we are currently at timestep "timesteps"
         """
-        p_0 = self.bc_schedule[0]
-        p_1 = self.bc_schedule[1]
-        i = 2
-        while timesteps > p_1[0] and i < len(self.bc_schedule):
-            p_0 = p_1
-            p_1 = self.bc_schedule[i]
-            i += 1
-        start_t, start_v = p_0
-        end_t, end_v = p_1
-        new_factor = self._anneal(start_v, timesteps, end_t, end_v, start_t)
+
+        new_factor = self._anneal_from_schedule(timesteps, self.bc_schedule)
         self.set_bc_factor(new_factor)
+
+    def anneal_potential_shaping_factor(self, timesteps):
+        """
+        Set the current potential shaping factor such that we anneal linearly according to self.potential_shaping_schedule
+        timesteps, given that we are currently at timestep "timesteps"
+        """
+
+        new_factor = self._anneal_from_schedule(timesteps, self.potential_shaping_schedule)
+        self.set_potential_shaping_factor(new_factor)
 
     def set_reward_shaping_factor(self, factor):
         self.reward_shaping_factor = factor
 
     def set_bc_factor(self, factor):
         self.bc_factor = factor
+
+    def set_potential_shaping_factor(self, factor):
+        self.potential_shaping_factor = factor
 
     def seed(self, seed):
         """
@@ -391,6 +413,11 @@ class TrainingCallbacks(DefaultCallbacks):
             episode.custom_metrics[stat + "_agent_0"] = len(stats[0])
             episode.custom_metrics[stat + "_agent_1"] = len(stats[1])
 
+        # Log environment coefficients
+        episode.custom_metrics["reward_shaping_factor"] = env.reward_shaping_factor
+        episode.custom_metrics["potential_shaping_factor"] = env.potential_shaping_factor
+        episode.custom_metrics["bc_factor"] = env.bc_factor
+
     def on_sample_end(self, worker, samples, **kwargs):
         pass
 
@@ -406,6 +433,11 @@ class TrainingCallbacks(DefaultCallbacks):
         trainer.workers.foreach_worker(
             lambda ev: ev.foreach_env(
                 lambda env: env.anneal_bc_factor(timestep)))
+
+        # Anneal the potential shaping factor based on environment paremeters and current timestep
+        trainer.workers.foreach_worker(
+            lambda ev: ev.foreach_env(
+                lambda env: env.anneal_potential_shaping_factor(timestep)))
 
     def on_postprocess_trajectory(self, worker, episode, agent_id, policy_id, policies, postprocessed_batch, original_batches, **kwargs):
         pass

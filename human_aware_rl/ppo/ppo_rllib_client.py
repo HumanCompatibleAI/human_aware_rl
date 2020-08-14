@@ -131,6 +131,10 @@ def my_config():
     entropy_coeff_end = 0.1
     entropy_coeff_horizon = 3e5
 
+    # Fully specified entropy coefficient schedule (w/ linear imputation between points)
+    # Overrides other entropy coeff params if present
+    entropy_coeff_schedule = None
+
     # Initial coefficient for KL divergence.
     kl_coeff = 0.2
 
@@ -202,17 +206,32 @@ def my_config():
         'non_useful_counter_coeff' : 0
     }
 
-    # Whether dense reward should come from potential function or not
-    use_phi = True
+    # Whether dense reward should include potential function or not
+    use_potential_shaping = True
+
+    # Whether the dense reward should include vanilla reward shaping or not
+    use_reward_shaping = False
 
     # Max episode length
     horizon = 400
 
-    # Constant by which shaped rewards are multiplied by when calculating total reward
+    # Constant by vanilla reward shaping is multiplied by before adding to total reward
     reward_shaping_factor = 1.0
 
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-    reward_shaping_horizon = float('inf')
+    reward_shaping_horizon = 3e6
+
+    # Fully specified reward shaping schedule; overrides other shaping coeff params if present
+    reward_shaping_schedule = None
+
+    # Potential shaping coefficient
+    potential_shaping_factor = 1.0
+
+    # Linearly anneal the potential shaping factor such that it reaches zero after this number of timesteps
+    potential_shaping_horizon = float('inf')
+
+    # Fully specified potential shaping schedule; overrides other potential shaping coeff params if present
+    potential_shaping_schedule = None
 
     # bc_factor represents that ppo agent gets paired with a bc agent for any episode
     # schedule for bc_factor is represented by a list of points (t_i, v_i) where v_i represents the 
@@ -250,7 +269,7 @@ def my_config():
         "num_gpus" : num_gpus,
         "seed" : seed,
         "evaluation_interval" : evaluation_interval,
-        "entropy_coeff_schedule" : [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
+        "entropy_coeff_schedule" : entropy_coeff_schedule if entropy_coeff_schedule else [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
         "eager" : eager
     }
 
@@ -274,9 +293,10 @@ def my_config():
 
         # To be passed into OvercookedMultiAgent constructor
         "multi_agent_params" : {
-            "reward_shaping_factor" : reward_shaping_factor,
-            "reward_shaping_horizon" : reward_shaping_horizon,
-            "use_phi" : use_phi,
+            "reward_shaping_schedule" : reward_shaping_schedule if reward_shaping_schedule else [(0, reward_shaping_factor), (reward_shaping_horizon, 0)],
+            "potential_shaping_schedule" : potential_shaping_schedule if potential_shaping_schedule else [(0, potential_shaping_factor), (potential_shaping_horizon, 0)],
+            "use_potential_shaping" : use_potential_shaping,
+            "use_reward_shaping" : use_reward_shaping,
             "bc_schedule" : bc_schedule,
             "potential_constants" : potential_constants
         }
