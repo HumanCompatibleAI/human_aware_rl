@@ -260,6 +260,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
         ob_p0, ob_p1 = self._get_obs(next_state)
         phi_s_prime = self.base_env.potential(mlp=self.mlp, gamma=self.gamma, potential_constants=self.potential_constants)
 
+        potential_reward = dense_reward = (0, 0)
+
         if self.use_potential_shaping:
             potential = self.gamma * phi_s_prime - self.phi_s
             potential_reward = (potential, potential)
