@@ -155,7 +155,7 @@ Ensure that have the correct `overcooked-ai` submodule code (if you cloned direc
 
 ```bash
 $ cd overcooked_ai
-overcooked_ai $ git checkout mtlu_dev
+overcooked_ai $ git checkout master
 overcooked_ai $ cd ..
 ```
 
