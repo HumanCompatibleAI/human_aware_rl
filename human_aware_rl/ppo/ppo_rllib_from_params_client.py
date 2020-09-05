@@ -70,8 +70,6 @@ def naive_params_schedule_fn(outside_information):
         "start_all_orders": [
             {"ingredients": ["onion", "onion", "onion"]}
         ],
-        "recipe_values": [20],
-        "recipe_times": [20],
         "display": False,
         "rew_shaping_params": rew_shaping_params
     }
@@ -231,6 +229,10 @@ def my_config():
     # Max episode length
     horizon = 400
 
+    # The number of MDP in the env.mdp_lst
+    num_mdp = 1
+    # num_mdp = np.inf  # for infinite mdp
+
     # Constant by which shaped rewards are multiplied by when calculating total reward
     reward_shaping_factor = 1.0
 
@@ -281,7 +283,9 @@ def my_config():
     evaluation_params = {
         "ep_length" : evaluation_ep_length,
         "num_games" : evaluation_num_games,
-        "display" : evaluation_display
+        "display" : evaluation_display,
+        # "store_dir" : "results_client_temp"
+        "display_phi": True
     }
 
 
@@ -291,7 +295,9 @@ def my_config():
         "mdp_params_schedule_fn" : naive_params_schedule_fn,
         # To be passed into OvercookedEnv constructor
         "env_params" : {
-            "horizon" : horizon
+            "horizon" : horizon,
+            "num_mdp" : num_mdp,
+            "initial_info": {}
         },
 
         # evaluation mdp params
@@ -303,8 +309,6 @@ def my_config():
             "start_all_orders": [
                 {"ingredients": ["onion", "onion", "onion"]}
             ],
-            "recipe_values": [20],
-            "recipe_times": [20],
             "display": False
         },
 

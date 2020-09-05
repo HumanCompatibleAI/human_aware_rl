@@ -8,7 +8,7 @@ def softmax(logits):
     return (e_x / np.sum(e_x, axis=0)).T
 
 
-def get_base_ae(mdp_params, env_params, outer_shape=None, mdp_params_schedule_fn=None):
+def get_base_ae(mdp_params, env_params, outer_shape, mdp_params_schedule_fn=None):
     """
     mdp_params: one set of fixed mdp parameter used by the enviroment
     env_params: env parameters (horizon, etc)
@@ -18,8 +18,18 @@ def get_base_ae(mdp_params, env_params, outer_shape=None, mdp_params_schedule_fn
     return: the base agent evaluator
     """
     assert mdp_params == None or mdp_params_schedule_fn == None, "either of the two has to be null"
-    mdp_fn = LayoutGenerator.mdp_gen_fn_from_dict(mdp_params, outer_shape, mdp_params_schedule_fn)
-    ae = AgentEvaluator(env_params=env_params, mdp_fn=mdp_fn)
+    if type(mdp_params) == dict and "layout_name" in mdp_params:
+        ae = AgentEvaluator.from_layout_name(mdp_params=mdp_params, env_params=env_params)
+    elif 'num_mdp' in env_params:
+        if np.isinf(env_params['num_mdp']):
+            ae = AgentEvaluator.from_mdp_params_infinite(mdp_params=mdp_params, env_params=env_params,
+                                                         outer_shape=outer_shape, mdp_params_schedule_fn=mdp_params_schedule_fn)
+        else:
+            ae = AgentEvaluator.from_mdp_params_finite(mdp_params=mdp_params, env_params=env_params,
+                                                         outer_shape=outer_shape, mdp_params_schedule_fn=mdp_params_schedule_fn)
+    else:
+        # should not reach this case
+        raise NotImplementedError()
     return ae
 
 # Returns the required arguments as inspect.Parameter objects in a list

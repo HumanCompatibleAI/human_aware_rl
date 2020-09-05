@@ -175,8 +175,7 @@ def my_config():
 
     ### Environment Params ###
     # Which overcooked level to use
-    # layout_names = ["cramped_room_2", "cramped_room"]
-    layout_name = "cramped_room_tomato_simple"
+    layout_name = "cramped_room"
 
     # all_layout_names = '_'.join(layout_names)
 

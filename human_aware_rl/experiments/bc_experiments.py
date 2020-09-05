@@ -77,7 +77,7 @@ def evaluate_bc_models(bc_model_paths, num_rounds):
         del bc_params_train["data_params"]
         del bc_params_test["data_params"]
         assert common_keys_equal(bc_params_train, bc_params_test)
-        ae = AgentEvaluator(mdp_params=bc_params_train["mdp_params"], env_params=bc_params_train["env_params"])
+        ae = AgentEvaluator.from_mdp_params(mdp_params=bc_params_train["mdp_params"], env_params=bc_params_train["env_params"])
         
         train_and_test = ae.evaluate_agent_pair(AgentPair(bc_train, bc_test), num_games=num_rounds)
         best_bc_models_performance[layout_name]["BC_train+BC_test_0"] = mean_and_std_err(train_and_test['ep_returns'])

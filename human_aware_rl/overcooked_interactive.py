@@ -7,7 +7,6 @@ from argparse import ArgumentParser
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, Direction, Action
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.agents.agent import StayAgent, RandomAgent, AgentFromPolicy, GreedyHumanModel
-from overcooked_ai_py.planning.planners import MediumLevelPlanner
 from overcooked_ai_py.mdp.layout_generator import LayoutGenerator
 from overcooked_ai_py.utils import load_dict_from_file
 

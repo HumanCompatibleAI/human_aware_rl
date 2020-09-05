@@ -1,26 +1,15 @@
 from overcooked_ai_py.mdp.actions import Action
-from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
-from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
-from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.agents.agent import Agent, AgentPair
-from overcooked_ai_py.planning.planners import MediumLevelPlanner, NO_COUNTERS_PARAMS
-from ray.tune.registry import register_env
 from ray.tune.logger import UnifiedLogger
-from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
-from ray.rllib.models import ModelCatalog
 from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal
 from datetime import datetime
-import tensorflow as tf
-import inspect
-import ray
 import tempfile
 import gym
 import numpy as np
 import os, pickle, copy
-import random
 
 action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
 obs_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
@@ -242,14 +231,16 @@ class OvercookedMultiAgent(MultiAgentEnv):
         assert all(self.action_space.contains(a) for a in action), "%r (%s) invalid"%(action, type(action))
         joint_action = [Action.INDEX_TO_ACTION[a] for a in action]
         # take a step in the current base environment
-        next_state, sparse_reward, done, info = self.base_env.step(joint_action)
-        ob_p0, ob_p1 = self._get_obs(next_state)
 
         if self.use_phi:
+            next_state, sparse_reward, done, info = self.base_env.step(joint_action, display_phi=True)
             potential = info['phi_s_prime'] - info['phi_s']
             dense_reward = (potential, potential)
         else:
+            next_state, sparse_reward, done, info = self.base_env.step(joint_action, display_phi=False)
             dense_reward = info["shaped_r_by_agent"]
+
+        ob_p0, ob_p1 = self._get_obs(next_state)
 
         shaped_reward_p0 = sparse_reward + self.reward_shaping_factor * dense_reward[0]
         shaped_reward_p1 = sparse_reward + self.reward_shaping_factor * dense_reward[1]
@@ -340,9 +331,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         env_params = env_config["env_params"]
         # "reward_shaping_factor"
         multi_agent_params = env_config["multi_agent_params"]
-        print("started", mdp_params_schedule_fn)
         base_ae = get_base_ae(mdp_params, env_params, outer_shape, mdp_params_schedule_fn)
-        print("finished")
         base_env = base_ae.env
 
         return cls(base_env, **multi_agent_params)
@@ -477,7 +466,7 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
     agent_1_featurize_fn (func): Used to preprocess states for agent 1, defaults to lossless_state_encoding if 'None'
     """
     print("eval mdp params", mdp_params)
-    evaluator = get_base_ae(mdp_params, {"horizon" : eval_params['ep_length']}, outer_shape)
+    evaluator = get_base_ae(mdp_params, {"horizon" : eval_params['ep_length'], "num_mdp":1}, outer_shape)
 
     # Override pre-processing functions with defaults if necessary
     agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else evaluator.env.lossless_state_encoding_mdp
@@ -488,7 +477,15 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
     agent1 = RlLibAgent(agent_1_policy, agent_index=1, featurize_fn=agent_1_featurize_fn)
 
     # Compute rollouts
-    results = evaluator.evaluate_agent_pair(AgentPair(agent0, agent1), num_games=eval_params['num_games'], display=eval_params['display'])
+    if 'store_dir' not in eval_params:
+        eval_params['store_dir'] = None
+    if 'display_phi' not in eval_params:
+        eval_params['display_phi'] = False
+    results = evaluator.evaluate_agent_pair(AgentPair(agent0, agent1),
+                                            num_games=eval_params['num_games'],
+                                            display=eval_params['display'],
+                                            dir=eval_params['store_dir'],
+                                            display_phi=eval_params['display_phi'])
 
     return results
 

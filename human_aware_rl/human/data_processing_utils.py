@@ -190,12 +190,12 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
 
     player_indices_to_convert: which player indexes' trajs we should return
     """
-    from overcooked_ai_py.planning.planners import MediumLevelPlanner, NO_COUNTERS_PARAMS
+    from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
 
     mdp = joint_traj_data['metadatas']['mdp'][0]
-    mlp = MediumLevelPlanner.from_pickle_or_compute(
+    mlam = MediumLevelActionManager.from_pickle_or_compute(
             mdp=mdp,
-            mlp_params=NO_COUNTERS_PARAMS,
+            mlam_params=NO_COUNTERS_PARAMS,
             force_compute=False,
             info=False
     )
@@ -217,7 +217,7 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
 
                 # NOTE: Could parallelize a bit more if slow
                 # state = mdp.preprocess_observation(state)[agent_idx]
-                state = mdp.featurize_state(state, mlp)[agent_idx]
+                state = mdp.featurize_state(state, mlam)[agent_idx]
 
             ep_obs.append(state)
             ep_acts.append(action)

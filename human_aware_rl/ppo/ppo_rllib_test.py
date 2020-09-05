@@ -62,55 +62,141 @@ class TestPPORllib(unittest.TestCase):
         shutil.rmtree(self.temp_model_dir)
         ray.shutdown()
 
-    def test_ppo_sp(self):
+    def test_ppo_sp_no_phi(self):
         # Train a self play agent for 20 iterations
-        results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "num_training_iters" : 400, "evaluation_interval" : 500, "entropy_coeff_start" : 0.0, "entropy_coeff_end" : 0.0}).result
+        results = ex.run(
+            config_updates={
+                # Please feel free to modify the parameters below
+                "results_dir": self.temp_results_dir,
+                "num_workers": 1,
+                "train_batch_size": 2000,
+                "sgd_minibatch_size": 1000,
+                "num_training_iters": 20,
+                "evaluation_interval": 5,
+                "entropy_coeff_start": 0.0,
+                "entropy_coeff_end": 0.0,
+                "use_phi": False
+            }
+        ).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
         self.assertGreaterEqual(results['average_total_reward'], 10.0)
 
         if self.compute_pickle:
-            self.expected['test_ppo_sp'] = results
+            self.expected['test_ppo_sp_no_phi'] = results
         
         # Reproducibility test
         if self.strict:
-            self.assertDictEqual(results, self.expected['test_ppo_sp'])
+            self.assertDictEqual(results, self.expected['test_ppo_sp_no_phi'])
 
-    def test_ppo_fp_sp(self):
+    def test_ppo_sp_yes_phi(self):
         # Train a self play agent for 20 iterations
-        results = ex_fp.run(
-            config_updates={"results_dir": self.temp_results_dir, "num_training_iters": 400, "evaluation_interval": 100,
-                            "entropy_coeff_start": 0.0, "entropy_coeff_end": 0.0}).result
+        results = ex.run(
+            config_updates={
+                # Please feel free to modify the parameters below
+                "results_dir": self.temp_results_dir,
+                "num_workers": 1,
+                "train_batch_size": 2000,
+                "sgd_minibatch_size": 1000,
+                "num_training_iters": 20,
+                "evaluation_interval": 5,
+                "entropy_coeff_start": 0.0,
+                "entropy_coeff_end": 0.0,
+                "use_phi": True
+            }
+        ).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
         self.assertGreaterEqual(results['average_total_reward'], 10.0)
 
         if self.compute_pickle:
-            self.expected['test_ppo_fp_sp'] = results
+            self.expected['test_ppo_sp_yes_phi'] = results
 
         # Reproducibility test
         if self.strict:
-            self.assertDictEqual(results, self.expected['test_ppo_fp_sp'])
+            self.assertDictEqual(results, self.expected['test_ppo_sp_yes_phi'])
 
-    def test_ppo_bc(self):
-        # Train bc model
-        model_dir = self.temp_model_dir
-        bc_params = get_default_bc_params()
-        bc_params['training_params']['epochs'] = 10
-        train_bc_model(model_dir, bc_params)
 
-        # Train rllib model
-        results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], "num_training_iters" : 20, "bc_model_dir" : model_dir, "evaluation_interval" : 5}).result
+    def test_ppo_fp_sp_no_phi(self):
+        # Train a self play agent for 20 iterations
+        results = ex_fp.run(
+            config_updates={
+                "results_dir": self.temp_results_dir,
+                "num_workers": 1,
+                "train_batch_size": 2000,
+                "sgd_minibatch_size": 1000,
+                "num_training_iters": 20,
+                "evaluation_interval": 5,
+                "use_phi": False,
+                "entropy_coeff_start": 0.0002,
+                "entropy_coeff_end": 0.00005,
+                "lr": 7e-4,
+                "seeds": [0],
+                "outer_shape": (5, 4)
+            }
+        ).result
 
-        # Sanity check
-        self.assertGreaterEqual(results['average_total_reward'], 20.0)
+        # Sanity check (make sure it begins to learn to receive dense reward)
+        self.assertGreaterEqual(results['average_total_reward'], 10.0)
 
         if self.compute_pickle:
-            self.expected['test_ppo_bc'] = results
+            self.expected['test_ppo_fp_sp_no_phi'] = results
 
         # Reproducibility test
         if self.strict:
-            self.assertDictEqual(results, self.expected['test_ppo_bc'])
+            self.assertDictEqual(results, self.expected['test_ppo_fp_sp_no_phi'])
+
+
+    def test_ppo_fp_sp_yes_phi(self):
+        # Train a self play agent for 20 iterations
+        results = ex_fp.run(
+            config_updates={
+                "results_dir": self.temp_results_dir,
+                "num_workers": 1,
+                "train_batch_size": 2000,
+                "sgd_minibatch_size": 1000,
+                "num_training_iters": 20,
+                "evaluation_interval": 5,
+                "use_phi": True,
+                "entropy_coeff_start": 0.0002,
+                "entropy_coeff_end": 0.00005,
+                "lr": 7e-4,
+                "seeds": [0],
+                "outer_shape": (5, 4)
+            }
+        ).result
+
+        # Sanity check (make sure it begins to learn to receive dense reward)
+        self.assertGreaterEqual(results['average_total_reward'], 10.0)
+
+        if self.compute_pickle:
+            self.expected['test_ppo_fp_sp_yes_phi'] = results
+
+        # Reproducibility test
+        if self.strict:
+            self.assertDictEqual(results, self.expected['test_ppo_fp_sp_yes_phi'])
+
+
+    # temporarily deprecated until BC is fully functional
+    # def test_ppo_bc(self):
+    #     # Train bc model
+    #     model_dir = self.temp_model_dir
+    #     bc_params = get_default_bc_params()
+    #     bc_params['training_params']['epochs'] = 10
+    #     train_bc_model(model_dir, bc_params)
+    #
+    #     # Train rllib model
+    #     results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], "num_training_iters" : 20, "bc_model_dir" : model_dir, "evaluation_interval" : 5}).result
+    #
+    #     # Sanity check
+    #     self.assertGreaterEqual(results['average_total_reward'], 20.0)
+    #
+    #     if self.compute_pickle:
+    #         self.expected['test_ppo_bc'] = results
+    #
+    #     # Reproducibility test
+    #     if self.strict:
+    #         self.assertDictEqual(results, self.expected['test_ppo_bc'])
 
 def _clear_pickle():
     # Write an empty dictionary to our static "expected" results location
@@ -130,8 +216,10 @@ if __name__ == '__main__':
         _clear_pickle()
 
     suite = unittest.TestSuite()
-    # suite.addTest(TestPPORllib('test_ppo_sp', args.compute_pickle, args.strict))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp', args.compute_pickle, args.strict))
+    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', args.compute_pickle, args.strict))
+    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', args.compute_pickle, args.strict))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', args.compute_pickle, args.strict))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', args.compute_pickle, args.strict))
     # suite.addTest(TestPPORllib('test_ppo_bc', args.compute_pickle, args.strict))
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)

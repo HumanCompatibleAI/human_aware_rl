@@ -11,7 +11,7 @@ from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, OvercookedS
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv, DEFAULT_ENV_PARAMS
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.agents.agent import AgentFromPolicy, AgentPair
-from overcooked_ai_py.planning.planners import MediumLevelPlanner, NO_COUNTERS_PARAMS
+from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
 from overcooked_ai_py.utils import save_pickle, load_pickle
 
 from human_aware_rl.baselines_utils import create_dir_if_not_exists
@@ -40,8 +40,8 @@ def init_gym_env(bc_params):
     env = OvercookedEnv(mdp, **bc_params["env_params"])
     gym_env = gym.make("Overcooked-v0")
     
-    mlp = MediumLevelPlanner.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS, force_compute=False)
-    gym_env.custom_init(env, featurize_fn=lambda x: mdp.featurize_state(x, mlp))
+    mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS, force_compute=False)
+    gym_env.custom_init(env, featurize_fn=lambda x: mdp.featurize_state(x, mlam))
     return gym_env
 
 def train_bc_agent(model_save_dir, bc_params, num_epochs=1000, lr=1e-4, adam_eps=1e-8):
@@ -84,7 +84,7 @@ def get_bc_agent_from_saved(model_name, no_waits=False):
 
 def get_bc_agent_from_model(model, bc_params, no_waits=False):
     mdp = OvercookedGridworld.from_layout_name(**bc_params["mdp_params"])
-    mlp = MediumLevelPlanner.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS, force_compute=False)
+    mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS, force_compute=False)
     
     def encoded_state_policy(observations, include_waits=True, stochastic=False):
         action_probs_n = model.action_probability(observations)
@@ -98,7 +98,7 @@ def get_bc_agent_from_model(model, bc_params, no_waits=False):
 
     def state_policy(mdp_states, agent_indices, include_waits, stochastic=False):
         # encode_fn = lambda s: mdp.preprocess_observation(s)
-        encode_fn = lambda s: mdp.featurize_state(s, mlp)
+        encode_fn = lambda s: mdp.featurize_state(s, mlam)
 
         obs = []
         for agent_idx, s in zip(agent_indices, mdp_states):

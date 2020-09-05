@@ -8,11 +8,6 @@ from human_aware_rl.static import HUMAN_DATA_PATH
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
 from overcooked_ai_py.mdp.actions import Action
-from overcooked_ai_py.agents.agent import AgentPair
-from overcooked_ai_py.agents.benchmarking import AgentEvaluator
-from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
-from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
-from overcooked_ai_py.planning.planners import MediumLevelPlanner, NO_COUNTERS_PARAMS
 from overcooked_ai_py.mdp.overcooked_env import DEFAULT_ENV_PARAMS
 from ray.rllib.policy import Policy as RllibPolicy
 

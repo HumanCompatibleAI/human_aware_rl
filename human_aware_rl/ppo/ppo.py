@@ -16,7 +16,7 @@ ex.observers.append(FileStorageObserver.create(PPO_DATA_DIR + 'ppo_exp'))
 from overcooked_ai_py.utils import load_pickle, save_pickle, load_dict_from_file, profile
 from overcooked_ai_py.agents.agent import RandomAgent, GreedyHumanModel, AgentPair
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
-from overcooked_ai_py.planning.planners import NO_COUNTERS_PARAMS, MediumLevelPlanner
+from overcooked_ai_py.planning.planners import NO_COUNTERS_PARAMS, MediumLevelActionManager
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 
@@ -232,10 +232,10 @@ def save_ppo_model(model, save_folder):
         }
     )
 
-def configure_other_agent(params, gym_env, mlp, mdp):
+def configure_other_agent(params, gym_env, mlam, mdp):
     if params["OTHER_AGENT_TYPE"] == "hm":
         hl_br, hl_temp, ll_br, ll_temp = params["HM_PARAMS"]
-        agent = GreedyHumanModel(mlp, hl_boltzmann_rational=hl_br, hl_temp=hl_temp, ll_boltzmann_rational=ll_br, ll_temp=ll_temp)
+        agent = GreedyHumanModel(mlam, hl_boltzmann_rational=hl_br, hl_temp=hl_temp, ll_boltzmann_rational=ll_br, ll_temp=ll_temp)
         gym_env.use_action_method = True
 
     elif params["OTHER_AGENT_TYPE"][:2] == "bc":
@@ -266,7 +266,7 @@ def configure_other_agent(params, gym_env, mlp, mdp):
         raise ValueError("unknown type of agent to match with")
         
     if not params["OTHER_AGENT_TYPE"] == "sp":
-        assert mlp.mdp == mdp
+        assert mlam.mdp == mdp
         agent.set_mdp(mdp)
         gym_env.other_agent = agent
 
@@ -361,7 +361,7 @@ def ppo_run(params):
         
         mdp = OvercookedGridworld.from_layout_name(**params["mdp_params"])
         env = OvercookedEnv(mdp, **params["env_params"])
-        mlp = MediumLevelPlanner.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS, force_compute=True) 
+        mlam = MediumLevelActionManager.from_pickle_or_compute(mdp, NO_COUNTERS_PARAMS, force_compute=True)
 
         # Configure gym env
         gym_env = get_vectorized_gym_env(
@@ -371,7 +371,7 @@ def ppo_run(params):
         gym_env.trajectory_sp = params["TRAJECTORY_SELF_PLAY"]
         gym_env.update_reward_shaping_param(1 if params["mdp_params"]["rew_shaping_params"] != 0 else 0)
 
-        configure_other_agent(params, gym_env, mlp, mdp)
+        configure_other_agent(params, gym_env, mlam, mdp)
 
         # Create model
         with tf.device('/device:GPU:{}'.format(params["GPU_ID"])):

@@ -77,7 +77,7 @@ def P_BC_evaluation(best_bc_models):
     for layout in layouts:
         mdp_params = {"layout_name": layout}
         env_params = {"horizon": 400}
-        ae = AgentEvaluator(mdp_params, env_params)
+        ae = AgentEvaluator.from_mdp_params(mdp_params, env_params)
         p_bc_evaluation[layout] = P_BC_evaluation_for_layout(ae, layout, best_bc_models)
     
     return p_bc_evaluation
