@@ -8,7 +8,7 @@ def softmax(logits):
     return (e_x / np.sum(e_x, axis=0)).T
 
 
-def get_base_ae(mdp_params, env_params, outer_shape, mdp_params_schedule_fn=None):
+def get_base_ae(mdp_params, env_params, outer_shape=None, mdp_params_schedule_fn=None):
     """
     mdp_params: one set of fixed mdp parameter used by the enviroment
     env_params: env parameters (horizon, etc)

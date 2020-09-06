@@ -75,7 +75,8 @@ class TestPPORllib(unittest.TestCase):
                 "evaluation_interval": 5,
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
-                "use_phi": False
+                "use_phi": False,
+                "evaluation_display": False
             }
         ).result
 
@@ -102,7 +103,8 @@ class TestPPORllib(unittest.TestCase):
                 "evaluation_interval": 5,
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
-                "use_phi": True
+                "use_phi": True,
+                "evaluation_display": False
             }
         ).result
 
@@ -132,7 +134,8 @@ class TestPPORllib(unittest.TestCase):
                 "entropy_coeff_end": 0.00005,
                 "lr": 7e-4,
                 "seeds": [0],
-                "outer_shape": (5, 4)
+                "outer_shape": (5, 4),
+                "evaluation_display": False
             }
         ).result
 
@@ -162,7 +165,8 @@ class TestPPORllib(unittest.TestCase):
                 "entropy_coeff_end": 0.00005,
                 "lr": 7e-4,
                 "seeds": [0],
-                "outer_shape": (5, 4)
+                "outer_shape": (5, 4),
+                "evaluation_display": False
             }
         ).result
 

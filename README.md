@@ -128,9 +128,9 @@ All DRL results can be reproduced by running the `.sh` scripts under `human_awar
 
 All non-DRL results can be reproduced by running cells in `NeurIPS Experiments and Visualizations.ipynb`.
 
-# Rllib-Multi Layout
+# Rllib
 
-Some of the agents are now compatible to be trained with rllib, using Tensorflow 2. This requires alternative installation. Make sure you are on the branch `mlt_dev`
+Some of the agents are now compatible to be trained with rllib, using Tensorflow 2. This requires alternative installation.
 
 ## CUDA 10.0 Installation on Ubuntu 18.04
 For Ubuntu 18.04, follow the direction [here](https://www.pugetsystems.com/labs/hpc/How-To-Install-CUDA-10-together-with-9-2-on-Ubuntu-18-04-with-support-for-NVIDIA-20XX-Turing-GPUs-1236/)

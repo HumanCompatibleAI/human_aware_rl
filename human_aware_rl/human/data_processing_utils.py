@@ -84,7 +84,7 @@ def json_obj_to_python_obj_state(mdp, df_object):
         obj_state = (soup_type, num_items, cook_time)
     else:
         obj_state = None
-    return ObjectState(df_object['name'], obj_pos, obj_state)
+    return ObjectState(df_object['name'], obj_pos)
 
 def extract_df_for_worker_on_layout(main_trials, worker_id, layout_name):
     """Extract trajectory for a specific layout and worker pair from main_trials df"""
@@ -99,7 +99,7 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
 
     datapoint = traj_df.iloc[0]
     python_layout_name = JS_LAYOUT_NAME_TO_PYTHON_NAME[datapoint['layout_name']]
-    agent_evaluator = AgentEvaluator(
+    agent_evaluator = AgentEvaluator.from_layout_name(
         mdp_params={"layout_name": python_layout_name},
         env_params={"horizon": 1250} # Defining the horizon of the mdp of origin of the trajectories
     )
