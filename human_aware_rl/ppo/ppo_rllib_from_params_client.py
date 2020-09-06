@@ -178,6 +178,9 @@ def my_config():
     # Whether to display rollouts in evaluation
     evaluation_display = True
 
+    # Where to store replay txt files
+    evaluation_replay_store_dir = None
+
     # Where to log the ray dashboard stats
     temp_dir = os.path.join(os.path.abspath(os.sep), "tmp", "ray_tmp") if not LOCAL_TESTING else None
 
@@ -284,7 +287,7 @@ def my_config():
         "ep_length" : evaluation_ep_length,
         "num_games" : evaluation_num_games,
         "display" : evaluation_display,
-        # "store_dir" : "results_client_temp"
+        "store_dir" : evaluation_replay_store_dir,
         "display_phi": True
     }
 
