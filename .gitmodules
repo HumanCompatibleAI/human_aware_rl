@@ -1,13 +1,13 @@
 [submodule "baselines"]
 	path = baselines
-	url = git@github.com:micahcarroll/baselines.git
+	url = https://github.com/micahcarroll/baselines.git
 [submodule "overcooked_ai"]
 	path = overcooked_ai
 	url = git@github.com:HumanCompatibleAI/overcooked_ai.git
 	branch = harl_merge_fix
 [submodule "stable-baselines"]
 	path = stable-baselines
-	url = git@github.com:micahcarroll/stable-baselines.git
+	url = https://github.com/micahcarroll/stable-baselines.git
 [submodule "tfjs-converter"]
 	path = tfjs-converter
 	url = https://github.com/tensorflow/tfjs-converter.git
