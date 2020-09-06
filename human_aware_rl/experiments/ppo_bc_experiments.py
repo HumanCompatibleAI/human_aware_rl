@@ -32,7 +32,7 @@ def evaluate_ppo_and_bc_models_for_layout(layout, num_rounds, bc_model_paths, pp
     agent_bc_test, bc_params = get_bc_agent_from_saved(bc_model_paths['test'][layout])
     ppo_bc_train_path = ppo_bc_model_paths['bc_train'][layout]
     ppo_bc_test_path = ppo_bc_model_paths['bc_test'][layout]
-    evaluator = AgentEvaluator.from_mdp_params(mdp_params=bc_params["mdp_params"], env_params=bc_params["env_params"])
+    evaluator = AgentEvaluator.from_mdp_params_infinite(mdp_params=bc_params["mdp_params"], env_params=bc_params["env_params"])
     
     for seed_idx in range(len(seeds["bc_train"])):
         agent_ppo_bc_train, ppo_config = get_ppo_agent(ppo_bc_train_path, seeds["bc_train"][seed_idx], best=best)

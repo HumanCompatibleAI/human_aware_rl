@@ -116,7 +116,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         reward_shaping_horizon (int): Timestep by which the reward_shaping_factor reaches zero through linear annealing
         bc_schedule (list[tuple]): List of (t_i, v_i) pairs where v_i represents the value of bc_factor at timestep t_i
             with linear interpolation in between the t_i
-        use_ph
+        use_phi (bool): Whether to use 'shaped_r_by_agent' or 'phi_s_prime' - 'phi_s' to determine dense reward
         """
         if bc_schedule:
             self.bc_schedule = bc_schedule
@@ -160,22 +160,20 @@ class OvercookedMultiAgent(MultiAgentEnv):
 
     def _setup_observation_space(self):
         dummy_state = self.base_env.mdp.get_standard_start_state()
+
+        #ppo observation
         featurize_fn_ppo = lambda state: self.base_env.lossless_state_encoding_mdp(state)
         obs_shape = featurize_fn_ppo(dummy_state)[0].shape
         high = np.ones(obs_shape) * float("inf")
         low = np.ones(obs_shape) * 0
-
         self.ppo_observation_space = gym.spaces.Box(low, high, dtype=np.float32)
 
-        if False:
-            featurize_fn_bc = lambda state: self.base_env.featurize_state_mdp(state)
-            print("mtx", self.base_env.mdp.terrain_mtx)
-            obs_shape = featurize_fn_bc(dummy_state)[0].shape
-            print("we good")
-            high = np.ones(obs_shape) * 10
-            low = np.ones(obs_shape) * -10
-            # Verify this
-            self.bc_observation_space = gym.spaces.Box(low, high, dtype=np.float32)
+        # bc observation
+        featurize_fn_bc = lambda state: self.base_env.featurize_state_mdp(state)
+        obs_shape = featurize_fn_bc(dummy_state)[0].shape
+        high = np.ones(obs_shape) * 10
+        low = np.ones(obs_shape) * -10
+        self.bc_observation_space = gym.spaces.Box(low, high, dtype=np.float32)
 
     def _get_featurize_fn(self, agent_id):
         if agent_id.startswith('ppo'):

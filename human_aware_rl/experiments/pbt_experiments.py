@@ -69,7 +69,7 @@ def evaluate_all_pbt_models(pbt_model_paths, best_bc_model_paths, num_rounds, se
 
 def evaluate_pbt_for_layout(layout_name, num_rounds, pbt_performance, pbt_model_paths, best_test_bc_models, seeds, best=False):
     bc_agent, bc_params = get_bc_agent_from_saved(model_name=best_test_bc_models[layout_name])
-    ae = AgentEvaluator.from_mdp_params(mdp_params=bc_params["mdp_params"], env_params=bc_params["env_params"])
+    ae = AgentEvaluator.from_mdp_params_infinite(mdp_params=bc_params["mdp_params"], env_params=bc_params["env_params"])
 
     pbt_save_dir = PBT_DATA_DIR + pbt_model_paths[layout_name] + "/"
     pbt_config = load_dict_from_txt(pbt_save_dir + "config")
