@@ -4,8 +4,7 @@ from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import numpy as np
 
 # environment variable that tells us whether this code is running on the server or not
-# LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
-LOCAL_TESTING = False
+LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
 
 # Sacred setup (must be before rllib imports)
 from sacred import Experiment
@@ -55,7 +54,7 @@ def my_config():
     ### Model params ###
 
     # Whether dense reward should come from potential function or not
-    use_phi = False
+    use_phi = True
 
     # whether to use recurrence in ppo model
     use_lstm = False
@@ -73,7 +72,7 @@ def my_config():
 
     ### Training Params ###
 
-    num_workers = 16 if not LOCAL_TESTING else 2
+    num_workers = 30 if not LOCAL_TESTING else 2
 
     # list of all random seeds to use for experiments, used to reproduce results
     seeds = [0]
@@ -82,12 +81,11 @@ def my_config():
     seed = None
 
     # Number of gpus the central driver should use
-    # Number of gpus the central driver should use
     num_gpus = 0 if LOCAL_TESTING else 1
 
     # How many environment timesteps will be simulated (across all environments)
     # for one set of gradient updates. Is divided equally across environments
-    train_batch_size = 6400 if not LOCAL_TESTING else 800
+    train_batch_size = 12000 if not LOCAL_TESTING else 800
 
     # size of minibatches we divide up each batch into before
     # performing gradient steps
@@ -100,10 +98,10 @@ def my_config():
     shared_policy = True
 
     # Number of training iterations to run
-    num_training_iters = 400 if not LOCAL_TESTING else 2
+    num_training_iters = 420 if not LOCAL_TESTING else 2
 
     # Stepsize of SGD.
-    lr = 5e-3
+    lr = 5e-5
 
     # Learning rate schedule.
     lr_schedule = None
@@ -126,7 +124,7 @@ def my_config():
 
     # Entropy bonus coefficient, will anneal linearly from _start to _end over _horizon steps
     entropy_coeff_start = 0.2
-    entropy_coeff_end = 0.00005
+    entropy_coeff_end = 0.1
     entropy_coeff_horizon = 3e5
 
     # Initial coefficient for KL divergence.
@@ -140,10 +138,10 @@ def my_config():
     num_sgd_iter = 8 if not LOCAL_TESTING else 1
 
     # How many trainind iterations (calls to trainer.train()) to run before saving model checkpoint
-    save_freq = 250
+    save_freq = 25
 
     # How many training iterations to run between each evaluation
-    evaluation_interval = 100 if not LOCAL_TESTING else 1
+    evaluation_interval = 50 if not LOCAL_TESTING else 1
 
     # How many timesteps should be in an evaluation episode
     evaluation_ep_length = 400
@@ -152,13 +150,13 @@ def my_config():
     evaluation_num_games = 1
 
     # Whether to display rollouts in evaluation
-    evaluation_display = True
+    evaluation_display = False
 
     # Where to log the ray dashboard stats
     temp_dir = os.path.join(os.path.abspath(os.sep), "tmp", "ray_tmp") if not LOCAL_TESTING else None
 
     # Where to store model checkpoints and training stats
-    results_dir = os.path.join(os.path.abspath('.'), 'results_og_client_temp')
+    results_dir = DEFAULT_RESULTS_DIR
 
     # Whether tensorflow should execute eagerly or not
     eager = False

@@ -1,5 +1,5 @@
 import unittest, os, shutil, pickle, ray, random, argparse, sys
-os.environ['RUN_ENV'] = 'production'
+os.environ['RUN_ENV'] = 'local'
 from human_aware_rl.ppo.ppo_rllib_client import ex
 from human_aware_rl.ppo.ppo_rllib_from_params_client import ex_fp
 from human_aware_rl.imitation.behavior_cloning_tf2 import get_default_bc_params, train_bc_model
