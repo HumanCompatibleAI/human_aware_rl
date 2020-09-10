@@ -20,7 +20,6 @@ BC_SAVE_DIR = os.path.join(DATA_DIR, "bc_runs")
 DEFAULT_DATA_PARAMS = {
     "train_mdps": ["cramped_room"],
     "ordered_trajs": False,
-    "human_ai_trajs": False,
     "processed" : True,
     "data_path": HUMAN_DATA_PATH
 }
