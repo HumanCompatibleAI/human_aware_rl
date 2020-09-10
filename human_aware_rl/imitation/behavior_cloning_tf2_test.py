@@ -58,7 +58,8 @@ class TestBCTraining(unittest.TestCase):
             self.assertTrue(np.allclose(model(self.dummy_input), self.expected["test_model_construction"]))
 
     def test_save_and_load(self):
-        model = train_bc_model(self.model_dir, self.bc_params)
+        model = build_bc_model(**self.bc_params)
+        save_bc_model(self.model_dir, model, self.bc_params)
         loaded_model, loaded_params = load_bc_model(self.model_dir)
         self.assertDictEqual(self.bc_params, loaded_params)
         self.assertTrue(np.allclose(model(self.dummy_input), loaded_model(self.dummy_input)))
@@ -111,8 +112,7 @@ class TestBCTraining(unittest.TestCase):
         results = evaluate_bc_model(model, self.bc_params)
 
         # Sanity Check
-        # Currently not run since training lstm takes too much compute for github CI
-        # self.assertGreaterEqual(results, 20.0)
+        self.assertGreaterEqual(results, 20.0)
 
         if self.compute_pickle:
             self.expected['test_lstm_evaluation'] = results
@@ -121,7 +121,8 @@ class TestBCTraining(unittest.TestCase):
 
     def test_lstm_save_and_load(self):
         self.bc_params['use_lstm'] = True
-        model = train_bc_model(self.model_dir, self.bc_params)
+        model = build_bc_model(**self.bc_params)
+        save_bc_model(self.model_dir, model, self.bc_params)
         loaded_model, loaded_params = load_bc_model(self.model_dir)
         self.assertDictEqual(self.bc_params, loaded_params)
         self.assertTrue(np.allclose(self._lstm_forward(model, self.dummy_input)[0], self._lstm_forward(loaded_model, self.dummy_input)[0]))

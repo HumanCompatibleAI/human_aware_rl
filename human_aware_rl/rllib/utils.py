@@ -1,5 +1,4 @@
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
-from overcooked_ai_py.mdp.layout_generator import LayoutGenerator
 import numpy as np
 import inspect
 
@@ -7,6 +6,13 @@ def softmax(logits):
     e_x = np.exp(logits.T - np.max(logits))
     return (e_x / np.sum(e_x, axis=0)).T
 
+def get_base_env(mdp_params, env_params, outer_shape=None, mdp_params_schedule_fn=None):
+    ae = get_base_ae(mdp_params, env_params, outer_shape, mdp_params_schedule_fn)
+    return ae.env
+
+def get_base_mlam(mdp_params, env_params, outer_shape=None, mdp_params_schedule_fn=None):
+    ae = get_base_ae(mdp_params, env_params, outer_shape, mdp_params_schedule_fn)
+    return ae.mlam
 
 def get_base_ae(mdp_params, env_params, outer_shape=None, mdp_params_schedule_fn=None):
     """

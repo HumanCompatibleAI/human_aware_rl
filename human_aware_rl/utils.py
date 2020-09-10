@@ -1,17 +1,10 @@
 import os
-import io
 import re
 import git
-import json
-import time
 import shutil
-import pickle
-import pstats
 import random
-import cProfile
 import numpy as np
 import tensorflow as tf
-import stable_baselines
 
 
 def delete_dir_if_exists(dir_path, verbose=False):
@@ -94,7 +87,6 @@ def set_global_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
     tf.random.set_random_seed(seed)
-    stable_baselines.common.set_global_seeds(seed)
 
 def prepare_nested_default_dict_for_pickle(nested_defaultdict):
     """Need to make all nested defaultdicts into normal dicts to pickle"""

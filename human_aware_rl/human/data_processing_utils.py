@@ -1,13 +1,10 @@
 import json
 import itertools
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.actions import Action, Direction
-from overcooked_ai_py.mdp.overcooked_mdp import OvercookedState, ObjectState, PlayerState, OvercookedGridworld
-from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
+from overcooked_ai_py.mdp.overcooked_mdp import OvercookedState, ObjectState, PlayerState
 
 
 ####################

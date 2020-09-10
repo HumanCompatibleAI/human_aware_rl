@@ -249,7 +249,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         infos = { self.curr_agents[0]: info, self.curr_agents[1]: info }
         return obs, rewards, dones, infos
 
-    def reset(self):
+    def reset(self, regen_mdp=True):
         """
         When training on individual maps, we want to randomize which agent is assigned to which
         starting location, in order to make sure that the agents are trained to be able to 
@@ -258,7 +258,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         NOTE: a nicer way to do this would be to just randomize starting positions, and not
         have to deal with randomizing indices.
         """
-        self.base_env.reset()
+        self.base_env.reset(regen_mdp)
         self.curr_agents = self._populate_agents()
         ob_p0, ob_p1 = self._get_obs(self.base_env.state)
         return {self.curr_agents[0]: ob_p0, self.curr_agents[1]: ob_p1}

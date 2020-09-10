@@ -17,7 +17,8 @@ from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to
 def get_human_human_trajectories(layouts, dataset_type, processed=False):
     """Get human-human trajectories"""
     assert dataset_type in ["train", "test"]
-    from human_aware_rl.imitation.behavioural_cloning import DEFAULT_BC_PARAMS
+    # please double check this
+    from human_aware_rl.imitation.behavior_cloning_tf2 import DEFAULT_BC_PARAMS
 
     expert_data = {}
     for layout in layouts:
@@ -66,9 +67,6 @@ def get_trajs_from_data(data_path, train_mdps, ordered_trajs, human_ai_trajs, pr
 #     trajectory = df_traj_to_python_joint_traj(one_traj_df, complete_traj)
 #     if trajectory is None: print("Layout {} is missing from worker {}".format(layout_name, worker_id))
 #     return trajectory
-
-def save_npz_file(trajs, output_filename):
-    AgentEvaluator.save_traj_in_stable_baselines_format(trajs, output_filename)
 
 
 ############################
