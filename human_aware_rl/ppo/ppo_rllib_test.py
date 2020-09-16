@@ -122,10 +122,10 @@ class TestPPORllib(unittest.TestCase):
             config_updates={
                 # Please feel free to modify the parameters below
                 "results_dir": self.temp_results_dir,
-                "num_workers": 1,
-                "train_batch_size": 800,
+                "num_workers": 2,
+                "train_batch_size": 1600,
                 "sgd_minibatch_size": 800,
-                "num_training_iters": 10,
+                "num_training_iters": 30,
                 "evaluation_interval": 10,
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
@@ -150,10 +150,10 @@ class TestPPORllib(unittest.TestCase):
             config_updates={
                 # Please feel free to modify the parameters below
                 "results_dir": self.temp_results_dir,
-                "num_workers": 1,
-                "train_batch_size": 800,
+                "num_workers": 2,
+                "train_batch_size": 1600,
                 "sgd_minibatch_size": 800,
-                "num_training_iters": 10,
+                "num_training_iters": 30,
                 "evaluation_interval": 10,
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
@@ -179,9 +179,9 @@ class TestPPORllib(unittest.TestCase):
             config_updates={
                 "results_dir": self.temp_results_dir,
                 "num_workers": 1,
-                "train_batch_size": 800,
+                "train_batch_size": 1600,
                 "sgd_minibatch_size": 800,
-                "num_training_iters": 10,
+                "num_training_iters": 30,
                 "evaluation_interval": 10,
                 "use_phi": False,
                 "entropy_coeff_start": 0.0002,
@@ -210,9 +210,9 @@ class TestPPORllib(unittest.TestCase):
             config_updates={
                 "results_dir": self.temp_results_dir,
                 "num_workers": 1,
-                "train_batch_size": 800,
+                "train_batch_size": 1600,
                 "sgd_minibatch_size": 800,
-                "num_training_iters": 10,
+                "num_training_iters": 30,
                 "evaluation_interval": 10,
                 "use_phi": True,
                 "entropy_coeff_start": 0.0002,
@@ -276,10 +276,10 @@ if __name__ == '__main__':
 
     suite = unittest.TestSuite()
     suite.addTest(TestPPORllib('test_save_load', **args))
-    # suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
     # suite.addTest(TestPPORllib('test_ppo_bc', args.compute_pickle, args.strict))
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)
