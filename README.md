@@ -1,10 +1,20 @@
 # Human-Aware Reinforcement Learning
 
-This code can be used to reproduce the results in the paper [On the Utility of Learning about Humans for Human-AI Coordination](https://arxiv.org/abs/1910.05789). *Note that this repository uses a specific older commit of the [overcooked_ai repository](https://github.com/HumanCompatibleAI/overcooked_ai)*, and should not be expected to work with the current version of that repository.
+This code is based on the work in [On the Utility of Learning about Humans for Human-AI Coordination](https://arxiv.org/abs/1910.05789). 
+
+# Contents
 
 To play the game with trained agents, you can use [Overcooked-Demo](https://github.com/HumanCompatibleAI/overcooked-demo).
 
 For more information about the Overcooked-AI environment, check out [this](https://github.com/HumanCompatibleAI/overcooked_ai) repo.
+
+* [Installation](#installation)
+* [Testing](#testing)
+* [Repo Structure Overview](#repo-structure-overview)
+* [Usage](#usage)
+* [Troubleshooting](#troubleshooting)
+* [Playing With Agents](#playing-with-agents)
+* [Reproducing Results](#repoducing-results)
 
 # Installation
 
@@ -66,7 +76,7 @@ Your virtual environment should now be configured to run the rllib training code
 
 Note: if you ever get an import error, please first check if you activated the conda env
 
-## Testing
+# Testing
 
 If set-up was successful, all unit tests and local reproducibility tests should pass. They can be run as follows
 
@@ -75,21 +85,21 @@ You can run all the tests with
 (harl_rllib) $ ./run_tests.sh
 ```
 
-### PPO Tests
+## PPO Tests
 Highest level integration tests that combine self play, bc training, and ppo_bc training
 ```bash
 (harl_rllib) $ cd human_aware_rl/ppo
 (harl_rllib) human_aware_rl/ppo $ python ppo_rllib_test.py
 ```
 
-### BC Tests
+## BC Tests
 All tests involving creation, training, and saving of bc models. No dependency on rllib
 ```bash
 (harl_rllib) $ cd imitation
 (harl_rllib) imitation $ python behavior_cloning_tf2_test.py
 ```
 
-### Rllib Tests
+## Rllib Tests
 Tests rllib environments and models, as well as various utility functions. Does not actually test rllib training
 ```bash
 (harl_rllib) $ cd rllib
@@ -100,18 +110,30 @@ You should see all tests passing.
 
 Note: the tests are broken up into separate files because they rely on different tensorflow execution states (i.e. the bc tests run tf in eager mode, while rllib requires tensorflow to be running symbollically). Going forward, it would probably be best to standardize the tensorflow execution state, or re-write the code such that it is robust to execution state.
 
-## Rllib code overview
+# Repo Structure Overview
 
 `ppo/`:
 - `ppo_rllib.py`: Primary module where code for training a PPO agent resides. This includes an rllib compatible wrapper on `OvercookedEnv`, utilities for converting rllib `Policy` classes to Overcooked `Agent`s, as well as utility functions and callbacks
-- `ppo_rllib_test.py` Reproducibility tests for local sanity checks
 - `ppo_rllib_client.py` Driver code for configuing and launching the training of an agent. More details about usage below
+- `ppo_rllib_from_params_client.py`: train one agent with PPO in Overcooked with variable-MDPs 
+- `ppo_rllib_test.py` Reproducibility tests for local sanity checks
+
+`rllib/`:
+- `rllib.py`: rllib agent and training utils that utilize Overcooked APIs
+- `utils.py`: utils for the above
+- `tests.py`: preliminary tests for the above
 
 `imitation/`:
 - `behavior_cloning_tf2.py`:  Module for training, saving, and loading a BC model
 - `behavior_cloning_tf2_test.py`: Contains basic reproducibility tests as well as unit tests for the various components of the bc module.
 
-## Usage
+`human/`:
+- `process_data.py` script to process human data in specific formats to be used by DRL algorithms
+- `data_processing_utils.py` utils for the above
+
+`utils.py`: utils for the repo
+
+# Usage
 
 Before proceeding, it is important to note that there are two primary groups of hyperparameter defaults, `local` and `production`. Which is selected is controlled by the `RUN_ENV` environment variable, which defaults to `production`. In order to use local hyperparameters, run
 ```bash
@@ -139,32 +161,9 @@ Training results and checkpoints are stored in a directory called `~/ray_results
 ```
 
 
-## Repo Structure Overview (inner `human_aware_rl` repo)
+# Troubleshooting
 
-`ppo/` (both using baselines):
-- `ppo_rllib.py`: where rllib ppo agents are defined
-- `ppo_rllib_client.py`: train one agent with PPO in Overcooked with a specific MDP
-- `ppo_rllib_from_params_client.py`: train one agent with PPO in Overcooked with variable-MDPs 
-- `ppo_rllib_test.py`: tests for ppo rllib clients
-
-`rllib/`:
-- `rllib.py`: rllib agent and training utils that utilize Overcooked APIs
-- `utils.py`: utils for the above
-- `tests.py`: preliminary tests for the above
-
-`imitation/`:
-- `behaviour_cloning_tf2.py`:  simple script to perform BC on trajectory data in tf2
-- `behaviour_cloning_tf2_test.py`:  test for above
-
-`human/`:
-- `process_data.py` script to process human data in specific formats to be used by DRL algorithms
-- `data_processing_utils.py` utils for the above
-
-`utils.py`: utils for the repo
-
-## Troubleshooting
-
-### Tensorflow
+## Tensorflow
 Many tensorflow errors are caused by the tensorflow state of execution. For example, if you get an error similar to 
 
 ```
@@ -205,3 +204,6 @@ ModuleNotFoundError: No module named 'human_aware_rl.data_dir'
 
 to initiate those variables
 
+# Reproducing Results
+
+The specific results in that paper were obtained using code that is no longer in the master branch. If you are interested in reproducing results, please check out [this](TODO) commit of this repository, and [this](TODO) of the `overcooked-ai` repository. A word of warning: those commits are stale and the code within them is no longer maintained.

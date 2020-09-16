@@ -22,14 +22,16 @@ class TestPPORllib(unittest.TestCase):
 
     compute_pickle (bool):      Whether the results of this test should be stored as the expected values for future tests
     strict (bool):              Whether the results of this test should be compared against expected values for exact match
+    min_performance (int):      Minimum sparse reward that must be achieved during training for test to count as "success"
 
     Note, this test always performs a basic sanity check to verify some learning is happening, even if the `strict` param is false
     """
 
-    def __init__(self, test_name, compute_pickle, strict):
+    def __init__(self, test_name, compute_pickle, strict, min_performance):
         super(TestPPORllib, self).__init__(test_name)
         self.compute_pickle = compute_pickle
         self.strict = strict
+        self.min_performance = min_performance
     
     def setUp(self):
         set_global_seed(0)
@@ -69,10 +71,10 @@ class TestPPORllib(unittest.TestCase):
                 # Please feel free to modify the parameters below
                 "results_dir": self.temp_results_dir,
                 "num_workers": 1,
-                "train_batch_size": 2000,
-                "sgd_minibatch_size": 1000,
-                "num_training_iters": 50,
-                "evaluation_interval": 5,
+                "train_batch_size": 800,
+                "sgd_minibatch_size": 800,
+                "num_training_iters": 10,
+                "evaluation_interval": 10,
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
                 "use_phi": False,
@@ -81,7 +83,7 @@ class TestPPORllib(unittest.TestCase):
         ).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
-        self.assertGreaterEqual(results['average_total_reward'], 10.0)
+        self.assertGreaterEqual(results['average_total_reward'], self.min_performance)
 
         if self.compute_pickle:
             self.expected['test_ppo_sp_no_phi'] = results
@@ -97,10 +99,10 @@ class TestPPORllib(unittest.TestCase):
                 # Please feel free to modify the parameters below
                 "results_dir": self.temp_results_dir,
                 "num_workers": 1,
-                "train_batch_size": 2000,
-                "sgd_minibatch_size": 1000,
-                "num_training_iters": 50,
-                "evaluation_interval": 5,
+                "train_batch_size": 800,
+                "sgd_minibatch_size": 800,
+                "num_training_iters": 10,
+                "evaluation_interval": 10,
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
                 "use_phi": True,
@@ -109,7 +111,7 @@ class TestPPORllib(unittest.TestCase):
         ).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
-        self.assertGreaterEqual(results['average_total_reward'], 10.0)
+        self.assertGreaterEqual(results['average_total_reward'], self.min_performance)
 
         if self.compute_pickle:
             self.expected['test_ppo_sp_yes_phi'] = results
@@ -125,10 +127,10 @@ class TestPPORllib(unittest.TestCase):
             config_updates={
                 "results_dir": self.temp_results_dir,
                 "num_workers": 1,
-                "train_batch_size": 2000,
-                "sgd_minibatch_size": 1000,
-                "num_training_iters": 50,
-                "evaluation_interval": 5,
+                "train_batch_size": 800,
+                "sgd_minibatch_size": 800,
+                "num_training_iters": 10,
+                "evaluation_interval": 10,
                 "use_phi": False,
                 "entropy_coeff_start": 0.0002,
                 "entropy_coeff_end": 0.00005,
@@ -140,7 +142,7 @@ class TestPPORllib(unittest.TestCase):
         ).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
-        self.assertGreaterEqual(results['average_total_reward'], 10.0)
+        self.assertGreaterEqual(results['average_total_reward'], self.min_performance)
 
         if self.compute_pickle:
             self.expected['test_ppo_fp_sp_no_phi'] = results
@@ -156,10 +158,10 @@ class TestPPORllib(unittest.TestCase):
             config_updates={
                 "results_dir": self.temp_results_dir,
                 "num_workers": 1,
-                "train_batch_size": 2000,
-                "sgd_minibatch_size": 1000,
-                "num_training_iters": 50,
-                "evaluation_interval": 5,
+                "train_batch_size": 800,
+                "sgd_minibatch_size": 800,
+                "num_training_iters": 10,
+                "evaluation_interval": 10,
                 "use_phi": True,
                 "entropy_coeff_start": 0.0002,
                 "entropy_coeff_end": 0.00005,
@@ -171,7 +173,7 @@ class TestPPORllib(unittest.TestCase):
         ).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
-        self.assertGreaterEqual(results['average_total_reward'], 10.0)
+        self.assertGreaterEqual(results['average_total_reward'], self.min_performance)
 
         if self.compute_pickle:
             self.expected['test_ppo_fp_sp_yes_phi'] = results
@@ -211,19 +213,20 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--compute-pickle', '-cp', action="store_true")
     parser.add_argument('--strict', '-s', action="store_true")
+    parser.add_argument('--min_performance', '-mp', default=5)
 
-    args = parser.parse_args()
+    args = vars(parser.parse_args())
 
-    assert not (args.compute_pickle and args.strict), "Cannot compute pickle and run strict reproducibility tests at same time"
-    print(args.compute_pickle, args.strict)
-    if args.compute_pickle:
+    assert not (args['compute_pickle'] and args['strict']), "Cannot compute pickle and run strict reproducibility tests at same time"
+    print(args['compute_pickle'], args['strict'])
+    if args['compute_pickle']:
         _clear_pickle()
 
     suite = unittest.TestSuite()
-    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', args.compute_pickle, args.strict))
-    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', args.compute_pickle, args.strict))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', args.compute_pickle, args.strict))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', args.compute_pickle, args.strict))
+    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
     # suite.addTest(TestPPORllib('test_ppo_bc', args.compute_pickle, args.strict))
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)
