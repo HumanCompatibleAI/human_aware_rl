@@ -265,7 +265,13 @@ def evaluate_bc_model(model, bc_params):
     agent_1_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)
 
     # Compute the results of the rollout(s)
-    results = evaluate(evaluation_params, mdp_params, agent_0_policy, agent_1_policy, featurize_fn, featurize_fn)
+    results = evaluate(eval_params=evaluation_params, 
+                       mdp_params=mdp_params, 
+                       outer_shape=None,
+                       agent_0_policy=agent_0_policy, 
+                       agent_1_policy=agent_1_policy, 
+                       agent_0_featurize_fn=featurize_fn, 
+                       agent_1_featurize_fn=featurize_fn)
 
     # Compute the average sparse return obtained in each rollout
     reward = np.mean(results['ep_returns'])

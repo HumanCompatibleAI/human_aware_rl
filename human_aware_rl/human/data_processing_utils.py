@@ -45,7 +45,7 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
 
     datapoint = traj_df.iloc[0]
     layout_name = datapoint['layout_name']
-    agent_evaluator = AgentEvaluator(
+    agent_evaluator = AgentEvaluator.from_layout_name(
         mdp_params={"layout_name": layout_name},
         env_params={"horizon": 1250}  # Defining the horizon of the mdp of origin of the trajectories
     )
@@ -169,7 +169,7 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
 
                 # NOTE: Could parallelize a bit more if slow
                 # state = mdp.preprocess_observation(state)[agent_idx]
-                state = env.featurize_state(state)[agent_idx]
+                state = env.featurize_state_mdp(state)[agent_idx]
 
             ep_obs.append(state)
             ep_acts.append(action)
