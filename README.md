@@ -206,4 +206,4 @@ to initiate those variables
 
 # Reproducing Results
 
-The specific results in that paper were obtained using code that is no longer in the master branch. If you are interested in reproducing results, please check out [this](TODO) commit of this repository, and [this](TODO) of the `overcooked-ai` repository. A word of warning: those commits are stale and the code within them is no longer maintained.
+The specific results in that paper were obtained using code that is no longer in the master branch. If you are interested in reproducing results, please check out [this](https://github.com/HumanCompatibleAI/human_aware_rl/tree/neurips2019) and follow the install instructions there.
