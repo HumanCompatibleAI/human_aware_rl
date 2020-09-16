@@ -129,3 +129,15 @@ data/ppo_exp/
 
 # Other files
 transfer_agent.sh
+
+# sacred config files
+**/slack.json
+
+# VSCode metadata
+**/.vscode
+
+# Data directories
+**/data_dir.py
+
+# PyCharm
+.idea/
