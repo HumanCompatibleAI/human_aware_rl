@@ -106,6 +106,13 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+# VSCode
+**/.vscode/
+
+# CHAI specific
+**/data_dir.py
+**/slack.json
+
 # Other
 .DS_Store
 *.key
