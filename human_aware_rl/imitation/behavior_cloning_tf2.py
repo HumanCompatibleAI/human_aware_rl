@@ -5,14 +5,9 @@ import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
 from human_aware_rl.static import HUMAN_DATA_PATH
-from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_env, get_mlp
+from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
 from overcooked_ai_py.mdp.actions import Action
-from overcooked_ai_py.agents.agent import AgentPair
-from overcooked_ai_py.agents.benchmarking import AgentEvaluator
-from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
-from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
-from overcooked_ai_py.planning.planners import MediumLevelPlanner, NO_COUNTERS_PARAMS
 from overcooked_ai_py.mdp.overcooked_env import DEFAULT_ENV_PARAMS
 from ray.rllib.policy import Policy as RllibPolicy
 
@@ -25,7 +20,6 @@ BC_SAVE_DIR = os.path.join(DATA_DIR, "bc_runs")
 DEFAULT_DATA_PARAMS = {
     "train_mdps": ["cramped_room"],
     "ordered_trajs": False,
-    "human_ai_trajs": False,
     "processed" : True,
     "data_path": HUMAN_DATA_PATH
 }
@@ -68,21 +62,18 @@ DEFAULT_BC_PARAMS = {
 # Boolean indicating whether all param dependencies have been loaded. Used to prevent re-loading unceccesarily
 _params_initalized = False
 
-def _get_base_env(bc_params):
-    return get_base_env(bc_params['mdp_params'], bc_params['env_params'])
-
-def _get_mlp(bc_params):
-    return get_mlp(bc_params['mdp_params'], bc_params['env_params'])
+def _get_base_ae(bc_params):
+    return get_base_ae(bc_params['mdp_params'], bc_params['env_params'])
 
 def _get_observation_shape(bc_params):
     """
     Helper function for creating a dummy environment from "mdp_params" and "env_params" specified
     in bc_params and returning the shape of the observation space
     """
-    base_env = _get_base_env(bc_params)
-    mlp = _get_mlp(bc_params)
+    base_ae = _get_base_ae(bc_params)
+    base_env = base_ae.env
     dummy_state = base_env.mdp.get_standard_start_state()
-    obs_shape = base_env.mdp.featurize_state(dummy_state, mlp)[0].shape
+    obs_shape = base_env.featurize_state_mdp(dummy_state)[0].shape
     return obs_shape
 
 # For lazing loading the default params. Prevents loading on every import of this module 
@@ -155,11 +146,16 @@ def train_bc_model(model_dir, bc_params, verbose=False):
     model = build_bc_model(**bc_params, max_seq_len=np.max(seq_lens))
 
     # Initialize the model
+    # Note: have to use lists for multi-output model support and not dicts because of tensorlfow 2.0.0 bug
+    if bc_params['use_lstm']:
+        loss = [keras.losses.SparseCategoricalCrossentropy(from_logits=True), None, None]
+        metrics = [["sparse_categorical_accuracy"], [], []]
+    else:
+        loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        metrics = ["sparse_categorical_accuracy"]
     model.compile(optimizer=keras.optimizers.Adam(training_params["learning_rate"]),
-                  loss={
-                    "logits" : keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-                  },
-                  metrics={ "logits" : "sparse_categorical_accuracy" })
+                  loss=loss,
+                  metrics=metrics)
 
 
     # Customize our training loop with callbacks
@@ -259,17 +255,23 @@ def evaluate_bc_model(model, bc_params):
     mdp_params = bc_params['mdp_params']
 
     # Get reference to state encoding function used by bc agents, with compatible signature
-    base_env = _get_base_env(bc_params)
-    mlp = _get_mlp(bc_params)
+    base_ae = _get_base_ae(bc_params)
+    base_env = base_ae.env
     def featurize_fn(state):
-        return base_env.mdp.featurize_state(state, mlp)
+        return base_env.featurize_state_mdp(state)
 
     # Wrap Keras models in rllib policies
     agent_0_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)
     agent_1_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)
 
     # Compute the results of the rollout(s)
-    results = evaluate(evaluation_params, mdp_params, agent_0_policy, agent_1_policy, featurize_fn, featurize_fn)
+    results = evaluate(eval_params=evaluation_params, 
+                       mdp_params=mdp_params, 
+                       outer_shape=None,
+                       agent_0_policy=agent_0_policy, 
+                       agent_1_policy=agent_1_policy, 
+                       agent_0_featurize_fn=featurize_fn, 
+                       agent_1_featurize_fn=featurize_fn)
 
     # Compute the average sparse return obtained in each rollout
     reward = np.mean(results['ep_returns'])

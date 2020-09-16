@@ -32,7 +32,7 @@ class RllibEnvTest(unittest.TestCase):
         env.bc_factor = factor
         tot_bc = 0
         for _ in range(trials):
-            env.reset()
+            env.reset(regen_mdp=False)
             num_bc = sum(map(lambda agent : int(agent.startswith('bc')), env.curr_agents))
             self.assertLessEqual(num_bc, 1)
             tot_bc += num_bc
@@ -88,8 +88,6 @@ class RllibEnvTest(unittest.TestCase):
         bc_factors = [0.0, 0.1, 0.5, 0.9, 1.0]
         for factor in bc_factors:
             self._test_bc_creation_proportion(env, factor)
-
-
 
 
 class RllibUtilsTest(unittest.TestCase):
