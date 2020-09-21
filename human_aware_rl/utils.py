@@ -1,14 +1,8 @@
 import os
-import io
 import re
 import git
-import json
-import time
 import shutil
-import pickle
-import pstats
 import random
-import cProfile
 import numpy as np
 import tensorflow as tf
 
@@ -92,7 +86,7 @@ def accuracy(action_probs, y):
 def set_global_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
-    tf.random.set_seed(seed)
+    tf.random.set_random_seed(seed)
 
 def prepare_nested_default_dict_for_pickle(nested_defaultdict):
     """Need to make all nested defaultdicts into normal dicts to pickle"""

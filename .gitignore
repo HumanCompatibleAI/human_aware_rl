@@ -138,3 +138,6 @@ transfer_agent.sh
 
 # Data directories
 **/data_dir.py
+
+# PyCharm
+.idea/

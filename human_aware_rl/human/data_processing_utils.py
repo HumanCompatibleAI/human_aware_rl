@@ -1,13 +1,9 @@
 import json
-import itertools
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedState, ObjectState, PlayerState, OvercookedGridworld
-from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 
 
 ####################
@@ -19,6 +15,7 @@ def json_action_to_python_action(action):
         action = tuple(action)
     assert action in Action.ALL_ACTIONS
     return action
+
 
 def json_joint_action_to_python_action(json_joint_action):
     """Port format from javascript to python version of Overcooked"""
@@ -40,15 +37,16 @@ def extract_df_for_worker_on_layout(main_trials, worker_id, layout_name):
     worker_layout_traj_df = worker_trajs_df[worker_trajs_df['layout_name'] == layout_name]
     return worker_layout_traj_df
 
+
 def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
     if len(traj_df) == 0:
         return None
 
     datapoint = traj_df.iloc[0]
     layout_name = datapoint['layout_name']
-    agent_evaluator = AgentEvaluator(
-        mdp_params={"layout_name": layout_name}, 
-        env_params={"horizon": 1250} # Defining the horizon of the mdp of origin of the trajectories
+    agent_evaluator = AgentEvaluator.from_layout_name(
+        mdp_params={"layout_name": layout_name},
+        env_params={"horizon": 1250}  # Defining the horizon of the mdp of origin of the trajectories
     )
     mdp = agent_evaluator.env.mdp
     env = agent_evaluator.env
@@ -62,21 +60,21 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
     trajectories = {
         "ep_observations": [overcooked_states],
         "ep_actions": [overcooked_actions],
-        "ep_rewards": [overcooked_rewards], # Individual (dense) reward values
-        "ep_dones": [[False] * len(overcooked_states)], # Individual done values
+        "ep_rewards": [overcooked_rewards],  # Individual (dense) reward values
+        "ep_dones": [[False] * len(overcooked_states)],  # Individual done values
         "ep_infos": [{}] * len(overcooked_states),
 
-        "ep_returns": [sum(overcooked_rewards)], # Sum of dense rewards across each episode
-        "ep_lengths": [len(overcooked_states)], # Lengths of each episode
+        "ep_returns": [sum(overcooked_rewards)],  # Sum of dense rewards across each episode
+        "ep_lengths": [len(overcooked_states)],  # Lengths of each episode
         "mdp_params": [mdp.mdp_params],
         "env_params": [env.env_params],
         "metadatas": {
-                'player_0_id': [datapoint['player_0_id']],
-                'player_1_id': [datapoint['player_1_id']],
-                'env': [agent_evaluator.env]
+            'player_0_id': [datapoint['player_0_id']],
+            'player_1_id': [datapoint['player_1_id']],
+            'env': [agent_evaluator.env]
         }
     }
-    trajectories = {k: np.array(v) if k not in ["ep_actions", "metadatas"] else v for k, v in trajectories.items() }
+    trajectories = {k: np.array(v) if k not in ["ep_actions", "metadatas"] else v for k, v in trajectories.items()}
 
     if complete_traj:
         agent_evaluator.check_trajectories(trajectories)
@@ -84,7 +82,7 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
 
 def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, ordered_pairs=True, processed=False, silent=False):
     """
-    Takes in a dataframe `main_trials` containing joint trajectories, and extract trajectories of workers `worker_ids` 
+    Takes in a dataframe `main_trials` containing joint trajectories, and extract trajectories of workers `worker_ids`
     on layouts `layout_names`, with specific options.
     """
 
@@ -92,16 +90,16 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, order
         # With shape (n_timesteps, game_len), where game_len might vary across games:
         "ep_observations": [],
         "ep_actions": [],
-        "ep_rewards": [], # Individual reward values
-        "ep_dones": [], # Individual done values
+        "ep_rewards": [],  # Individual reward values
+        "ep_dones": [],  # Individual done values
         "ep_infos": [],
 
         # With shape (n_episodes, ):
-        "ep_returns": [], # Sum of rewards across each episode
-        "ep_lengths": [], # Lengths of each episode
+        "ep_returns": [],  # Sum of rewards across each episode
+        "ep_lengths": [],  # Lengths of each episode
         "mdp_params": [],
         "env_params": [],
-        "metadatas": {"ep_agent_idxs": []} # Agent index for current episode
+        "metadatas": {"ep_agent_idxs": []}  # Agent index for current episode
     }
 
     human_indices = []
@@ -125,6 +123,7 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, order
     if not silent: print("Number of trajectories processed for each layout: {}".format(num_trials_for_layout))
     return single_agent_trajectories, human_indices
 
+
 def get_human_player_index_for_df(one_traj_df):
     """Determines which player index had a human player"""
     human_player_indices = []
@@ -138,10 +137,11 @@ def get_human_player_index_for_df(one_traj_df):
 
     return human_player_indices
 
-def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indices_to_convert=None, processed=True, silent=False):
+
+def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indices_to_convert=None, processed=True,
+                                     silent=False):
     """
     Take a joint trajectory and split it into two single-agent trajectories, adding data to the `trajectories` dictionary
-
     player_indices_to_convert: which player indexes' trajs we should return
     """
 
@@ -157,14 +157,14 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
         ep_obs, ep_acts, ep_dones = [], [], []
         for i in range(len(states)):
             state, action = states[i], joint_actions[i][agent_idx]
-            
+
             if processed:
                 # Pre-processing (default is state featurization)
                 action = np.array([Action.ACTION_TO_INDEX[action]]).astype(int)
 
                 # NOTE: Could parallelize a bit more if slow
                 # state = mdp.preprocess_observation(state)[agent_idx]
-                state = env.featurize_state(state)[agent_idx]
+                state = env.featurize_state_mdp(state)[agent_idx]
 
             ep_obs.append(state)
             ep_acts.append(action)

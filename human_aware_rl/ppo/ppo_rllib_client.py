@@ -6,7 +6,6 @@ import numpy as np
 # environment variable that tells us whether this code is running on the server or not
 LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
 
-
 # Sacred setup (must be before rllib imports)
 from sacred import Experiment
 ex = Experiment("PPO RLLib")
@@ -59,6 +58,9 @@ def _env_creator(env_config):
 @ex.config
 def my_config():
     ### Model params ###
+
+    # Whether dense reward should come from potential function or not
+    use_phi = True
 
     # whether to use recurrence in ppo model
     use_lstm = False
@@ -183,8 +185,19 @@ def my_config():
     # Which overcooked level to use
     layout_name = "cramped_room"
 
+    # all_layout_names = '_'.join(layout_names)
+
     # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
-    experiment_name = "{0}_{1}".format("PPO", layout_name)
+
+    params_str = str(use_phi) + "_nw=%d_vf=%f_es=%f_en=%f_kl=%f" % (
+        num_workers,
+        vf_loss_coeff,
+        entropy_coeff_start,
+        entropy_coeff_end,
+        kl_coeff
+    )
+
+    experiment_name = "{0}_{1}_{2}".format("PPO", layout_name, params_str)
 
     # Rewards the agent will receive for intermediate actions
     rew_shaping_params = {
@@ -280,11 +293,13 @@ def my_config():
         "display" : evaluation_display
     }
 
+
     environment_params = {
         # To be passed into OvercookedGridWorld constructor
+
         "mdp_params" : {
-            "layout_name" : layout_name,
-            "rew_shaping_params" : rew_shaping_params
+            "layout_name": layout_name,
+            "rew_shaping_params": rew_shaping_params
         },
         # To be passed into OvercookedEnv constructor
         "env_params" : {
