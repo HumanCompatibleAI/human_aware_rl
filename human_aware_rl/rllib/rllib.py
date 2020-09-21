@@ -645,28 +645,29 @@ def load_trainer(save_path):
     trainer.restore(save_path)
     return trainer
 
-def get_agent_from_trainer(trainer, policy_id="ppo", agent_index=0):
+def get_agent_from_trainer(trainer, policy_id="ppo", agent_index=0, featurize_fn=None):
     policy = trainer.get_policy(policy_id)
-    dummy_env = trainer.env_creator(trainer.config['env_config'])
-    featurize_fn = dummy_env.featurize_fn_map[policy_id]
+    if featurize_fn is None:
+        dummy_env = trainer.env_creator(trainer.config['env_config'])
+        featurize_fn = dummy_env.featurize_fn_map[policy_id]
     agent = RlLibAgent(policy, agent_index, featurize_fn=featurize_fn)
     return agent
 
-def get_agent_pair_from_trainer(trainer, policy_id_0='ppo', policy_id_1='ppo'):
-    agent0 = get_agent_from_trainer(trainer, policy_id=policy_id_0)
-    agent1 = get_agent_from_trainer(trainer, policy_id=policy_id_1)
+def get_agent_pair_from_trainer(trainer, policy_id_0='ppo', policy_id_1='ppo', featutize_fn=None):
+    agent0 = get_agent_from_trainer(trainer, policy_id=policy_id_0, featurize_fn=featutize_fn)
+    agent1 = get_agent_from_trainer(trainer, policy_id=policy_id_1, featurize_fn=featutize_fn)
     return AgentPair(agent0, agent1)
 
 
-def load_agent_pair(save_path, policy_id_0='ppo', policy_id_1='ppo'):
+def load_agent_pair(save_path, policy_id_0='ppo', policy_id_1='ppo', featurize_fn=None):
     """
     Returns an Overcooked AgentPair object that has as player 0 and player 1 policies with 
     ID policy_id_0 and policy_id_1, respectively
     """
     trainer = load_trainer(save_path)
-    return get_agent_pair_from_trainer(trainer, policy_id_0, policy_id_1)
+    return get_agent_pair_from_trainer(trainer, policy_id_0, policy_id_1, featurize_fn)
 
-def load_agent(save_path, policy_id='ppo', agent_index=0):
+def load_agent(save_path, policy_id='ppo', agent_index=0, featurize_fn=None):
     """
     Returns an RllibAgent (compatible with the Overcooked Agent API) from the `save_path` to a previously
     serialized trainer object created with `save_trainer`
@@ -678,6 +679,6 @@ def load_agent(save_path, policy_id='ppo', agent_index=0):
     as the featurization is not symmetric for both players
     """
     trainer = load_trainer(save_path)
-    return get_agent_from_trainer(trainer, policy_id=policy_id, agent_index=agent_index)
+    return get_agent_from_trainer(trainer, policy_id=policy_id, agent_index=agent_index, featurize_fn=featurize_fn)
 
 
