@@ -93,7 +93,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
     supported_agents = ['ppo', 'bc']
 
     # Default bc_schedule, includes no bc agent at any time
-    bc_schedule = self_play_bc_schedule = [(0, 0), (float('inf'), 0)]
+    bc_schedule = self_play_bc_schedule = zero_schedule = [(0, 0), (float('inf'), 0)]
 
     # Default environment params used for creation
     DEFAULT_CONFIG = {
@@ -108,10 +108,12 @@ class OvercookedMultiAgent(MultiAgentEnv):
         },
         # To be passed into OvercookedMultiAgent constructor
         "multi_agent_params" : {
-            "reward_shaping_factor" : 0.0,
-            "reward_shaping_horizon" : 0,
+            "use_reward_shaping" : False,
+            "reward_shaping_schedule" : zero_schedule,
+            "use_potential_shaping" : False,
+            "potential_shaping_schedule" : zero_schedule,
             "bc_schedule" : self_play_bc_schedule,
-            "use_phi" : True,
+            "gamma" : 0.99,
             "potential_constants" : {}
         }
     }
@@ -127,10 +129,16 @@ class OvercookedMultiAgent(MultiAgentEnv):
             with linear interpolation in between the t_i
         use_phi (bool): Whether to use 'shaped_r_by_agent' or 'phi_s_prime' - 'phi_s' to determine dense reward
         """
+        if use_reward_shaping and not reward_shaping_schedule:
+            raise ValueError("must specify `reward_shaping_schedule` if `use_reward_shaping` is true")
+        if use_potential_shaping and not potential_shaping_schedule:
+            raise ValueError("Must specify `potential_shaping_scheduld` if `use_potnetial_shaping` is True")
+
         if bc_schedule:
             self.bc_schedule = bc_schedule
-        self.reward_shaping_schedule = reward_shaping_schedule
-        self.potential_shaping_schedule = potential_shaping_schedule
+        
+        self.reward_shaping_schedule = reward_shaping_schedule if use_reward_shaping else self.zero_schedule
+        self.potential_shaping_schedule = potential_shaping_schedule if use_potential_shaping else self.zero_schedule
 
         self._validate_schedule(self.bc_schedule)
         self._validate_schedule(self.reward_shaping_schedule)
@@ -477,7 +485,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         if 'bc' in policies:
             base_ae = get_base_ae(eval_mdp_params, env_params)
             base_env = base_ae.env
-            bc_featurize_fn = lambda state : base_env.mdp.featurize_state(state)
+            bc_featurize_fn = lambda state : base_env.featurize_state_mdp(state)
             if policies[0] == 'bc':
                 agent_0_feat_fn = bc_featurize_fn
             if policies[1] == 'bc':

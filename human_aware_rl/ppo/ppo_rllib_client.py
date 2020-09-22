@@ -59,9 +59,6 @@ def _env_creator(env_config):
 def my_config():
     ### Model params ###
 
-    # Whether dense reward should come from potential function or not
-    use_phi = True
-
     # whether to use recurrence in ppo model
     use_lstm = False
 
@@ -187,18 +184,6 @@ def my_config():
 
     # all_layout_names = '_'.join(layout_names)
 
-    # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
-
-    params_str = str(use_phi) + "_nw=%d_vf=%f_es=%f_en=%f_kl=%f" % (
-        num_workers,
-        vf_loss_coeff,
-        entropy_coeff_start,
-        entropy_coeff_end,
-        kl_coeff
-    )
-
-    experiment_name = "{0}_{1}_{2}".format("PPO", layout_name, params_str)
-
     # Rewards the agent will receive for intermediate actions
     rew_shaping_params = {
         "PLACEMENT_IN_POT_REW": 3,
@@ -251,6 +236,18 @@ def my_config():
     # value of bc_factor at timestep t_i. Values are linearly interpolated between points
     # The default listed below represents bc_factor=0 for all timesteps
     bc_schedule = OvercookedMultiAgent.self_play_bc_schedule
+
+    # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
+
+    params_str = str(use_potential_shaping) + "_nw=%d_vf=%f_es=%f_en=%f_kl=%f" % (
+        num_workers,
+        vf_loss_coeff,
+        entropy_coeff_start,
+        entropy_coeff_end,
+        kl_coeff
+    )
+
+    experiment_name = "{0}_{1}_{2}".format("PPO", layout_name, params_str)
 
 
     # To be passed into rl-lib model/custom_options config

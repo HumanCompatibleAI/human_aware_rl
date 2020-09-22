@@ -53,8 +53,8 @@ class RllibEnvTest(unittest.TestCase):
             self.assertRaises(AssertionError, OvercookedMultiAgent.from_config, self.params)
 
     def test_reward_shaping_annealing(self):
-        self.params['multi_agent_params']['reward_shaping_factor'] = 1
-        self.params['multi_agent_params']['reward_shaping_horizon'] = 1e3
+        self.params['multi_agent_params']['use_reward_shaping'] = True
+        self.params['multi_agent_params']['reward_shaping_schedule'] = [(0, 1), (1e3, 0)]
 
         expected_rew_factors = [1, 990/1e3, 900/1e3, 500/1e3, 0.0, 0.0, 0.0, 0.0]
         actual_rew_factors = []
