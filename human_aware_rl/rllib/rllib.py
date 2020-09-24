@@ -624,26 +624,29 @@ def save_trainer(trainer, params, path=None):
         dill.dump(config, f)
     return save_path
 
-def load_trainer(save_path, true_num_workers=False):
+def load_trainer(save_path, custom_config=None):
     """
     Arguments:
         save_path (str): the path to the trainer
-        true_num_workers (bool): whether to load the true num_workers in the trainer
+        custom_config (dict): custom configuration dictionary
     Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
     Note that `save_path` is the full path to the checkpoint FILE, not the checkpoint directory
     """
-    # Read in params used to create trainer
-    config_path = os.path.join(os.path.dirname(save_path), "config.pkl")
-    with open(config_path, "rb") as f:
-        # We use dill (instead of pickle) here because we must deserialize functions
-        config = dill.load(f)
+    # enable custom config file to resume training
+    if custom_config is not None:
+        trainer = gen_trainer_from_params(custom_config)
+    else:
+        # Read in params used to create trainer
+        config_path = os.path.join(os.path.dirname(save_path), "config.pkl")
+        with open(config_path, "rb") as f:
+            # We use dill (instead of pickle) here because we must deserialize functions
+            config = dill.load(f)
 
-    if not true_num_workers:
         # Override this param to lower overhead in trainer creation
         config['training_params']['num_workers'] = 0
 
-    # Get un-trained trainer object with proper config
-    trainer = gen_trainer_from_params(config)
+        # Get un-trained trainer object with proper config
+        trainer = gen_trainer_from_params(config)
 
     # Load weights into dummy object
     trainer.restore(save_path)

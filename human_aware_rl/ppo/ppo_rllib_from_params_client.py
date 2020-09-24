@@ -378,7 +378,7 @@ def _env_creater(env_config):
 def run(params):
     saved_path = params["resume_checkpoint_path"]
     if saved_path:
-        trainer = load_trainer(save_path=saved_path, true_num_workers=True)
+        trainer = load_trainer(save_path=saved_path, custom_config=params)
     else:
         # Retrieve the tune.Trainable object that is used for the experiment
         trainer = gen_trainer_from_params(params)
