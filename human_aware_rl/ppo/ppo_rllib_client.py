@@ -32,7 +32,7 @@ from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from human_aware_rl.ppo.ppo_rllib import RllibPPOModel, RllibLSTMPPOModel
-from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params
+from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params, load_trainer
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR
 
 
@@ -91,7 +91,7 @@ def my_config():
     seed = None
 
     # Number of gpus the central driver should use
-    num_gpus = 0 if LOCAL_TESTING else 1
+    num_gpus = 1 if not LOCAL_TESTING else 0
 
     # How many environment timesteps will be simulated (across all environments)
     # for one set of gradient updates. Is divided equally across environments
@@ -321,8 +321,13 @@ def my_config():
 
 
 def run(params):
-    # Retrieve the tune.Trainable object that is used for the experiment
-    trainer = gen_trainer_from_params(params)
+    # reload checkpoint if it exist, and is not None
+    if "resume_checkpoint_path" in params and params["resume_checkpoint_path"]:
+        saved_path = params["resume_checkpoint_path"]
+        trainer = load_trainer(save_path=saved_path, custom_config=params)
+    else:
+        # Retrieve the tune.Trainable object that is used for the experiment
+        trainer = gen_trainer_from_params(params)
 
     # Object to store training results in
     result = {}

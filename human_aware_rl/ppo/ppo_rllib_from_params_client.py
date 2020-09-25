@@ -113,7 +113,7 @@ def my_config():
     seed = None
 
     # Number of gpus the central driver should use
-    num_gpus = 0 if LOCAL_TESTING else 1
+    num_gpus = 1 if not LOCAL_TESTING else 0
 
     # How many environment timesteps will be simulated (across all environments)
     # for one set of gradient updates. Is divided equally across environments
@@ -376,8 +376,9 @@ def _env_creater(env_config):
 
 
 def run(params):
-    saved_path = params["resume_checkpoint_path"]
-    if saved_path:
+    # reload checkpoint if it exist, and is not None
+    if "resume_checkpoint_path" in params and params["resume_checkpoint_path"]:
+        saved_path = params["resume_checkpoint_path"]
         trainer = load_trainer(save_path=saved_path, custom_config=params)
     else:
         # Retrieve the tune.Trainable object that is used for the experiment
