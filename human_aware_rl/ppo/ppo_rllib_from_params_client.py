@@ -55,31 +55,6 @@ def _env_creator(env_config):
     from human_aware_rl.rllib.rllib import OvercookedMultiAgent 
     return OvercookedMultiAgent.from_config(env_config)
 
-def naive_params_schedule_fn(outside_information):
-    """
-    In this preliminary version, the outside information is ignored
-    """
-    # Rewards the agent will receive for intermediate actions
-    rew_shaping_params = {
-        "PLACEMENT_IN_POT_REW": 3,
-        "DISH_PICKUP_REWARD": 3,
-        "SOUP_PICKUP_REWARD": 5,
-        "DISH_DISP_DISTANCE_REW": 0,
-        "POT_DISTANCE_REW": 0,
-        "SOUP_DISTANCE_REW": 0,
-    }
-    mdp_default_gen_params = {
-        "inner_shape": (5, 4),
-        "prop_empty": 0.95,
-        "prop_feats": 0.1,
-        "start_all_orders": [
-            {"ingredients": ["onion", "onion", "onion"]}
-        ],
-        "display": False,
-        "rew_shaping_params": rew_shaping_params
-    }
-    return mdp_default_gen_params
-
 
 @ex_fp.config
 def my_config():
@@ -118,12 +93,12 @@ def my_config():
     # How many environment timesteps will be simulated (across all environments)
     # for one set of gradient updates. Is divided equally across environments
     # train_batch_size = 40000 if not LOCAL_TESTING else 800
-    train_batch_size = 100000 if not LOCAL_TESTING else 800
+    train_batch_size = 128000 if not LOCAL_TESTING else 800
 
     # size of minibatches we divide up each batch into before
     # performing gradient steps
     # sgd_minibatch_size = 10000 if not LOCAL_TESTING else 800
-    sgd_minibatch_size = 25000 if not LOCAL_TESTING else 800
+    sgd_minibatch_size = 80000 if not LOCAL_TESTING else 800
 
     # Rollout length
     rollout_fragment_length = 400
@@ -132,10 +107,10 @@ def my_config():
     shared_policy = True
 
     # Number of training iterations to run
-    num_training_iters = 400 if not LOCAL_TESTING else 2
+    num_training_iters = 1000 if not LOCAL_TESTING else 2
 
     # Stepsize of SGD.
-    lr = 5e-3
+    lr = 7e-4
 
     # Learning rate schedule.
     lr_schedule = None
@@ -157,8 +132,8 @@ def my_config():
     vf_loss_coeff = 1e-4
 
     # Entropy bonus coefficient, will anneal linearly from _start to _end over _horizon steps
-    entropy_coeff_start = 0.02
-    entropy_coeff_end = 0.00005
+    entropy_coeff_start = 0.2
+    entropy_coeff_end = 0.0005
     entropy_coeff_horizon = 3e5
 
     # Initial coefficient for KL divergence.
@@ -175,7 +150,7 @@ def my_config():
     save_freq = 250
 
     # How many training iterations to run between each evaluation
-    evaluation_interval = 50 if not LOCAL_TESTING else 1
+    evaluation_interval = 200 if not LOCAL_TESTING else 1
 
     # How many timesteps should be in an evaluation episode
     evaluation_ep_length = 400
@@ -193,7 +168,7 @@ def my_config():
     temp_dir = os.path.join(os.path.abspath(os.sep), "tmp", "ray_tmp") if not LOCAL_TESTING else None
 
     # Where to store model checkpoints and training stats
-    results_dir = os.path.join(os.path.abspath('.'), 'results_client_temp')
+    results_dir = DEFAULT_RESULTS_DIR
 
     # Whether tensorflow should execute eagerly or not
     eager = False
@@ -207,11 +182,18 @@ def my_config():
     bc_stochastic = True
 
 
+    ## MDP Generator Params ###
+    # What is the shape of the inner mdp
+    inner_shape = (5, 4)
+
+    # What proportion of the inner mdp is empty
+    prop_empty = 0.95
+
+    # What proportion of the inner mdp has features (Onion, Tomato, Pot, etc..)
+    prop_feats = 0.1
+
 
     ### Environment Params ###
-
-
-
 
     outer_shape = (5, 4)
 
@@ -224,18 +206,17 @@ def my_config():
         kl_coeff,
         outer_shape[0],
         outer_shape[1],
-        5,
-        4,
-        0.95,
-        0.1
+        inner_shape[0],
+        inner_shape[1],
+        prop_empty,
+        prop_feats
     )
 
     # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
     experiment_name = "{0}_{1}".format("PPO_fp_", params_str)
 
-
     # Whether dense reward should come from potential function or not
-    use_phi = True
+    use_phi = False
 
     # Max episode length
     horizon = 400
@@ -255,7 +236,6 @@ def my_config():
     # value of bc_factor at timestep t_i. Values are linearly interpolated between points
     # The default listed below represents bc_factor=0 for all timesteps
     bc_schedule = OvercookedMultiAgent.self_play_bc_schedule
-
 
     # To be passed into rl-lib model/custom_options config
     model_params = {
@@ -299,24 +279,55 @@ def my_config():
         "display_phi": True
     }
 
+    # Please note that this function cannot be pickled
+    # However, the initial inner_shape, prop_empty, prop_feats will be pickled
+    def params_schedule_fn(outside_information):
+        """
+        In this preliminary version, the outside information is ignored
+        """
+        # Rewards the agent will receive for intermediate actions
+        rew_shaping_params = {
+            "PLACEMENT_IN_POT_REW": 3,
+            "DISH_PICKUP_REWARD": 3,
+            "SOUP_PICKUP_REWARD": 5,
+            "DISH_DISP_DISTANCE_REW": 0,
+            "POT_DISTANCE_REW": 0,
+            "SOUP_DISTANCE_REW": 0,
+        }
+        mdp_default_gen_params = {
+            "inner_shape": outside_information["inner_shape"],
+            "prop_empty": outside_information["prop_empty"],
+            "prop_feats": outside_information["prop_feats"],
+            "start_all_orders": [
+                {"ingredients": ["onion", "onion", "onion"]}
+            ],
+            "display": False,
+            "rew_shaping_params": rew_shaping_params
+        }
+        return mdp_default_gen_params
+
 
     environment_params = {
         # To be passed into OvercookedGridWorld constructor
         "outer_shape" : outer_shape,
-        "mdp_params_schedule_fn" : naive_params_schedule_fn,
+        "mdp_params_schedule_fn" : params_schedule_fn,
         # To be passed into OvercookedEnv constructor
         "env_params" : {
             "horizon" : horizon,
             "num_mdp" : num_mdp,
-            "initial_info": {}
+            "initial_info": {
+                "inner_shape": inner_shape,
+                "prop_empty": prop_empty,
+                "prop_feats": prop_feats
+            }
         },
 
         # evaluation mdp params
 
         "eval_mdp_params" :{
-            "inner_shape": (5, 4),
-            "prop_empty": 0.95,
-            "prop_feats": 0.1,
+            "inner_shape": inner_shape,
+            "prop_empty": prop_empty,
+            "prop_feats": prop_feats,
             "start_all_orders": [
                 {"ingredients": ["onion", "onion", "onion"]}
             ],

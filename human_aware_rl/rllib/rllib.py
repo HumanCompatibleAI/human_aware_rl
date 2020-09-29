@@ -2,6 +2,7 @@ from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, EVENT_TYPES
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
+from overcooked_ai_py.mdp.layout_generator import DEFAILT_PARAMS_SCHEDULE_FN
 from overcooked_ai_py.agents.agent import Agent, AgentPair
 from ray.tune.registry import register_env
 from ray.tune.logger import UnifiedLogger
@@ -15,7 +16,7 @@ from datetime import datetime
 import tempfile
 import gym
 import numpy as np
-import os, copy, dill
+import os, copy, dill, shutil
 import ray
 
 action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
@@ -386,14 +387,6 @@ class TrainingCallbacks(DefaultCallbacks):
         episode.custom_metrics["sparse_reward"] = tot_sparse_reward
         episode.custom_metrics["shaped_reward"] = tot_shaped_reward
 
-
-        """
-        # Deprecated: Store cooking probability
-        for key in cooking_stats:
-            if len(cooking_stats[key]) > 0:
-                episode.hist_data[key] = cooking_stats[key]
-        """
-
         # Store per-agent game stats to rllib info dicts
         for stat in stats_to_collect:
             stats = game_stats[stat]
@@ -512,7 +505,12 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
 ###########################
 
 
-def gen_trainer_from_params(params):
+def gen_trainer_from_params(params, load_only=False):
+    """
+    Arguments:
+        params (dict): parameters for the trainer
+        load_only (bool): whether the trainer will be load_only. If set to true, you will NOT able to train from here
+    """
     # All ray environment set-up
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, include_webui=False, temp_dir=params['ray_params']['temp_dir'])
@@ -551,19 +549,22 @@ def gen_trainer_from_params(params):
     # Rllib compatible way of setting the directory we store agent checkpoints in
     logdir_prefix = "{0}_{1}_{2}".format(params["experiment_name"], params['training_params']['seed'], timestr)
     def custom_logger_creator(config):
-                """Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
-                """
-                results_dir = params['results_dir']
-                if not os.path.exists(results_dir):
-                    try:
-                        os.makedirs(results_dir)
-                    except Exception as e:
-                        print("error creating custom logging dir. Falling back to default logdir {}".format(DEFAULT_RESULTS_DIR))
-                        results_dir = DEFAULT_RESULTS_DIR
-                logdir = tempfile.mkdtemp(
-                    prefix=logdir_prefix, dir=results_dir)
-                logger = UnifiedLogger(config, logdir, loggers=None)
-                return logger
+        """Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
+        """
+        results_dir = params['results_dir']
+        if not os.path.exists(results_dir):
+            try:
+                os.makedirs(results_dir)
+            except Exception as e:
+                print("error creating custom logging dir. Falling back to default logdir {}".format(DEFAULT_RESULTS_DIR))
+                results_dir = DEFAULT_RESULTS_DIR
+        logdir = tempfile.mkdtemp(
+            prefix=logdir_prefix, dir=results_dir)
+        logger = UnifiedLogger(config, logdir, loggers=None)
+        # remove the unecessary logdir folder if we are only planning to load the agent, and not perform any training
+        if load_only:
+            shutil.rmtree(logdir)
+        return logger
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
@@ -619,22 +620,29 @@ def save_trainer(trainer, params, path=None):
     config = copy.deepcopy(params)
     config_path = os.path.join(os.path.dirname(save_path), "config.pkl")
 
+    # handle the situation where dill cannot pickle a function that takes dictionary dynamically defined - part 1
+    if "mdp_params_schedule_fn" in config["environment_params"]:
+        config["environment_params"]["mdp_params_schedule_fn"] = lambda _: {}
+
     # Note that we use dill (not pickle) here because it supports function serialization
     with open(config_path, "wb") as f:
         dill.dump(config, f)
     return save_path
 
-def load_trainer(save_path, custom_config=None):
+def load_trainer(save_path, custom_config=None, load_only=False):
     """
     Arguments:
         save_path (str): the path to the trainer
         custom_config (dict): custom configuration dictionary
+        load_only (bool): whether the trainer will be load_only. If set to true, you will NOT able to train from here
     Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
     Note that `save_path` is the full path to the checkpoint FILE, not the checkpoint directory
     """
     # enable custom config file to resume training
+    # please note that when training for multi-layout, you should always load with a custom_config
+    # this is because drill cannot pickle the dynamically defined mdp_params_schedule_fn
     if custom_config is not None:
-        trainer = gen_trainer_from_params(custom_config)
+        trainer = gen_trainer_from_params(custom_config, load_only=load_only)
     else:
         # Read in params used to create trainer
         config_path = os.path.join(os.path.dirname(save_path), "config.pkl")
@@ -645,8 +653,12 @@ def load_trainer(save_path, custom_config=None):
         # Override this param to lower overhead in trainer creation
         config['training_params']['num_workers'] = 0
 
+        # handle the situation where dill cannot pickle a function that takes dictionary dynamically defined - part 2
+        if "mdp_params_schedule_fn" in config["environment_params"]:
+            config["environment_params"]["mdp_params_schedule_fn"] = DEFAILT_PARAMS_SCHEDULE_FN
+
         # Get un-trained trainer object with proper config
-        trainer = gen_trainer_from_params(config)
+        trainer = gen_trainer_from_params(config, load_only=load_only)
 
     # Load weights into dummy object
     trainer.restore(save_path)
@@ -671,7 +683,7 @@ def load_agent_pair(save_path, policy_id_0='ppo', policy_id_1='ppo', featurize_f
     Returns an Overcooked AgentPair object that has as player 0 and player 1 policies with 
     ID policy_id_0 and policy_id_1, respectively
     """
-    trainer = load_trainer(save_path)
+    trainer = load_trainer(save_path, load_only=True)
     return get_agent_pair_from_trainer(trainer, policy_id_0, policy_id_1, featurize_fn)
 
 def load_agent(save_path, policy_id='ppo', agent_index=0, featurize_fn=None):
@@ -685,7 +697,7 @@ def load_agent(save_path, policy_id='ppo', agent_index=0, featurize_fn=None):
     Agent index indicates whether the agent is player zero or player one (or player n in the general case)
     as the featurization is not symmetric for both players
     """
-    trainer = load_trainer(save_path)
+    trainer = load_trainer(save_path, load_only=True)
     return get_agent_from_trainer(trainer, policy_id=policy_id, agent_index=agent_index, featurize_fn=featurize_fn)
 
 
