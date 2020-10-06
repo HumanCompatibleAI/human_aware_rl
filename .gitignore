@@ -141,6 +141,3 @@ transfer_agent.sh
 
 # PyCharm
 .idea/
-
-# data
-results_client_temp/
