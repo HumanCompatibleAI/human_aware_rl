@@ -18,3 +18,10 @@ cd ..
 # PPO tests
 cd ./ppo
 python ppo_rllib_test.py
+cd ..
+
+# evaluator tests
+cd ./evaluate
+python evaluate.py -l cramped_room -n 2 -m True -b 11 21
+python evaluate.py -l cramped_room -n 2 -b 11 21 -g True
+cd ..
