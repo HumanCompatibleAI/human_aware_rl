@@ -1,4 +1,4 @@
-from human_aware_rl.human_aware_rl.evaluate.eval_utils import from_params_stats_ppo_agent_pair_lst_self_play, \
+from human_aware_rl.evaluate.eval_utils import from_params_stats_ppo_agent_pair_lst_self_play, \
     from_params_stats_ppo_agent_pair_lst_mixed_play, from_params_stats_ppo_agent_pair_lst_human_play
 from ray.tune.result import DEFAULT_RESULTS_DIR
 
