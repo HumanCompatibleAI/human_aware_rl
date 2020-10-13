@@ -1,3 +1,6 @@
+# Warning: Please note that although this file looks very similar to ppo_rllib_from_params_client.py, but very different
+# You should use this file if you plan to generate mdp from a predetermined layout (from layout_name)
+
 # All imports except rllib
 import argparse, os, sys
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
