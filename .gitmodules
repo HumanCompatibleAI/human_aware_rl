@@ -1,4 +1,4 @@
 [submodule "overcooked_ai"]
 	path = overcooked_ai
 	url = https://github.com/HumanCompatibleAI/overcooked_ai.git
-	branch = eval_visual_merge
+	branch = mesut_xpl

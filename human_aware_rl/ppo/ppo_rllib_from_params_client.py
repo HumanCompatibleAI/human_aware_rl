@@ -200,6 +200,12 @@ def my_config():
 
     outer_shape = (5, 4)
 
+    # Littering parameters
+    onion_litter = 0.0
+    dish_litter = 0.0
+    soup_1_litter = 0.0
+    soup_2_litter = 0.0
+    soup_3_litter = 0.0
 
     params_str = "nw=%d_vf=%f_es=%f_en=%f_kl=%f_outer_shape=%d_%d--inner_shape=%d_%d--prop_empty=%f--prop_feats=%f" % (
         num_workers,
@@ -322,6 +328,13 @@ def my_config():
                 "inner_shape": inner_shape,
                 "prop_empty": prop_empty,
                 "prop_feats": prop_feats
+            },
+            "litter_params" : {
+                "onion_litter": onion_litter,
+                "dish_litter": dish_litter,
+                "soup_1_litter": soup_1_litter,
+                "soup_2_litter": soup_2_litter,
+                "soup_3_litter": soup_3_litter
             }
         },
 
