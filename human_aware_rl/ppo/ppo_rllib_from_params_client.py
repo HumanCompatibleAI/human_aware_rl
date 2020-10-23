@@ -206,6 +206,7 @@ def my_config():
     soup_1_litter = 0.0
     soup_2_litter = 0.0
     soup_3_litter = 0.0
+    pot_litter = 0.0
 
     params_str = "nw=%d_vf=%f_es=%f_en=%f_kl=%f_outer_shape=%d_%d--inner_shape=%d_%d--prop_empty=%f--prop_feats=%f" % (
         num_workers,
@@ -334,7 +335,8 @@ def my_config():
                 "dish_litter": dish_litter,
                 "soup_1_litter": soup_1_litter,
                 "soup_2_litter": soup_2_litter,
-                "soup_3_litter": soup_3_litter
+                "soup_3_litter": soup_3_litter,
+                "pot_litter": pot_litter
             }
         },
 
