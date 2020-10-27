@@ -188,6 +188,14 @@ def my_config():
     # Which overcooked level to use
     layout_name = "cramped_room"
 
+    # Littering parameters
+    onion_litter = 0.0
+    dish_litter = 0.0
+    soup_1_litter = 0.0
+    soup_2_litter = 0.0
+    soup_3_litter = 0.0
+    pot_litter = 0.0
+
     # all_layout_names = '_'.join(layout_names)
 
     # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
@@ -278,7 +286,15 @@ def my_config():
         },
         # To be passed into OvercookedEnv constructor
         "env_params" : {
-            "horizon" : horizon
+            "horizon" : horizon,
+            "litter_params": {
+                "onion_litter": onion_litter,
+                "dish_litter": dish_litter,
+                "soup_1_litter": soup_1_litter,
+                "soup_2_litter": soup_2_litter,
+                "soup_3_litter": soup_3_litter,
+                "pot_litter": pot_litter
+            }
         },
 
         # To be passed into OvercookedMultiAgent constructor
