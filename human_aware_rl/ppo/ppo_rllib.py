@@ -23,6 +23,8 @@ class RllibPPOModel(TFModelV2):
         size_hidden_layers = custom_params["SIZE_HIDDEN_LAYERS"]
         num_filters = custom_params["NUM_FILTERS"]
         num_convs = custom_params["NUM_CONV_LAYERS"]
+        d2rl = custom_params["D2RL"]
+        assert type(d2rl) == bool
 
         ## Create graph of custom network. It will under a shared tf scope such that all agents
         ## use the same model
@@ -51,8 +53,11 @@ class RllibPPOModel(TFModelV2):
             )(out)
         
         # Apply dense hidden layers, if any
-        out = tf.keras.layers.Flatten()(out)
-        for _ in range(num_hidden_layers):
+        conv_out = tf.keras.layers.Flatten()(out)
+        out = conv_out
+        for i in range(num_hidden_layers):
+            if i > 0 and d2rl:
+                out = tf.keras.layers.Concatenate()([out, conv_out])
             out = tf.keras.layers.Dense(size_hidden_layers)(out)
             out = tf.keras.layers.LeakyReLU()(out)
 
