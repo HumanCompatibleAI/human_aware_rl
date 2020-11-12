@@ -195,17 +195,18 @@ def my_config():
     soup_2_litter = 0.0
     soup_3_litter = 0.0
     pot_litter = 0.0
-
-    # all_layout_names = '_'.join(layout_names)
+    player_litter = 0.0
+    littered = str(sum([onion_litter, dish_litter, soup_1_litter, soup_2_litter, soup_3_litter, pot_litter, player_litter]) > 0)
 
     # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
 
-    params_str = str(use_phi) + "_nw=%d_vf=%f_es=%f_en=%f_kl=%f" % (
+    params_str = str(use_phi) + "_nw=%d_vf=%f_es=%f_en=%f_kl=%f_littered=%s" % (
         num_workers,
         vf_loss_coeff,
         entropy_coeff_start,
         entropy_coeff_end,
-        kl_coeff
+        kl_coeff,
+        littered
     )
 
     experiment_name = "{0}_{1}_{2}".format("PPO", layout_name, params_str)
@@ -293,7 +294,8 @@ def my_config():
                 "soup_1_litter": soup_1_litter,
                 "soup_2_litter": soup_2_litter,
                 "soup_3_litter": soup_3_litter,
-                "pot_litter": pot_litter
+                "pot_litter": pot_litter,
+                "player_litter": player_litter
             }
         },
 

@@ -207,8 +207,10 @@ def my_config():
     soup_2_litter = 0.0
     soup_3_litter = 0.0
     pot_litter = 0.0
+    player_litter = 0.0
+    littered = str(sum([onion_litter, dish_litter, soup_1_litter, soup_2_litter, soup_3_litter, pot_litter, player_litter]) > 0)
 
-    params_str = "nw=%d_vf=%f_es=%f_en=%f_kl=%f_outer_shape=%d_%d--inner_shape=%d_%d--prop_empty=%f--prop_feats=%f" % (
+    params_str = "nw=%d_vf=%f_es=%f_en=%f_kl=%f_outer_shape=%d_%d--inner_shape=%d_%d--prop_empty=%f--prop_feats=%f--littered=%s" % (
         num_workers,
         vf_loss_coeff,
         entropy_coeff_start,
@@ -219,7 +221,8 @@ def my_config():
         inner_shape[0],
         inner_shape[1],
         prop_empty,
-        prop_feats
+        prop_feats,
+        littered
     )
 
     # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
@@ -239,7 +242,7 @@ def my_config():
     reward_shaping_factor = 1.0
 
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-    reward_shaping_horizon = 1e6
+    reward_shaping_horizon = 2e8
 
     # bc_factor represents that ppo agent gets paired with a bc agent for any episode
     # schedule for bc_factor is represented by a list of points (t_i, v_i) where v_i represents the 
@@ -336,7 +339,8 @@ def my_config():
                 "soup_1_litter": soup_1_litter,
                 "soup_2_litter": soup_2_litter,
                 "soup_3_litter": soup_3_litter,
-                "pot_litter": pot_litter
+                "pot_litter": pot_litter,
+                "player_litter": player_litter
             }
         },
 
