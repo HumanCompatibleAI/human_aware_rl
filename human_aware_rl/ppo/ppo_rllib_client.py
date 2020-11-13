@@ -74,8 +74,8 @@ def my_config():
     # LSTM memory cell size (only used if use_lstm=True)
     CELL_SIZE = 256
 
-
-
+    # whether to use D2RL https://arxiv.org/pdf/2010.09163.pdf (concatenation the result of last conv layer to each hidden layer); works only when use_lstm is False
+    D2RL = False
     ### Training Params ###
 
     num_workers = 30 if not LOCAL_TESTING else 2
@@ -228,7 +228,8 @@ def my_config():
         "SIZE_HIDDEN_LAYERS" : SIZE_HIDDEN_LAYERS,
         "NUM_FILTERS" : NUM_FILTERS,
         "NUM_CONV_LAYERS" : NUM_CONV_LAYERS,
-        "CELL_SIZE" : CELL_SIZE
+        "CELL_SIZE" : CELL_SIZE,
+        "D2RL": D2RL
     }
 
     # to be passed into the rllib.PPOTrainer class

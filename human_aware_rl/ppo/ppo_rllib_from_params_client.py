@@ -93,7 +93,7 @@ def my_config():
     SIZE_HIDDEN_LAYERS = 64
     NUM_FILTERS = 25
     NUM_CONV_LAYERS = 3
-
+    D2RL = False
     # LSTM memory cell size (only used if use_lstm=True)
     CELL_SIZE = 256
 
@@ -261,7 +261,8 @@ def my_config():
         "SIZE_HIDDEN_LAYERS" : SIZE_HIDDEN_LAYERS,
         "NUM_FILTERS" : NUM_FILTERS,
         "NUM_CONV_LAYERS" : NUM_CONV_LAYERS,
-        "CELL_SIZE" : CELL_SIZE
+        "CELL_SIZE" : CELL_SIZE,
+        "D2RL": D2RL
     }
 
     # to be passed into the rllib.PPOTrainer class
