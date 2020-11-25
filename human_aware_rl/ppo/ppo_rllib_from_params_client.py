@@ -137,7 +137,7 @@ def my_config():
     # Entropy bonus coefficient, will anneal linearly from _start to _end over _horizon steps
     entropy_coeff_start = 0.2
     entropy_coeff_end = 0.0005
-    entropy_coeff_horizon = 3e5
+    entropy_coeff_horizon = 4e8
 
     # Initial coefficient for KL divergence.
     kl_coeff = 0.2
@@ -208,6 +208,7 @@ def my_config():
     soup_3_litter = 0.0
     pot_litter = 0.0
     player_litter = 0.0
+    litter_fraction = 0.0
     littered = str(sum([onion_litter, dish_litter, soup_1_litter, soup_2_litter, soup_3_litter, pot_litter, player_litter]) > 0)
 
     params_str = "nw=%d_vf=%f_es=%f_en=%f_kl=%f_outer_shape=%d_%d--inner_shape=%d_%d--prop_empty=%f--prop_feats=%f--littered=%s" % (
@@ -340,7 +341,8 @@ def my_config():
                 "soup_2_litter": soup_2_litter,
                 "soup_3_litter": soup_3_litter,
                 "pot_litter": pot_litter,
-                "player_litter": player_litter
+                "player_litter": player_litter,
+                "litter_fraction": litter_fraction
             }
         },
 
