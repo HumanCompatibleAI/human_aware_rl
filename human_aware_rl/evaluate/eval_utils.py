@@ -8,6 +8,8 @@ from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.agents.agent import AgentPair, GreedyHumanModel
 from overcooked_ai_py.mdp.layout_generator import LayoutGenerator
 
+from overcooked_ai_py.mdp.layout_evaluator import stats_from_analaysis
+
 from human_aware_rl.rllib.rllib import load_agent_pair, load_agent
 
 # Whether or not to display the game during evaluation process
@@ -47,6 +49,7 @@ def agent_pair_lst_compare_stats(evaluator, agent_pair_lst, num_layouts=1, num_g
     """
     num_agent_pairs = len(agent_pair_lst)
     layout_namelst = []
+    stats_lst = []
     spares_reward_lst = np.zeros((num_layouts, num_agent_pairs, num_games_per_layout))
     sparse_reward_mean_lst = np.zeros((num_layouts, num_agent_pairs))
     sparse_reward_std_lst = np.zeros((num_layouts, num_agent_pairs))
@@ -54,6 +57,11 @@ def agent_pair_lst_compare_stats(evaluator, agent_pair_lst, num_layouts=1, num_g
     for i in range(num_layouts):
         if PRINTING:
             print("layout", i)
+            terrain_i = evaluator.env.mdp.terrain_mtx
+            print(terrain_i)
+            stats = stats_from_analaysis(terrain_i, best_only=True, printing=True)
+            stats_lst.append(stats)
+            print("===========================================")
             # print(evaluator.env.mdp.layout_name)
         layout_namelst.append(evaluator.env.mdp.layout_name)
         for j in range(num_agent_pairs):
@@ -78,6 +86,9 @@ def agent_pair_lst_compare_stats(evaluator, agent_pair_lst, num_layouts=1, num_g
 
     with open(SAVE_DIR + 'layouts' + file_name + '.pkl', 'wb') as f:
         pickle.dump(layout_namelst, f)
+
+    with open(SAVE_DIR + 'stats' + file_name + '.pkl', 'wb') as f:
+        pickle.dump(stats_lst, f)
 
     np.savez(SAVE_DIR + 'data' + file_name + ".npz",
              sparse_reward_lst=spares_reward_lst,
