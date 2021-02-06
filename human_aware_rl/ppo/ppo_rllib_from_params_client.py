@@ -209,7 +209,7 @@ def my_config():
     pot_litter = 0.0
     player_litter = 0.0
     litter_fraction = 0.0
-    littered = str(sum([onion_litter, dish_litter, soup_1_litter, soup_2_litter, soup_3_litter, pot_litter, player_litter]) > 0)
+    littered = str(sum([onion_litter, dish_litter, soup_1_litter, soup_2_litter, soup_3_litter, pot_litter, player_litter]) > 0 and litter_fraction > 0)
 
     params_str = "nw=%d_vf=%f_es=%f_en=%f_kl=%f_outer_shape=%d_%d--inner_shape=%d_%d--prop_empty=%f--prop_feats=%f--littered=%s" % (
         num_workers,
