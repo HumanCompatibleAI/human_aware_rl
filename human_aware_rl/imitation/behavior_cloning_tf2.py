@@ -10,54 +10,10 @@ from human_aware_rl.data_dir import DATA_DIR
 from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.mdp.overcooked_env import DEFAULT_ENV_PARAMS
 from ray.rllib.policy import Policy as RllibPolicy
+from human_aware_rl.imitation.default_bc_params import BC_SAVE_DIR, DEFAULT_DATA_PARAMS, \
+    DEFAULT_MLP_PARAMS, DEFAULT_TRAINING_PARAMS, DEFAULT_EVALUATION_PARAMS, DEFAULT_BC_PARAMS, \
+    DEFAULT_CNN_PARAMS
 
-#################
-# Configuration #
-#################
-
-BC_SAVE_DIR = os.path.join(DATA_DIR, "bc_runs")
-
-DEFAULT_DATA_PARAMS = {
-    "train_mdps": ["cramped_room"],
-    "ordered_trajs": False,
-    "processed" : True,
-    "data_path": HUMAN_DATA_PATH
-}
-
-DEFAULT_MLP_PARAMS = {
-    # Number of fully connected layers to use in our network
-    "num_layers" : 2,
-    # Each int represents a layer of that hidden size
-    "net_arch" : [64, 64]
-}
-
-DEFAULT_TRAINING_PARAMS = {
-    "epochs" : 100,
-    "validation_split" : 0.15,
-    "batch_size" : 64,
-    "learning_rate" : 1e-3,
-    "use_class_weights" : False
-}
-
-DEFAULT_EVALUATION_PARAMS = {
-    "ep_length" : 400,
-    "num_games" : 1,
-    "display" : False
-}
-
-DEFAULT_BC_PARAMS = {
-    "eager" : True,
-    "use_lstm" : False,
-    "cell_size" : 256,
-    "data_params": DEFAULT_DATA_PARAMS,
-    "mdp_params": {'layout_name': "cramped_room"},
-    "env_params": DEFAULT_ENV_PARAMS,
-    "mdp_fn_params": {},
-    "mlp_params" : DEFAULT_MLP_PARAMS,
-    "training_params" : DEFAULT_TRAINING_PARAMS,
-    "evaluation_params" : DEFAULT_EVALUATION_PARAMS,
-    "action_shape" :  (len(Action.ALL_ACTIONS), )
-}
 
 # Boolean indicating whether all param dependencies have been loaded. Used to prevent re-loading unceccesarily
 _params_initalized = False
