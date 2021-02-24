@@ -3,8 +3,9 @@ import numpy as np
 
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.actions import Action, Direction
-from overcooked_ai_py.mdp.overcooked_mdp import OvercookedState, ObjectState, PlayerState, OvercookedGridworld
-
+from overcooked_ai_py.mdp.overcooked_mdp import OvercookedState, ObjectState, PlayerState
+from human_aware_rl.imitation.default_bc_params import DEFAULT_DATA_PARAMS, DEFAULT_BC_PARAMS
+from human_aware_rl.rllib.utils import get_encoding_function
 
 ####################
 # CONVERSION UTILS #
@@ -84,7 +85,10 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
 
 
 def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, ordered_pairs=True, processed=False,
-                                                silent=False):
+                                                silent=False, include_orders=DEFAULT_BC_PARAMS["predict_orders"],
+                                                state_processing_function=DEFAULT_DATA_PARAMS["state_processing_function"], 
+                                                action_processing_function=DEFAULT_DATA_PARAMS["action_processing_function"], 
+                                                orders_processing_function=DEFAULT_DATA_PARAMS["orders_processing_function"]):
     """
     Takes in a dataframe `main_trials` containing joint trajectories, and extract trajectories of workers `worker_ids`
     on layouts `layout_names`, with specific options.
@@ -105,7 +109,8 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, order
         "env_params": [],
         "metadatas": {"ep_agent_idxs": []}  # Agent index for current episode
     }
-
+    if include_orders:
+        single_agent_trajectories["ep_orders"] = []
     human_indices = []
     num_trials_for_layout = {}
     for layout_name in layout_names:
@@ -123,7 +128,10 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, order
 
             # Convert joint trajectories to single agent trajectories, appending recovered info to the `trajectories` dict
             joint_state_trajectory_to_single(single_agent_trajectories, joint_traj_data, human_idx, processed=processed,
-                                             silent=silent)
+                                             silent=silent, include_orders=include_orders,
+                                             state_processing_function=state_processing_function,
+                                             action_processing_function=action_processing_function,
+                                             orders_processing_function=orders_processing_function)
 
     if not silent: print("Number of trajectories processed for each layout: {}".format(num_trials_for_layout))
     return single_agent_trajectories, human_indices
@@ -142,39 +150,95 @@ def get_human_player_index_for_df(one_traj_df):
 
     return human_player_indices
 
+def process_trajs_from_json_obj(trajectories, processed, agent_idxs,
+                                include_orders=DEFAULT_BC_PARAMS["predict_orders"],
+                                state_processing_function=DEFAULT_DATA_PARAMS["state_processing_function"], 
+                                action_processing_function=DEFAULT_DATA_PARAMS["action_processing_function"], 
+                                orders_processing_function=DEFAULT_DATA_PARAMS["orders_processing_function"]):
+    if processed:
+        state_processing_function = get_encoding_function(state_processing_function,
+            mdp_params=trajectories["mdp_params"][0], env_params=trajectories["env_params"][0])
+        action_processing_function = get_encoding_function(action_processing_function,
+            mdp_params=trajectories["mdp_params"][0], env_params=trajectories["env_params"][0])
+        orders_processing_function = get_encoding_function(orders_processing_function,
+            mdp_params=trajectories["mdp_params"][0], env_params=trajectories["env_params"][0])
+    else:
+        # identity functions 
+        state_processing_function = lambda state: [state]*(max(agent_idxs)+1)
+        action_processing_function = lambda action: action
+        orders_processing_function = lambda state: [state.orders_list]*(max(agent_idxs)+1)
+    
+    all_observations = []
+    all_actions = []
+    all_rewards = []
+    all_orders = []
+    for states, actions, rewards in zip(trajectories["ep_states"], trajectories["ep_actions"], trajectories["ep_rewards"]):
+        for agent_idx in agent_idxs:
+            single_agent_episode_observations = []
+            single_agent_episode_actions = []
+            single_agent_episode_rewards = []
+            single_agent_episode_orders = []
+            for state, action, reward in zip(states, actions, rewards):
+                single_agent_episode_observations.append(state_processing_function(state)[agent_idx])
+                single_agent_episode_actions.append(action_processing_function(action)[agent_idx])
+                single_agent_episode_rewards.append([reward])
+                if include_orders: single_agent_episode_orders.append(orders_processing_function(state)[agent_idx])
+            all_observations.append(single_agent_episode_observations)
+            all_actions.append(single_agent_episode_actions)
+            all_rewards.append(single_agent_episode_rewards)
+            if include_orders: all_orders.append(single_agent_episode_orders)
 
-def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indices_to_convert=None, processed=True,
-                                     silent=False):
+    if not trajectories.get("metadatas"):
+        trajectories["metadatas"] = {}
+    trajectories["metadatas"]["ep_agent_idxs"] = agent_idxs
+
+    trajectories["ep_observations"] = all_observations
+    trajectories["ep_actions"] = all_actions
+    trajectories["ep_rewards"] = all_rewards
+    if include_orders: trajectories["ep_orders"] = all_orders
+    
+    return trajectories, agent_idxs
+
+
+def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indices_to_convert,
+                                    processed=True, silent=False, include_orders=DEFAULT_BC_PARAMS["predict_orders"],
+                                    state_processing_function=DEFAULT_DATA_PARAMS["state_processing_function"], 
+                                    action_processing_function=DEFAULT_DATA_PARAMS["action_processing_function"], 
+                                    orders_processing_function=DEFAULT_DATA_PARAMS["orders_processing_function"]
+                                    ):
     """
     Take a joint trajectory and split it into two single-agent trajectories, adding data to the `trajectories` dictionary
     player_indices_to_convert: which player indexes' trajs we should return
     """
-
     env = joint_traj_data['metadatas']['env'][0]
 
     assert len(joint_traj_data['ep_observations']) == 1, "This method only takes in one trajectory"
     states, joint_actions = joint_traj_data['ep_observations'][0], joint_traj_data['ep_actions'][0]
+
     rewards, length = joint_traj_data['ep_rewards'][0], joint_traj_data['ep_lengths'][0]
 
+    if processed:
+        state_processing_function = get_encoding_function(state_processing_function, env=env)
+        action_processing_function = get_encoding_function(action_processing_function, env=env)
+        orders_processing_function = get_encoding_function(orders_processing_function, env=env)
+    else:
+        # identity functions 
+        state_processing_function = lambda state: [state]*(max(player_indices_to_convert)+1)
+        action_processing_function = lambda action: action
+        orders_processing_function = lambda state: [state.orders_list]*(max(player_indices_to_convert)+1)
+    
     # Getting trajectory for each agent
     for agent_idx in player_indices_to_convert:
-
-        ep_obs, ep_acts, ep_dones = [], [], []
+        ep_obs, ep_acts, ep_dones, ep_orders = [], [], [], []
         for i in range(len(states)):
-            state, action = states[i], joint_actions[i][agent_idx]
+            state, joint_action = states[i], joint_actions[i]
 
-            if processed:
-                # Pre-processing (default is state featurization)
-                action = np.array([Action.ACTION_TO_INDEX[action]]).astype(int)
-
-                # NOTE: Could parallelize a bit more if slow
-                # state = mdp.preprocess_observation(state)[agent_idx]
-                state = env.featurize_state_mdp(state)[agent_idx]
-
-            ep_obs.append(state)
-            ep_acts.append(action)
+            action = joint_action[agent_idx]
+            ep_obs.append(state_processing_function(state)[agent_idx])
+            ep_acts.append(action_processing_function(joint_action)[agent_idx])
             ep_dones.append(False)
-
+            if include_orders: ep_orders.append(orders_processing_function(state)[agent_idx])
+        
         ep_dones[-1] = True
 
         trajectories["ep_observations"].append(ep_obs)
@@ -187,3 +251,4 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
         trajectories["mdp_params"].append(env.mdp.mdp_params)
         trajectories["env_params"].append({})
         trajectories["metadatas"]["ep_agent_idxs"].append(agent_idx)
+        if include_orders: trajectories["ep_orders"].append(ep_orders)

@@ -1,4 +1,4 @@
-import random, json, copy
+import random, json, copy, os
 import numpy as np
 import pandas as pd
 from collections import defaultdict
@@ -8,7 +8,8 @@ from overcooked_ai_py.utils import mean_and_std_err
 
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to_overcooked_single, \
-    extract_df_for_worker_on_layout, df_traj_to_python_joint_traj
+    extract_df_for_worker_on_layout, df_traj_to_python_joint_traj, process_trajs_from_json_obj
+from human_aware_rl.imitation.default_bc_params import DEFAULT_DATA_PARAMS, DEFAULT_BC_PARAMS
 
 
 ######################
@@ -18,43 +19,64 @@ from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to
 def get_human_human_trajectories(layouts, dataset_type, processed=False):
     """Get human-human trajectories"""
     assert dataset_type in ["train", "test"]
-    # please double check this
-    from human_aware_rl.imitation.behavior_cloning_tf2 import DEFAULT_BC_PARAMS
 
     expert_data = {}
     for layout in layouts:
         print(layout)
         bc_params = copy.deepcopy(DEFAULT_BC_PARAMS)
         bc_params["data_params"]['train_mdps'] = [layout]
-        bc_params["data_params"]['data_path'] = DATA_DIR + "human/anonymized/clean_{}_trials.pkl".format(dataset_type)
+        bc_params["data_params"]['data_path'] = os.path.join(DATA_DIR, "human", "anonymized",
+            "clean_{}_trials.pkl".format(dataset_type))
         bc_params["mdp_params"]['layout_name'] = layout
         bc_params["mdp_params"]['start_order_list'] = None
-        expert_data[layout] = get_trajs_from_data(**bc_params["data_params"], silent=True, processed=processed)[0]
+        bc_params["data_params"]["processed"] = processed
+        bc_params["data_params"]["silent"] = True
+        bc_params["data_params"]["from_dataframe"] = True
+
+        expert_data[layout] = get_trajs_from_data(**bc_params["data_params"])[0]
 
     return expert_data
 
 
-#############################
-# DATAFRAME TO TRAJECTORIES #
-#############################
+##################################################
+# DATAFRAME PKL/JSON TO (PROCESSED) TRAJECTORIES #
+##################################################
 
-def get_trajs_from_data(data_path, train_mdps, ordered_trajs, processed, silent=False):
-    """
-    Converts and returns trajectories from dataframe at `data_path` to overcooked trajectories.
-    """
+def get_trajs_from_data(data_path, from_dataframe=True,
+    processed=DEFAULT_DATA_PARAMS["processed"],
+    include_orders=DEFAULT_BC_PARAMS["predict_orders"],
+    state_processing_function=DEFAULT_DATA_PARAMS["state_processing_function"], 
+    action_processing_function=DEFAULT_DATA_PARAMS["action_processing_function"], 
+    orders_processing_function=DEFAULT_DATA_PARAMS["orders_processing_function"], **kwargs):
     print("Loading data from {}".format(data_path))
+    if from_dataframe:
+        main_trials = pd.read_pickle(data_path)
+        trajs, info = convert_joint_df_trajs_to_overcooked_single(
+            main_trials,
+            kwargs["train_mdps"],
+            ordered_pairs=kwargs["ordered_trajs"],
+            processed=processed,
+            silent=kwargs["silent"],
+            include_orders=include_orders,
+            state_processing_function=state_processing_function,
+            action_processing_function=action_processing_function,
+            orders_processing_function=orders_processing_function
+        )
+    else:
+        if data_path.endswith(".json"):
+            trajs = AgentEvaluator.load_traj_from_json(data_path)
+        else:
+            trajs = AgentEvaluator.load_trajectories(data_path)
+        trajs, info = process_trajs_from_json_obj(trajs, 
+            processed,
+            state_processing_function=state_processing_function,
+            action_processing_function=action_processing_function,
+            agent_idxs=kwargs["agent_idxs"],
+            include_orders=include_orders,
+            orders_processing_function=orders_processing_function
+            )
 
-    main_trials = pd.read_pickle(data_path)
-
-    trajs, info = convert_joint_df_trajs_to_overcooked_single(
-        main_trials,
-        train_mdps,
-        ordered_pairs=ordered_trajs,
-        processed=processed,
-        silent=silent
-    )
-
-    return trajs, info
+    return trajs, info 
 
 
 ############################
