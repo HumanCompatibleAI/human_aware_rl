@@ -4,16 +4,20 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
-from human_aware_rl.static import HUMAN_DATA_PATH
-from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
-from human_aware_rl.data_dir import DATA_DIR
-from overcooked_ai_py.mdp.actions import Action
-from overcooked_ai_py.mdp.overcooked_env import DEFAULT_ENV_PARAMS
+
+from human_aware_rl.rllib.rllib import RlLibAgent, evaluate
+from human_aware_rl.rllib.utils import softmax, sigmoid, get_base_ae, get_encoding_function
 from ray.rllib.policy import Policy as RllibPolicy
 from human_aware_rl.imitation.default_bc_params import BC_SAVE_DIR, DEFAULT_DATA_PARAMS, \
     DEFAULT_MLP_PARAMS, DEFAULT_TRAINING_PARAMS, DEFAULT_EVALUATION_PARAMS, DEFAULT_BC_PARAMS, \
     DEFAULT_CNN_PARAMS
 
+OBS_INPUT_NAME = "Overcooked_observation"
+EP_LEN_INPUT_NAME = "seq_in"
+HIDDEN_INPUT_NAME = "hidden_in"
+MEMORY_INPUT_NAME = "memory_in"
+ACTION_OUTPUT_NAME = "logits"
+ORDERS_OUTPUT_NAME = "orders_logits"
 
 # Boolean indicating whether all param dependencies have been loaded. Used to prevent re-loading unceccesarily
 _params_initalized = False
@@ -29,14 +33,30 @@ def _get_observation_shape(bc_params):
     base_ae = _get_base_ae(bc_params)
     base_env = base_ae.env
     dummy_state = base_env.mdp.get_standard_start_state()
-    obs_shape = base_env.featurize_state_mdp(dummy_state)[0].shape
+    encoding_f = get_encoding_function(bc_params["data_params"]["state_processing_function"], env=base_env)
+    obs_shape = encoding_f(dummy_state)[0].shape
     return obs_shape
+
+def _get_orders_shape(bc_params):
+    """
+    Helper function for creating a dummy environment from "mdp_params" and "env_params" specified
+    in bc_params and returning the shape of the order space
+    NOTE: does work when output logit layer shape is same as orders shape (does not work for sparse encodings)
+    """
+    base_ae = _get_base_ae(bc_params)
+    base_env = base_ae.env
+    dummy_state = base_env.mdp.get_standard_start_state()
+    
+    encoding_f = get_encoding_function(bc_params["data_params"]["orders_processing_function"], env=base_env)
+    orders_shape = encoding_f(dummy_state)[0].shape
+    return orders_shape
 
 # For lazing loading the default params. Prevents loading on every import of this module 
 def get_default_bc_params():
     global _params_initalized, DEFAULT_BC_PARAMS
     if not _params_initalized:
         DEFAULT_BC_PARAMS['observation_shape'] = _get_observation_shape(DEFAULT_BC_PARAMS)
+        DEFAULT_BC_PARAMS['orders_shape'] = _get_orders_shape(DEFAULT_BC_PARAMS)
         _params_initalized = False
     return copy.deepcopy(DEFAULT_BC_PARAMS)
 
@@ -61,18 +81,34 @@ def _pad(sequences, maxlen=None, default=0):
     return sequences
 
 def load_data(bc_params, verbose):
-    processed_trajs, _ = get_trajs_from_data(**bc_params["data_params"], silent=not verbose)
-    inputs, targets = processed_trajs["ep_observations"], processed_trajs["ep_actions"]
-
-    if bc_params['use_lstm']:
-        seq_lens = np.array([len(seq) for seq in inputs])
-        seq_padded = _pad(inputs, default=np.zeros((len(inputs[0][0],))))
-        targets_padded = _pad(targets, default=np.zeros(1))
-        seq_t = np.dstack(seq_padded).transpose((2, 0, 1))
-        targets_t = np.dstack(targets_padded).transpose((2, 0, 1))
-        return seq_t, seq_lens, targets_t
+    predict_orders = bc_params.get("predict_orders", DEFAULT_BC_PARAMS["predict_orders"])
+    
+    processed_trajs, _ = get_trajs_from_data(**bc_params["data_params"], silent=not verbose, include_orders=predict_orders)
+    observations, actions = processed_trajs["ep_observations"], processed_trajs["ep_actions"],
+    if predict_orders:
+        orders = processed_trajs["ep_orders"]
     else:
-        return np.vstack(inputs), None, np.vstack(targets)
+        orders = None
+    
+    if bc_params['use_lstm']:
+        ep_lens = np.array([len(ob) for ob in observations])
+        observations = _pad(observations, default=np.zeros(bc_params['observation_shape']))
+        observations = np.moveaxis(np.stack(np.moveaxis(observations, 0, 2)), 2, 0)
+
+        actions = _pad(actions, default=np.zeros(1))
+        actions = np.dstack(actions).transpose((2, 0, 1))
+    
+        if predict_orders:
+            orders = _pad(orders, default=np.zeros(bc_params["orders_shape"]))
+            orders = np.moveaxis(np.stack(np.moveaxis(orders, 0, 2)), 2, 0)
+    else:
+        observations = np.vstack(observations)
+        ep_lens = None # not used in non recurrent networks
+        actions = np.vstack(actions)
+        if predict_orders: orders = np.vstack(orders)
+    
+    return observations, ep_lens, actions, orders
+    
 
 def build_bc_model(use_lstm=True, eager=False, **kwargs):
     if not eager:
@@ -81,17 +117,48 @@ def build_bc_model(use_lstm=True, eager=False, **kwargs):
         return _build_lstm_model(**kwargs)
     else:
         return _build_model(**kwargs)
-    
 
-def train_bc_model(model_dir, bc_params, verbose=False):
-    inputs, seq_lens, targets = load_data(bc_params, verbose)
+def _get_loss(loss_or_name, **kwargs):
+    if type(loss_or_name) is str:
+        loss = getattr(tf.keras.losses, loss_or_name)(**kwargs)
+    else:
+        loss = loss_or_name
+    return loss
+
+def _bc_model_inputs(bc_params, obs, ep_lens=None):
+    N = obs.shape[0]
+    inputs = { OBS_INPUT_NAME: obs }
+    # Inputs unique to lstm model
+    if bc_params['use_lstm']:
+        assert ep_lens is not None
+        inputs[EP_LEN_INPUT_NAME] = ep_lens
+        inputs[HIDDEN_INPUT_NAME] = np.zeros((N, bc_params['cell_size']))
+        inputs[MEMORY_INPUT_NAME] = np.zeros((N, bc_params['cell_size']))
+    return inputs
+
+def _bc_model_targets(bc_params, acts=None, orders=None):
+    targets = {}
+    predict_orders = bc_params.get("predict_orders", DEFAULT_BC_PARAMS["predict_orders"])
+    targets[ACTION_OUTPUT_NAME] = acts
+
+    if predict_orders:
+        assert orders is not None
+        targets[ORDERS_OUTPUT_NAME] = orders
+    return targets
+    
+def train_bc_model(model_dir, bc_params, verbose=False, loaded_data=None):
+    if loaded_data is None:
+        loaded_data = load_data(bc_params, verbose)
+    (obs, ep_lens, acts, orders) = loaded_data
+    #NOTE: some pointing to default params is to maintain backward compatibility (older version of BC params did not included many of the variables)
+    predict_orders = bc_params.get("predict_orders", DEFAULT_BC_PARAMS["predict_orders"])
+
 
     training_params = bc_params["training_params"]
-
-    
+    eval_params = bc_params["evaluation_params"]
     if training_params['use_class_weights']:
         # Get class counts, and use these to compute balanced class weights
-        classes, counts = np.unique(targets.flatten(), return_counts=True)
+        classes, counts = np.unique(acts.flatten(), return_counts=True)
         weights = sum(counts) / counts
         class_weights = dict(zip(classes, weights))
     else:
@@ -99,27 +166,29 @@ def train_bc_model(model_dir, bc_params, verbose=False):
         class_weights = None
 
     # Retrieve un-initialized keras model
-    model = build_bc_model(**bc_params, max_seq_len=np.max(seq_lens))
-
+    model = build_bc_model(**bc_params, max_seq_len=np.max(ep_lens))
     # Initialize the model
-    # Note: have to use lists for multi-output model support and not dicts because of tensorlfow 2.0.0 bug
-    if bc_params['use_lstm']:
-        loss = [keras.losses.SparseCategoricalCrossentropy(from_logits=True), None, None]
-        metrics = [["sparse_categorical_accuracy"], [], []]
-    else:
-        loss = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metrics = ["sparse_categorical_accuracy"]
-    model.compile(optimizer=keras.optimizers.Adam(training_params["learning_rate"]),
-                  loss=loss,
-                  metrics=metrics)
 
+    metrics = {}
+    losses = {}
+    loss_weights = {}
+    metrics[ACTION_OUTPUT_NAME] = eval_params.get("actions_metrics", DEFAULT_EVALUATION_PARAMS["actions_metrics"])
+    losses[ACTION_OUTPUT_NAME] =  _get_loss(training_params.get("actions_loss", DEFAULT_TRAINING_PARAMS["actions_loss"]), from_logits=True)
+    loss_weights[ACTION_OUTPUT_NAME] = training_params.get("actions_loss_coeff", 1.0)
+
+    if predict_orders:
+        metrics[ORDERS_OUTPUT_NAME] = eval_params["orders_metrics"]
+        losses[ORDERS_OUTPUT_NAME] =  _get_loss(training_params["orders_loss"], from_logits=True)
+        loss_weights[ORDERS_OUTPUT_NAME] = training_params.get("orders_loss_coeff", 1.0)
+        
+    model.compile(optimizer=keras.optimizers.Adam(training_params["learning_rate"]),
+                  loss=losses,
+                  metrics=metrics,
+                  loss_weights=loss_weights)
 
     # Customize our training loop with callbacks
     callbacks = [
-        # Early terminate training if loss doesn't improve for "patience" epochs
-        keras.callbacks.EarlyStopping(
-            monitor="loss", patience=20
-        ),
+        # Early terminate training if loss doesn't improve for "patextend([]
         # Reduce lr by "factor" after "patience" epochs of no improvement in loss
         keras.callbacks.ReduceLROnPlateau(
             monitor="loss", patience=3, factor=0.1
@@ -138,18 +207,10 @@ def train_bc_model(model_dir, bc_params, verbose=False):
     ]
 
     ## Actually train our model
-
     # Create input dict for both models
-    N = inputs.shape[0]
-    inputs = { "Overcooked_observation" : inputs }
-    targets = { "logits" : targets }
-
-    # Inputs unique to lstm model
-    if bc_params['use_lstm']:
-        inputs['seq_in'] = seq_lens
-        inputs['hidden_in'] = np.zeros((N, bc_params['cell_size']))
-        inputs['memory_in'] = np.zeros((N, bc_params['cell_size']))
-
+    inputs = _bc_model_inputs(bc_params, obs, ep_lens)
+    targets = _bc_model_targets(bc_params, acts, orders)
+    
     # Batch size doesn't include time dimension (seq_len) so it should be smaller for rnn model
     batch_size = 1 if bc_params['use_lstm'] else training_params['batch_size']
     model.fit(inputs, targets, callbacks=callbacks, batch_size=batch_size, 
@@ -180,7 +241,6 @@ def save_bc_model(model_dir, model, bc_params):
     with open(os.path.join(model_dir, "metadata.pickle"), 'wb') as f:
         pickle.dump(bc_params, f)
 
-
 def load_bc_model(model_dir):
     """
     Returns the model instance (including all compilation data like optimizer state) and a dictionary of parameters
@@ -191,6 +251,39 @@ def load_bc_model(model_dir):
     with open(os.path.join(model_dir, "metadata.pickle"), "rb") as f:
         bc_params = pickle.load(f)
     return model, bc_params
+
+def evaluate_bc_model_metrics(model, bc_params, use_training_data=False, use_validation_data=True, data=None):
+    # evaluate BC model on its metrics i.e. accuracy
+    if data is None:
+        data = load_data(bc_params, verbose=False)
+
+    (obs, ep_lens, acts, orders) = data
+    training_params = bc_params["training_params"]
+    training_samples_num = int((1-training_params["validation_split"])*len(obs))
+    
+    if use_validation_data and use_training_data:
+        pass
+    elif use_validation_data and not use_training_data:
+        obs = obs[training_samples_num:]
+        if ep_lens is not None: ep_lens = ep_lens[training_samples_num:]
+        if acts is not None: acts = acts[training_samples_num:]
+        if orders is not None: orders = orders[training_samples_num:]
+    elif use_training_data and not use_validation_data:
+        obs = obs[:training_samples_num]
+        if ep_lens is not None: ep_lens = ep_lens[:training_samples_num]
+        if acts is not None: acts = acts[:training_samples_num]
+        if orders is not None: orders = orders[:training_samples_num]
+    else:
+        raise ValueError('At least one of the variables "use_training_data" or "use_validation_data" needs to be set to True')
+    inputs = _bc_model_inputs(bc_params, obs, ep_lens)
+    targets = _bc_model_targets(bc_params, acts, orders)
+    
+    # Batch size doesn't include time dimension (seq_len) so it should be smaller for rnn model
+    batch_size = 1 if bc_params['use_lstm'] else training_params['batch_size']
+    # NOTE: 2 lines below has same effect as return_dict model.evaluate(inputs, targets, batch_size=batch_size, return_dict=True),
+    #  but it is not compatible with older tf versions
+    result = model.evaluate(inputs, targets, batch_size=batch_size)
+    return {metric_name: result[i] for i, metric_name in enumerate(model.metrics_names)}
 
 def evaluate_bc_model(model, bc_params):
     """
@@ -213,30 +306,51 @@ def evaluate_bc_model(model, bc_params):
     # Get reference to state encoding function used by bc agents, with compatible signature
     base_ae = _get_base_ae(bc_params)
     base_env = base_ae.env
-    def featurize_fn(state):
-        return base_env.featurize_state_mdp(state)
+    featurize_fn = get_encoding_function(bc_params["data_params"]["state_processing_function"], env=base_env)
 
     # Wrap Keras models in rllib policies
-    agent_0_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)
-    agent_1_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)
-
+    policies = [BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True), 
+        BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)]
+    featurize_fns = [featurize_fn for p in policies]
     # Compute the results of the rollout(s)
     results = evaluate(eval_params=evaluation_params, 
                        mdp_params=mdp_params, 
                        outer_shape=None,
-                       agent_0_policy=agent_0_policy, 
-                       agent_1_policy=agent_1_policy, 
-                       agent_0_featurize_fn=featurize_fn, 
-                       agent_1_featurize_fn=featurize_fn)
+                       policies=policies, 
+                       featurize_fns=featurize_fns)
 
     # Compute the average sparse return obtained in each rollout
     reward = np.mean(results['ep_returns'])
     return reward
 
-def _build_model(observation_shape, action_shape, mlp_params, **kwargs):
+def _build_model(observation_shape, action_shape, mlp_params, cnn_params=DEFAULT_CNN_PARAMS, **kwargs):
     ## Inputs
-    inputs = keras.Input(shape=observation_shape, name="Overcooked_observation")
-    x = inputs
+    obs_in = keras.Input(shape=observation_shape, name=OBS_INPUT_NAME)
+    x = obs_in
+    if cnn_params.get("use_cnn"):
+        num_filters = cnn_params["num_filters"]
+        num_convs = cnn_params["num_conv_layers"]
+        if num_convs > 0:
+            x = keras.layers.Conv2D(
+                filters=num_filters,
+                kernel_size=[5, 5],
+                padding="same",
+                activation=tf.nn.leaky_relu,
+                name="conv_initial"
+            )(x)
+        # Apply remaining conv layers, if any
+        for i in range(0, num_convs-1):
+            padding = "same" if i < num_convs - 2 else "valid"
+            x = tf.keras.layers.Conv2D(
+                filters=num_filters,
+                kernel_size=[3, 3],
+                padding=padding,
+                activation=tf.nn.leaky_relu,
+                name="conv_{}".format(i)
+            )(x)
+    
+        # Apply dense hidden layers, if any
+        x = tf.keras.layers.Flatten()(x)
 
     ## Build fully connected layers
     assert len(mlp_params["net_arch"]) == mlp_params["num_layers"], "Invalid Fully Connected params"
@@ -246,17 +360,47 @@ def _build_model(observation_shape, action_shape, mlp_params, **kwargs):
         x = keras.layers.Dense(units, activation="relu", name="fc_{0}".format(i))(x)
 
     ## output layer
-    logits = keras.layers.Dense(action_shape[0], name="logits")(x)
+    logits = keras.layers.Dense(action_shape[0], name=ACTION_OUTPUT_NAME)(x)
+    outputs = [logits]
+    if kwargs.get("predict_orders", DEFAULT_BC_PARAMS["predict_orders"]):
+        orders_shape = kwargs["orders_shape"]
+        orders_logits = keras.layers.Dense(orders_shape[0], name=ORDERS_OUTPUT_NAME)(x)
+        outputs.append(orders_logits)
+    
+    return keras.Model(inputs=[obs_in], outputs=outputs)
 
-    return keras.Model(inputs=inputs, outputs=logits)
-
-def _build_lstm_model(observation_shape, action_shape, mlp_params, cell_size, max_seq_len=20, **kwargs):
+def _build_lstm_model(observation_shape, action_shape, mlp_params, cell_size, max_seq_len=20, cnn_params=DEFAULT_CNN_PARAMS, **kwargs):
     ## Inputs
-    obs_in = keras.Input(shape=(None, *observation_shape), name="Overcooked_observation")
-    seq_in = keras.Input(shape=(), name="seq_in", dtype=tf.int32)
-    h_in = keras.Input(shape=(cell_size,), name="hidden_in")
-    c_in = keras.Input(shape=(cell_size,), name="memory_in")
+    obs_in = keras.Input(shape=(None, *observation_shape), name=OBS_INPUT_NAME)
+    seq_in = keras.Input(shape=(), name=EP_LEN_INPUT_NAME, dtype=tf.int32)
+    h_in = keras.Input(shape=(cell_size,), name=HIDDEN_INPUT_NAME)
+    c_in = keras.Input(shape=(cell_size,), name=MEMORY_INPUT_NAME)
     x = obs_in
+    if cnn_params.get("use_cnn", DEFAULT_CNN_PARAMS["use_cnn"]): 
+        num_filters = cnn_params["num_filters"]
+        num_convs = cnn_params["num_conv_layers"]
+        if num_convs > 0:
+            x = tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(
+                filters=num_filters,
+                kernel_size=[5, 5],
+                padding="same",
+                activation=tf.nn.leaky_relu,
+                name="conv_initial"
+            ))(x)
+
+        # Apply remaining conv layers, if any
+        for i in range(0, num_convs-1):
+            padding = "same" if i < num_convs - 2 else "valid"
+            out = tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(
+                filters=num_filters,
+                kernel_size=[3, 3],
+                padding=padding,
+                activation=tf.nn.leaky_relu,
+                name="conv_{}".format(i)
+            ))(x)
+        
+        # Flatten spatial features
+        x = tf.keras.layers.TimeDistributed(tf.keras.layers.Flatten())(x)
 
     ## Build fully connected layers
     assert len(mlp_params["net_arch"]) == mlp_params["num_layers"], "Invalid Fully Connected params"
@@ -275,9 +419,14 @@ def _build_lstm_model(observation_shape, action_shape, mlp_params, cell_size, ma
     )
 
     ## output layer
-    logits = keras.layers.TimeDistributed(keras.layers.Dense(action_shape[0]), name="logits")(lstm_out)
+    logits = keras.layers.TimeDistributed(keras.layers.Dense(action_shape[0]), name=ACTION_OUTPUT_NAME)(lstm_out)
+    outputs = [logits, h_out, c_out]
+    if kwargs.get("predict_orders", DEFAULT_BC_PARAMS["predict_orders"]):
+        orders_shape = kwargs["orders_shape"]
+        orders_logits = keras.layers.TimeDistributed(keras.layers.Dense(orders_shape[0]), name=ORDERS_OUTPUT_NAME)(lstm_out)
+        outputs.append(orders_logits)
 
-    return keras.Model(inputs=[obs_in, seq_in, h_in, c_in], outputs=[logits, h_out, c_out])
+    return keras.Model(inputs=[obs_in, seq_in, h_in, c_in], outputs=outputs)
 
 
 
@@ -348,8 +497,10 @@ class BehaviorCloningPolicy(RllibPolicy):
         self.stochastic = config['stochastic']
         self.use_lstm = bc_params['use_lstm']
         self.cell_size = bc_params['cell_size']
+        self.model_predicts_orders = bc_params.get("predict_orders", DEFAULT_BC_PARAMS["predict_orders"])
         self.eager = config['eager'] if 'eager' in config else bc_params['eager']
         self.context = self._create_execution_context()
+        self.bc_params = bc_params
 
     def _setup_shapes(self):
         # This is here to make the class compatible with both tuples or gym.Space objs for the spaces
@@ -357,27 +508,37 @@ class BehaviorCloningPolicy(RllibPolicy):
         self.observation_shape = self.observation_space if type(self.observation_space) == tuple else self.observation_space.shape
         self.action_shape = self.action_space if type(self.action_space) == tuple else (self.action_space.n,)
 
-        
-
     @classmethod
-    def from_model_dir(cls, model_dir, stochastic=True):
+    def from_model_dir(cls, model_dir, stochastic=True, **kwargs):
         model, bc_params = load_bc_model(model_dir)
         config = {
             "bc_model" : model,
             "bc_params" : bc_params,
-            "stochastic" : stochastic
+            "stochastic" : stochastic,
+            **kwargs
         }
         return cls(bc_params['observation_shape'], bc_params['action_shape'], config)
 
     @classmethod
-    def from_model(cls, model, bc_params, stochastic=True):
+    def from_model(cls, model, bc_params, stochastic=True, **kwargs):
         config = {
             "bc_model" : model,
             "bc_params" : bc_params,
-            "stochastic" : stochastic
+            "stochastic" : stochastic,
+            **kwargs
         }
         return cls(bc_params["observation_shape"], bc_params["action_shape"], config)
-
+    
+    def predict_orders(self, obs_batch, state_batches=None):
+        # predict probabilities what orders are ready to fullfill based on the past
+        # assumes sigmoid function from logits(for multi-hot encoding)
+        assert self.model_predicts_orders
+        obs_batch = np.array(obs_batch)
+        with self.context:
+            action_logits, states, orders_logits = self._forward(obs_batch, state_batches)
+        orders_probs = sigmoid(orders_logits)
+        return orders_probs
+    
     def compute_actions(self, obs_batch, 
                         state_batches=None, 
                         prev_action_batch=None,
@@ -396,12 +557,12 @@ class BehaviorCloningPolicy(RllibPolicy):
             state_outs (list): only necessary for rnn hidden states
             infos (dict): dictionary of extra feature batches { "action_dist_inputs" : [BATCH_SIZE, ...] }
         """
-        # Cast to np.array if list (no-op if already np.array)        
+        # Cast to np.array if list (no-op if already np.array)      
         obs_batch = np.array(obs_batch)
 
         # Run the model
         with self.context:
-            action_logits, states = self._forward(obs_batch, state_batches)
+            action_logits, states, orders_logits = self._forward(obs_batch, state_batches)
         
         # Softmax in numpy to convert logits to probabilities
         action_probs = softmax(action_logits)
@@ -448,15 +609,38 @@ class BehaviorCloningPolicy(RllibPolicy):
         return {}
 
     def _forward(self, obs_batch, state_batches):
+        multiple_outs = self.use_lstm or self.model_predicts_orders
+
         if self.use_lstm:
             obs_batch = np.expand_dims(obs_batch, 1)
             seq_lens = np.ones(len(obs_batch))
-            model_out = self.model.predict([obs_batch, seq_lens] + state_batches)
-            logits, states = model_out[0], model_out[1:]
+            model_out = self.model.predict(
+                {
+                    OBS_INPUT_NAME:obs_batch,
+                    EP_LEN_INPUT_NAME:seq_lens,
+                    HIDDEN_INPUT_NAME:state_batches[0],
+                    MEMORY_INPUT_NAME:state_batches[1]
+                })
+            logits = model_out[0]
             logits = logits.reshape((logits.shape[0], -1))
-            return logits, states
+            states = model_out[1:3]
         else:
-            return self.model.predict(obs_batch), []
+            model_out = self.model.predict({OBS_INPUT_NAME:obs_batch})
+            if multiple_outs:
+                logits = model_out[0]
+            else:
+                logits = model_out
+            states = []
+            
+        if self.model_predicts_orders:
+            orders_logits = model_out[-1]
+            if self.use_lstm:
+                orders_logits = orders_logits.reshape((orders_logits.shape[0], -1))
+        else:
+            orders_logits = []
+
+        return logits, states, orders_logits
+
 
     def _create_execution_context(self):
         """

@@ -10,6 +10,9 @@ def softmax(logits):
     e_x = np.exp(logits.T - np.max(logits))
     return (e_x / np.sum(e_x, axis=0)).T
 
+def sigmoid(logits):
+    return 1 / (1 + np.exp(-logits))
+
 def get_base_env(mdp_params, env_params, outer_shape=None, mdp_params_schedule_fn=None):
     ae = get_base_ae(mdp_params, env_params, outer_shape, mdp_params_schedule_fn)
     return ae.env
