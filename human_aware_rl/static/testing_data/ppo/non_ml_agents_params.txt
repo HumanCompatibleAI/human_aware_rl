@@ -1,0 +1,27 @@
+{
+    "random-agent": {
+         "config" : {
+            "agent_cls": agent.RandomAgent,
+            "agent_init_kwargs": {
+                "all_actions": False
+            }
+         }
+    },
+    "greedy-model": {
+        "config" : {
+            "agent_cls": agent.GreedyHumanModel,
+            "agent_init_kwargs": {},
+            "agent_init_kwargs_variables": {
+                "mlam": "env.mlam"
+            }
+        }
+    },
+    "random_agent": {
+         "config" : {
+            "agent_cls": agent.RandomAgent,
+            "agent_init_kwargs": {
+                "all_actions": False
+            }
+         }
+    },
+}

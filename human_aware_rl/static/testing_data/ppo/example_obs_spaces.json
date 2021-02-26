@@ -1,0 +1,7 @@
+{
+    "ppo": {
+        "observations": "mdp.lossless_state_encoding_gym_space",
+        "auxillary_info": "mdp.multi_hot_orders_encoding_gym_space"
+    },
+    "bc": "mdp.featurize_state_gym_space"
+}

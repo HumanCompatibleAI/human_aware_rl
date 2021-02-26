@@ -1,0 +1,4 @@
+[{'timestep': 0, 'agents': [{'ppo': 1}, {'random_agent': 1}]},
+ {'timestep': 100, 'agents': [{'ppo': 1}, {'random-agent': 1}]},
+ {'timestep': 101, 'agents': [{'ppo': 1}, {'greedy-model': 1}]}
+]

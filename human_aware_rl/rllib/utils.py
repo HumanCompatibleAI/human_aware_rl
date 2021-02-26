@@ -57,12 +57,18 @@ def get_required_arguments(fn):
 def iterable_equal(a, b):
     if hasattr(a, '__iter__') != hasattr(b, '__iter__'):
         return False
-    if not hasattr(a, '__iter__'):
+
+    if not hasattr(a, '__iter__') or isinstance(a, str):
         return a == b
 
     if len(a) != len(b):
         return False
 
+    if isinstance(a, dict):
+        a = a.items()
+    if isinstance(b, dict):
+        b = b.items()
+    
     for elem_a, elem_b in zip(a, b):
         if not iterable_equal(elem_a, elem_b):
             return False

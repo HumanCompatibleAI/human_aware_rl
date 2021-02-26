@@ -1,0 +1,8 @@
+{
+    "start_orientations": false,
+    "wait_allowed": true,
+    "counter_goals": [[1,2]],
+    "counter_drop": [[1,2]],
+    "counter_pickup": [[1,2]],
+    "same_motion_goals": false
+}
