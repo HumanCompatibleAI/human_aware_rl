@@ -1,8 +1,10 @@
 # All imports except rllib
-import argparse, os, sys
+import argparse, os, sys, copy
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
+from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 import numpy as np
-
+# import whole agent module so any agent can be supplied in non_ml_agents_params_file
+from overcooked_ai_py.agents import agent
 # environment variable that tells us whether this code is running on the server or not
 LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
 
@@ -30,11 +32,11 @@ import ray
 from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
-from ray.rllib.agents.ppo.ppo import PPOTrainer
 from human_aware_rl.ppo.ppo_rllib import RllibPPOModel, RllibLSTMPPOModel
-from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params
+from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params, DictObsSpacePPOTFPolicy
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR
-
+# Note: human_aware_rl.utils also contains tf code so it needs to be imported after rllib
+from human_aware_rl.utils import load_dict_from_unkown_filetype
 
 ###################### Temp Documentation #######################
 #   run the following command in order to train a PPO self-play #
@@ -55,24 +57,71 @@ def _env_creator(env_config):
     from human_aware_rl.rllib.rllib import OvercookedMultiAgent 
     return OvercookedMultiAgent.from_config(env_config)
 
+CUSTOM_MODEL_ID = "MyPPOModel"
+
 @ex.config
 def my_config():
-    ### Model params ###
-
-    # Whether dense reward should come from potential function or not
-    use_phi = True
-
-    # whether to use recurrence in ppo model
-    use_lstm = False
+    ### PPO model params ###
 
     # Base model params
     NUM_HIDDEN_LAYERS = 3
     SIZE_HIDDEN_LAYERS = 64
     NUM_FILTERS = 25
     NUM_CONV_LAYERS = 3
-
+    
+    # whether to use recurrence in ppo model
+    use_lstm = False
     # LSTM memory cell size (only used if use_lstm=True)
     CELL_SIZE = 256
+
+
+
+    ### Other agents params ###
+    # path to pickled policy model for behavior cloning
+    bc_model_dir = os.path.join(BC_SAVE_DIR, "default")
+
+    # Whether bc agents should return action logit argmax or sample
+    bc_stochastic = True
+    
+    # config for non machine learning based agent (rule based)
+    # agent_init_kwargs_variables is used by fill_init_kwargs inside OvercookedMultiAgent.create_non_ml_agent to fill selected fields with env/mdp attributes
+    # if you want to change these easiest way to do it is to supply .txt file with whole variable that can be evaluated into this dict
+    non_ml_agents_params = {
+        "StayAgent": {
+            "config": {
+                "agent_cls": agent.StayAgent
+            }
+        },
+        "RandomAgentInteracting": {
+             "config": {
+                "agent_cls": agent.RandomAgent,
+                "agent_init_kwargs": {
+                    "all_actions": True
+                }
+             }
+        },
+        "RandomAgent": {
+             "config": {
+                "agent_cls": agent.RandomAgent,
+                "agent_init_kwargs": {
+                    "all_actions": False
+                }
+             }
+        },
+        "GreedyHumanModel": {
+            "config": {
+                "agent_cls": agent.GreedyHumanModel,
+                "agent_init_kwargs": {},
+                "agent_init_kwargs_variables": {
+                    "mlam": "env.mlam"
+                }
+            }
+        }
+    }
+    non_ml_agents_params_file = None
+    if non_ml_agents_params_file:
+        with open(non_ml_agents_params_file, "r") as f:
+            non_ml_agents_params = eval(f.read())
 
 
 
@@ -100,12 +149,6 @@ def my_config():
     # Rollout length
     rollout_fragment_length = 400
     
-    # Whether all PPO agents should share the same policy network
-    shared_policy = True
-
-    # Number of training iterations to run
-    num_training_iters = 420 if not LOCAL_TESTING else 2
-
     # Stepsize of SGD.
     lr = 5e-5
 
@@ -143,11 +186,24 @@ def my_config():
     # execute per train batch).
     num_sgd_iter = 8 if not LOCAL_TESTING else 1
 
+    # Whether tensorflow should execute eagerly or not
+    eager = False
+
+    # Number of training iterations to run
+    num_training_iters = 420 if not LOCAL_TESTING else 2
+
     # How many trainind iterations (calls to trainer.train()) to run before saving model checkpoint
     save_freq = 25
+    
+    # Whether all PPO agents should share the same policy network
+    shared_policy = True
 
-    # How many training iterations to run between each evaluation
-    evaluation_interval = 50 if not LOCAL_TESTING else 1
+
+
+    ### Evaluation params ###
+    
+    # Agents used in evaluation
+    evaluation_agents = ["ppo", "ppo"]
 
     # How many timesteps should be in an evaluation episode
     evaluation_ep_length = 400
@@ -158,42 +214,39 @@ def my_config():
     # Whether to display rollouts in evaluation
     evaluation_display = False
 
-    # Where to log the ray dashboard stats
-    temp_dir = os.path.join(os.path.abspath(os.sep), "tmp", "ray_tmp")
-
-    # Where to store model checkpoints and training stats
-    results_dir = DEFAULT_RESULTS_DIR
-
-    # Whether tensorflow should execute eagerly or not
-    eager = False
-
-
-    ### BC Params ###
-    # path to pickled policy model for behavior cloning
-    bc_model_dir = os.path.join(BC_SAVE_DIR, "default")
-
-    # Whether bc agents should return action logit argmax or sample
-    bc_stochastic = True
-
+    # How many training iterations to run between each evaluation
+    evaluation_interval = 50 if not LOCAL_TESTING else 1
 
 
     ### Environment Params ###
+
     # Which overcooked level to use
     layout_name = "cramped_room"
 
     # all_layout_names = '_'.join(layout_names)
 
-    # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
+    # Max episode length
+    horizon = 400
 
-    params_str = str(use_phi) + "_nw=%d_vf=%f_es=%f_en=%f_kl=%f" % (
-        num_workers,
-        vf_loss_coeff,
-        entropy_coeff_start,
-        entropy_coeff_end,
-        kl_coeff
-    )
+    # used when one of the agents uses mlam
+    mlam_params = {
+        'start_orientations': False,
+        'wait_allowed': False,
+        'counter_goals': [],
+        'counter_drop': [],
+        'counter_pickup': [],
+        'same_motion_goals': True
+    }
+    mlam_params_file = None
+    if mlam_params_file:
+        mlam_params = load_dict_from_unkown_filetype(mlam_params_file)
 
-    experiment_name = "{0}_{1}_{2}".format("PPO", layout_name, params_str)
+    mlam_use_all_counters = False
+    if mlam_use_all_counters:
+        all_counters = OvercookedGridworld.from_layout_name(layout_name).get_counter_locations()
+        mlam_params["counter_goals"] = all_counters
+        mlam_params["counter_drop"] = all_counters
+        mlam_params["counter_pickup"] = all_counters
 
     # Rewards the agent will receive for intermediate actions
     rew_shaping_params = {
@@ -203,10 +256,14 @@ def my_config():
         "DISH_DISP_DISTANCE_REW": 0,
         "POT_DISTANCE_REW": 0,
         "SOUP_DISTANCE_REW": 0,
+        "TOMATO_COUNTER_PICKUP_REWARD": 0,
+        "ONION_COUNTER_PICKUP_REWARD": 0,
+        "TOMATO_DISPENSER_PICKUP_REWARD": 0,
+        "ONION_DISPENSER_PICKUP_REWARD": 0
     }
 
-    # Max episode length
-    horizon = 400
+    # Whether dense reward should come from potential function or not
+    use_phi = True
 
     # Constant by which shaped rewards are multiplied by when calculating total reward
     reward_shaping_factor = 1.0
@@ -218,100 +275,173 @@ def my_config():
     # schedule for bc_factor is represented by a list of points (t_i, v_i) where v_i represents the 
     # value of bc_factor at timestep t_i. Values are linearly interpolated between points
     # The default listed below represents bc_factor=0 for all timesteps
-    bc_schedule = OvercookedMultiAgent.self_play_bc_schedule
+    # for schedules containing other agents than ppo and bc check out agents_schedule
+    bc_schedule = None
+
+    # agents_schedule is list of dicts where key "agents" is list of dicts representing probability of having agent 
+    #   of given type for every player at given timestep (with key "timestep") with linear interpolation in between the timesteps
+    #   example dict: {"timestep": 10, "agents": [{"ppo":1}, {"ppo":0.3, "bc": 0.7}]}
+    # you cannot change agents_schedule directly by running file from command line: python ppo_rllib_client.py with agents_schedule=...,
+    #   use agents_schedule_file instead
+    agents_schedule_file = None
+    if bc_schedule is not None:
+        agents_schedule = OvercookedMultiAgent.bc_schedule_to_agents_schedule(bc_schedule)
+    elif agents_schedule_file:
+        agents_schedule = load_dict_from_unkown_filetype(agents_schedule_file)
+    else:
+        agents_schedule = OvercookedMultiAgent.self_play_schedule
+
+    # if agents starting positions should be shuffled in training and evaluation
+    shuffle_agents = True
+
+    # map type of ml based agent (ppo or bc) to state encoding functions and observation spaces
+    # state encoding functions and observation spaces can be encoded in form of string if they are attributes/properties of mdp with 
+    # format: "mdp.property_name" i.e.
+    # {"ppo": "mdp.lossless_state_encoding_gym_space", 
+    # "bc": "mdp.lossless_state_encoding_gym_space"}
+    # use dicts for dict state spaces (only supported keys are: "observations" (encoded observation, used by default) 
+    # and "auxillary_info" (1d vector containing info about anything else i.e. orders)) i.e.
+    # {"ppo": {"observations": "mdp.lossless_state_encoding_gym_space", 
+    #          "auxillary_info": "mdp.multi_hot_orders_encoding_gym_space"},
+    #  "bc": "mdp.lossless_state_encoding_gym_space"}
+    featurize_fns = copy.deepcopy(OvercookedMultiAgent.default_featurize_fns)
+    featurize_fns_file = None
+    if featurize_fns_file:
+        featurize_fns = load_dict_from_unkown_filetype(featurize_fns_file)
+
+    observation_spaces = copy.deepcopy(OvercookedMultiAgent.default_observation_spaces)
+    observation_spaces_file = None
+    if observation_spaces_file:
+        observation_spaces = load_dict_from_unkown_filetype(observation_spaces_file)
 
 
-    # To be passed into rl-lib model/custom_options config
-    model_params = {
-        "use_lstm" : use_lstm,
-        "NUM_HIDDEN_LAYERS" : NUM_HIDDEN_LAYERS,
-        "SIZE_HIDDEN_LAYERS" : SIZE_HIDDEN_LAYERS,
-        "NUM_FILTERS" : NUM_FILTERS,
-        "NUM_CONV_LAYERS" : NUM_CONV_LAYERS,
-        "CELL_SIZE" : CELL_SIZE
+
+    # Where to log the ray dashboard stats
+    temp_dir = os.path.join(os.path.abspath(os.sep), "tmp", "ray_tmp")
+
+    # Where to store model checkpoints and training stats
+    results_dir = DEFAULT_RESULTS_DIR
+
+    # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
+    params_str = str(use_phi) + "_nw=%d_vf=%f_es=%f_en=%f_kl=%f" % (
+        num_workers,
+        vf_loss_coeff,
+        entropy_coeff_start,
+        entropy_coeff_end,
+        kl_coeff
+    )
+
+    experiment_name = "{0}_{1}_{2}".format("PPO", layout_name, params_str)
+
+
+    ppo_agent_params = {
+            "policy_cls": DictObsSpacePPOTFPolicy,
+            "config": {
+                "model": {
+                    # To be passed into rl-lib model/custom_options config
+                    "custom_options": {
+                        "NUM_HIDDEN_LAYERS": NUM_HIDDEN_LAYERS,
+                        "SIZE_HIDDEN_LAYERS": SIZE_HIDDEN_LAYERS,
+                        "NUM_FILTERS": NUM_FILTERS,
+                        "NUM_CONV_LAYERS": NUM_CONV_LAYERS,      
+                        "use_lstm": use_lstm,
+                        "CELL_SIZE": CELL_SIZE
+                    },
+                    "custom_model": CUSTOM_MODEL_ID
+                }
+            }
+    }
+
+    bc_agent_params = {
+            "policy_cls": BehaviorCloningPolicy,
+            "config": {
+                "model_dir": bc_model_dir,
+                "stochastic": bc_stochastic,
+                "eager": eager
+            }
+        }
+    
+    ml_agent_params = {
+        "ppo": ppo_agent_params,
+        "bc": bc_agent_params
     }
 
     # to be passed into the rllib.PPOTrainer class
     training_params = {
-        "num_workers" : num_workers,
-        "train_batch_size" : train_batch_size,
-        "sgd_minibatch_size" : sgd_minibatch_size,
-        "rollout_fragment_length" : rollout_fragment_length,
-        "num_sgd_iter" : num_sgd_iter,
-        "lr" : lr,
-        "lr_schedule" : lr_schedule,
-        "grad_clip" : grad_clip,
-        "gamma" : gamma,
-        "lambda" : lmbda,
-        "vf_share_layers" : vf_share_layers,
-        "vf_loss_coeff" : vf_loss_coeff,
-        "kl_coeff" : kl_coeff,
-        "clip_param" : clip_param,
-        "num_gpus" : num_gpus,
-        "seed" : seed,
-        "evaluation_interval" : evaluation_interval,
-        "entropy_coeff_schedule" : [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
-        "eager" : eager
+        "num_workers": num_workers,
+        "seed": seed,
+        "num_gpus": num_gpus,
+        "train_batch_size": train_batch_size,
+        "sgd_minibatch_size": sgd_minibatch_size,
+        "rollout_fragment_length": rollout_fragment_length,
+        "lr": lr,
+        "lr_schedule": lr_schedule,
+        "grad_clip": grad_clip,
+        "gamma": gamma,
+        "lambda": lmbda,
+        "vf_share_layers": vf_share_layers,
+        "vf_loss_coeff": vf_loss_coeff,
+        "entropy_coeff_schedule": [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
+        "kl_coeff": kl_coeff,
+        "clip_param": clip_param,
+        "num_sgd_iter": num_sgd_iter,
+        "evaluation_interval": evaluation_interval,
+        "eager": eager
     }
 
     # To be passed into AgentEvaluator constructor and _evaluate function
     evaluation_params = {
-        "ep_length" : evaluation_ep_length,
-        "num_games" : evaluation_num_games,
-        "display" : evaluation_display
+        "agents":  evaluation_agents,
+        "ep_length": evaluation_ep_length,
+        "num_games": evaluation_num_games,
+        "display": evaluation_display,
+        "non_ml_agents_params": non_ml_agents_params,
+        "mlam_params": mlam_params
     }
-
 
     environment_params = {
         # To be passed into OvercookedGridWorld constructor
-
-        "mdp_params" : {
+        "mdp_params": {
             "layout_name": layout_name,
             "rew_shaping_params": rew_shaping_params
         },
         # To be passed into OvercookedEnv constructor
-        "env_params" : {
-            "horizon" : horizon
+        "env_params": {
+            "horizon": horizon,
+            "mlam_params": mlam_params
         },
-
         # To be passed into OvercookedMultiAgent constructor
-        "multi_agent_params" : {
-            "reward_shaping_factor" : reward_shaping_factor,
-            "reward_shaping_horizon" : reward_shaping_horizon,
-            "use_phi" : use_phi,
-            "bc_schedule" : bc_schedule
-        }
-    }
-
-    bc_params = {
-        "bc_policy_cls" : BehaviorCloningPolicy,
-        "bc_config" : {
-            "model_dir" : bc_model_dir,
-            "stochastic" : bc_stochastic,
-            "eager" : eager
+        "multi_agent_params": {
+            "use_phi": use_phi,
+            "reward_shaping_factor": reward_shaping_factor,
+            "reward_shaping_horizon": reward_shaping_horizon,
+            "agents_schedule": agents_schedule,
+            "shuffle_agents": shuffle_agents,
+            "featurize_fns": featurize_fns,
+            "observation_spaces": observation_spaces,
+            "non_ml_agents_params": non_ml_agents_params
         }
     }
 
     ray_params = {
-        "custom_model_id" : "MyPPOModel",
-        "custom_model_cls" : RllibLSTMPPOModel if model_params['use_lstm'] else RllibPPOModel,
-        "temp_dir" : temp_dir,
-        "env_creator" : _env_creator
+        "custom_model_id": CUSTOM_MODEL_ID,
+        "custom_model_cls": RllibLSTMPPOModel if use_lstm else RllibPPOModel,
+        "temp_dir": temp_dir,
+        "env_creator": _env_creator
     }
 
     params = {
-        "model_params" : model_params,
-        "training_params" : training_params,
-        "environment_params" : environment_params,
-        "bc_params" : bc_params,
-        "shared_policy" : shared_policy,
-        "num_training_iters" : num_training_iters,
-        "evaluation_params" : evaluation_params,
-        "experiment_name" : experiment_name,
-        "save_every" : save_freq,
-        "seeds" : seeds,
-        "results_dir" : results_dir,
-        "ray_params" : ray_params
+        "agent_params": ml_agent_params,
+        "training_params": training_params,
+        "evaluation_params": evaluation_params,
+        "environment_params": environment_params,
+        "ray_params": ray_params,
+        "shared_policy": shared_policy,
+        "num_training_iters": num_training_iters,
+        "experiment_name": experiment_name,
+        "save_every": save_freq,
+        "seeds": seeds,
+        "results_dir": results_dir,
     }
 
 
@@ -359,4 +489,4 @@ def main(params):
     # Return value gets sent to our slack observer for notification
     average_sparse_reward = np.mean([res['custom_metrics']['sparse_reward_mean'] for res in results])
     average_episode_reward = np.mean([res['episode_reward_mean'] for res in results])
-    return { "average_sparse_reward" : average_sparse_reward, "average_total_reward" : average_episode_reward }
+    return { "average_sparse_reward": average_sparse_reward, "average_total_reward": average_episode_reward }

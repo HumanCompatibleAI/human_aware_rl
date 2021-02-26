@@ -5,7 +5,7 @@ import shutil
 import random
 import numpy as np
 import tensorflow as tf
-
+from overcooked_ai_py.utils import load_dict_from_file, load_from_json
 
 def delete_dir_if_exists(dir_path, verbose=False):
     if os.path.exists(dir_path):
@@ -16,6 +16,14 @@ def delete_dir_if_exists(dir_path, verbose=False):
 def create_dir_if_not_exists(dir_path):
     if not os.path.exists(dir_path):
 	    os.makedirs(dir_path)
+
+def load_dict_from_unkown_filetype(filepath):
+    try:
+        # json.load
+        return load_from_json(filepath)
+    except:
+        # eval of str from file
+        return load_dict_from_file(filepath)
 
 def reset_tf():
     """Clean up tensorflow graph and session.

@@ -2,9 +2,10 @@ from ray.rllib.models.tf.tf_modelv2 import TFModelV2
 from ray.rllib.models.tf.recurrent_tf_modelv2 import RecurrentTFModelV2
 import numpy as np
 import tensorflow as tf
+import gym
 
-
-
+AUXILLARY_INFO_NAME = "auxillary_info"
+OBSERVATIONS_NAME = "observations"
 
 class RllibPPOModel(TFModelV2):
     """
@@ -23,12 +24,25 @@ class RllibPPOModel(TFModelV2):
         size_hidden_layers = custom_params["SIZE_HIDDEN_LAYERS"]
         num_filters = custom_params["NUM_FILTERS"]
         num_convs = custom_params["NUM_CONV_LAYERS"]
+        if hasattr(obs_space, "original_space"):
+            obs_space = obs_space.original_space
 
+        auxillary_info_input_layer = None
+        if isinstance(obs_space, gym.spaces.Dict):
+            auxillary_info = obs_space.spaces.get(AUXILLARY_INFO_NAME)
+            obs_space = obs_space[OBSERVATIONS_NAME]
+            if auxillary_info is not None:
+                auxillary_info_input_layer = tf.keras.Input(shape=auxillary_info.shape, name=AUXILLARY_INFO_NAME)
+        
+        obs_input_layer = tf.keras.Input(shape=obs_space.shape, name=OBSERVATIONS_NAME)
+        out = obs_input_layer
         ## Create graph of custom network. It will under a shared tf scope such that all agents
         ## use the same model
-        self.inputs = tf.keras.Input(shape=obs_space.shape, name="observations")
-        out = self.inputs
 
+        self.inputs = [obs_input_layer]
+
+        if auxillary_info_input_layer is not None:
+            self.inputs.append(auxillary_info_input_layer)
         # Apply initial conv layer with a larger kenel (why?)
         if num_convs > 0:
             out = tf.keras.layers.Conv2D(
@@ -52,6 +66,11 @@ class RllibPPOModel(TFModelV2):
         
         # Apply dense hidden layers, if any
         out = tf.keras.layers.Flatten()(out)
+
+        if auxillary_info_input_layer is not None:
+            flat_auxillary_info = tf.keras.layers.Flatten()(auxillary_info_input_layer)
+            out = tf.keras.layers.Concatenate()([out, flat_auxillary_info])
+
         for _ in range(num_hidden_layers):
             out = tf.keras.layers.Dense(size_hidden_layers)(out)
             out = tf.keras.layers.LeakyReLU()(out)
@@ -77,14 +96,15 @@ class RllibPPOModel(TFModelV2):
 class RllibLSTMPPOModel(RecurrentTFModelV2):
     """
     Model that will map encoded environment observations to action logits
-
-                                                         |_______|
-                                                     /-> | value |
+                            (optional) auxillary_info       
+                                       ||                |_______|
+                                       \/            /-> | value |
              ___________     _________     ________ /    |_______|  
     state -> | conv_net | -> | fc_net | -> | lstm | 
              |__________|    |________|    |______| \\    |_______________|
                                            /    \\   \\-> | action_logits |
                                           h_in   c_in     |_______________|
+                                         
     """
 
     def __init__(self, obs_space, action_space, num_outputs, model_config, name, **kwargs):
@@ -101,17 +121,49 @@ class RllibLSTMPPOModel(RecurrentTFModelV2):
         cell_size = custom_params["CELL_SIZE"]
 
         ### Create graph of the model ###
-        flattened_dim = np.prod(obs_space.shape)
-
+        flattened_obs_dim = np.prod(obs_space.shape)
         # Need an extra batch dimension (None) for time dimension
-        flattened_obs_inputs = tf.keras.Input(shape=(None, flattened_dim), name="input")
+        flattened_obs_inputs = tf.keras.Input(shape=(None, flattened_obs_dim), name="input")
+        
+        if hasattr(obs_space, "original_space"):
+            assert isinstance(obs_space, gym.spaces.Dict), "currently only Dict observation spaces are supported from obs_spaces that consist multiple spaces"
+            obs_space = obs_space.original_space
+            auxillary_info = obs_space.spaces.get(AUXILLARY_INFO_NAME, None)
+        else:
+            auxillary_info = None
+
+        if auxillary_info is None:
+            obs_input = flattened_obs_inputs
+            auxillary_info_input = None
+        else:
+            def divide_input_into_obs_and_auxillary_info(flattened_obs_inputs, auxillary_info, obs_space):
+                is_auxillary_info_first = list(obs_space.spaces.keys())[0] == AUXILLARY_INFO_NAME
+                auxillary_info_size = np.prod(auxillary_info.shape)
+
+                if is_auxillary_info_first:
+                    first_slices_elem_size = auxillary_info_size
+                else:
+                    first_slices_elem_size = flattened_obs_dim - auxillary_info_size
+                
+                sliced_data = tf.keras.layers.Lambda(lambda x: (x[:,:,:first_slices_elem_size], x[:,:,first_slices_elem_size:]))(flattened_obs_inputs)
+
+                if is_auxillary_info_first:
+                    (auxillary_info_input, obs_input) = sliced_data 
+                else:
+                    (obs_input, auxillary_info_input) = sliced_data
+                    
+                return obs_input, auxillary_info_input
+                
+            obs_input, auxillary_info_input = divide_input_on_obs_and_auxillary_info(flattened_obs_inputs, auxillary_info, obs_space)
+
         lstm_h_in = tf.keras.Input(shape=(cell_size,), name="h_in")
         lstm_c_in = tf.keras.Input(shape=(cell_size,), name="c_in")
         seq_in = tf.keras.Input(shape=(), name="seq_in", dtype=tf.int32)
-
+        inputs = [flattened_obs_inputs, seq_in, lstm_h_in, lstm_c_in]
+        
         # Restore initial observation shape
-        obs_inputs = tf.keras.layers.Reshape(target_shape=(-1, *obs_space.shape))(flattened_obs_inputs)
-        out = obs_inputs
+        obs_input = tf.keras.layers.Reshape(target_shape=(-1, *obs_space.shape))(obs_input)
+        out = obs_input
 
         ## Initial "vision" network
 
@@ -138,6 +190,10 @@ class RllibLSTMPPOModel(RecurrentTFModelV2):
         
         # Flatten spatial features
         out = tf.keras.layers.TimeDistributed(tf.keras.layers.Flatten())(out)
+        
+        if auxillary_info_input is not None:
+            # NOTE: auxillary_info_input is already flat
+            out = tf.keras.layers.Concatenate()([out, auxillary_info_input])
 
         # Apply dense hidden layers, if any
         for i in range(num_hidden_layers):
@@ -146,9 +202,6 @@ class RllibLSTMPPOModel(RecurrentTFModelV2):
                 activation=tf.nn.leaky_relu, 
                 name="fc_{0}".format(i)
             ))(out)
-
-        
-
 
         ## LSTM network
         lstm_out, h_out, c_out = tf.keras.layers.LSTM(cell_size, return_sequences=True, return_state=True, name="lstm")(
@@ -165,7 +218,7 @@ class RllibLSTMPPOModel(RecurrentTFModelV2):
 
         self.cell_size = cell_size
         self.base_model = tf.keras.Model(
-            inputs=[flattened_obs_inputs, seq_in, lstm_h_in, lstm_c_in],
+            inputs=inputs,
             outputs=[layer_out, value_out, h_out, c_out]
         )
         self.register_variables(self.base_model.variables)
