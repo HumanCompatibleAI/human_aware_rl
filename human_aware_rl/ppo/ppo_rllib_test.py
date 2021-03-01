@@ -192,6 +192,28 @@ class TestPPORllib(unittest.TestCase):
         ).result
         self._compare_results_with_expected('test_ppo_fp_sp_no_phi', results)
 
+    def test_ppo_d2rl(self):
+        # Train a self play agent for 30 iterations
+        results = ex_fp.run(
+            config_updates={
+                "results_dir": self.temp_results_dir,
+                "num_workers": 1,
+                "train_batch_size": 1600,
+                "sgd_minibatch_size": 800,
+                "num_training_iters": 30,
+                "evaluation_interval": 10,
+                "use_phi": False,
+                "entropy_coeff_start": 0.0002,
+                "entropy_coeff_end": 0.00005,
+                "lr": 7e-4,
+                "seeds": [0],
+                "outer_shape": (5, 4),
+                "evaluation_display": False,
+                "D2RL": True
+            }
+        ).result
+        self._compare_results_with_expected('test_ppo_d2rl', results)
+
     def test_ppo_fp_sp_yes_phi(self):
         # Train a self play agent for 30 iterations
         results = ex_fp.run(
@@ -360,6 +382,7 @@ if __name__ == '__main__':
     suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
     suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
     suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_d2rl', **args))
     suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
     suite.addTest(TestPPORllib('test_ppo_non_ml_agents', **args))
     suite.addTest(TestPPORllib('test_ppo_dict_obs_spaces', **args))
