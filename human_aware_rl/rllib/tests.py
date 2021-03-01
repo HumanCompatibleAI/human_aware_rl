@@ -52,7 +52,7 @@ class RllibEnvTest(unittest.TestCase):
         tot_bc = 0
         for _ in range(trials):
             env.reset(regen_mdp=False)
-            num_bc = sum(map(lambda agent: int(agent.startswith('bc')), env.current_agents_names))
+            num_bc = sum(map(lambda agent: int(agent.startswith('bc')), env.current_agents_ids))
             self.assertLessEqual(num_bc, 1)
             tot_bc += num_bc
         actual_factor = tot_bc / trials
@@ -103,8 +103,8 @@ class RllibEnvTest(unittest.TestCase):
         obs = env.reset()
 
         # Check that we have the right number of agents with valid names
-        self.assertEqual(len(env.current_agents_names), 2)
-        self.assertListEqual(list(obs.keys()), env.current_agents_names)
+        self.assertEqual(len(env.current_agents_ids), 2)
+        self.assertListEqual(list(obs.keys()), env.current_agents_ids)
 
         # Ensure that bc agents are created 'factor' percentage of the time
         bc_factors = [0.0, 0.1, 0.5, 0.9, 1.0]
