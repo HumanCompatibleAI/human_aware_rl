@@ -105,9 +105,9 @@ def my_config():
     SIZE_HIDDEN_LAYERS = 64
     NUM_FILTERS = 25
     NUM_CONV_LAYERS = 3
-    
     # whether to use recurrence in ppo model
     use_lstm = False
+    D2RL = False
     # LSTM memory cell size (only used if use_lstm=True)
     CELL_SIZE = 256
 
@@ -370,7 +370,8 @@ def my_config():
                         "NUM_FILTERS": NUM_FILTERS,
                         "NUM_CONV_LAYERS": NUM_CONV_LAYERS,      
                         "use_lstm": use_lstm,
-                        "CELL_SIZE": CELL_SIZE
+                        "CELL_SIZE": CELL_SIZE,
+                        "D2RL": D2RL
                     },
                     "custom_model": CUSTOM_MODEL_ID
                 }

@@ -68,12 +68,12 @@ def my_config():
     SIZE_HIDDEN_LAYERS = 64
     NUM_FILTERS = 25
     NUM_CONV_LAYERS = 3
-    
     # whether to use recurrence in ppo model
     use_lstm = False
     # LSTM memory cell size (only used if use_lstm=True)
     CELL_SIZE = 256
-
+    # whether to use D2RL https://arxiv.org/pdf/2010.09163.pdf (concatenation the result of last conv layer to each hidden layer); works only when use_lstm is False
+    D2RL = False
 
 
     ### Other agents params ###
@@ -345,7 +345,8 @@ def my_config():
                         "NUM_FILTERS": NUM_FILTERS,
                         "NUM_CONV_LAYERS": NUM_CONV_LAYERS,      
                         "use_lstm": use_lstm,
-                        "CELL_SIZE": CELL_SIZE
+                        "CELL_SIZE": CELL_SIZE,
+                        "D2RL": D2RL
                     },
                     "custom_model": CUSTOM_MODEL_ID
                 }
