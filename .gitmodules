@@ -1,4 +1,4 @@
 [submodule "overcooked_ai"]
 	path = overcooked_ai
-	url = https://github.com/HumanCompatibleAI/overcooked_ai.git
-	branch = master
+	url = https://github.com/bmielnicki/overcooked_ai.git
+	branch = main_dev
