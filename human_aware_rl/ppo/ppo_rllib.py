@@ -33,7 +33,7 @@ class RllibPPOModel(TFModelV2):
         auxillary_info_input_layer = None
         if isinstance(obs_space, gym.spaces.Dict):
             auxillary_info = obs_space.spaces.get(AUXILLARY_INFO_NAME)
-            obs_space = obs_space[OBSERVATIONS_NAME]
+            obs_space = obs_space.spaces[OBSERVATIONS_NAME]
             if auxillary_info is not None:
                 auxillary_info_input_layer = tf.keras.Input(shape=auxillary_info.shape, name=AUXILLARY_INFO_NAME)
         
@@ -127,26 +127,32 @@ class RllibLSTMPPOModel(RecurrentTFModelV2):
         num_filters = custom_params["NUM_FILTERS"]
         num_convs = custom_params["NUM_CONV_LAYERS"]
         cell_size = custom_params["CELL_SIZE"]
-
+        
         ### Create graph of the model ###
+        # take obs_space shape before splitting obs_space into obs_space and auxillary_info as flattened_obs_dim still works here if obs_space is Dict
         flattened_obs_dim = np.prod(obs_space.shape)
         # Need an extra batch dimension (None) for time dimension
         flattened_obs_inputs = tf.keras.Input(shape=(None, flattened_obs_dim), name="input")
         
         if hasattr(obs_space, "original_space"):
-            assert isinstance(obs_space, gym.spaces.Dict), "currently only Dict observation spaces are supported from obs_spaces that consist multiple spaces"
-            obs_space = obs_space.original_space
-            auxillary_info = obs_space.spaces.get(AUXILLARY_INFO_NAME, None)
+            original_obs_space = obs_space.original_space
         else:
-            auxillary_info = None
+            original_obs_space = obs_space
+        
+        if isinstance(original_obs_space, gym.spaces.Dict):
+            auxillary_info_space = original_obs_space.spaces.get(AUXILLARY_INFO_NAME, None)
+            obs_space = original_obs_space.spaces[OBSERVATIONS_NAME]
+        else:
+            auxillary_info_space = None
+            obs_space = original_obs_space
 
-        if auxillary_info is None:
+        if auxillary_info_space is None:
             obs_input = flattened_obs_inputs
             auxillary_info_input = None
         else:
-            def divide_input_into_obs_and_auxillary_info(flattened_obs_inputs, auxillary_info, obs_space):
-                is_auxillary_info_first = list(obs_space.spaces.keys())[0] == AUXILLARY_INFO_NAME
-                auxillary_info_size = np.prod(auxillary_info.shape)
+            def divide_input_into_obs_and_auxillary_info(flattened_obs_inputs, auxillary_info_space, original_obs_space):
+                is_auxillary_info_first = list(original_obs_space.spaces.keys())[0] == AUXILLARY_INFO_NAME
+                auxillary_info_size = np.prod(auxillary_info_space.shape)
 
                 if is_auxillary_info_first:
                     first_slices_elem_size = auxillary_info_size
@@ -162,13 +168,13 @@ class RllibLSTMPPOModel(RecurrentTFModelV2):
                     
                 return obs_input, auxillary_info_input
                 
-            obs_input, auxillary_info_input = divide_input_on_obs_and_auxillary_info(flattened_obs_inputs, auxillary_info, obs_space)
+            obs_input, auxillary_info_input = divide_input_into_obs_and_auxillary_info(flattened_obs_inputs, auxillary_info_space, original_obs_space)
 
         lstm_h_in = tf.keras.Input(shape=(cell_size,), name="h_in")
         lstm_c_in = tf.keras.Input(shape=(cell_size,), name="c_in")
         seq_in = tf.keras.Input(shape=(), name="seq_in", dtype=tf.int32)
         inputs = [flattened_obs_inputs, seq_in, lstm_h_in, lstm_c_in]
-        
+
         # Restore initial observation shape
         obs_input = tf.keras.layers.Reshape(target_shape=(-1, *obs_space.shape))(obs_input)
         out = obs_input

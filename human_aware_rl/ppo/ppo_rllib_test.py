@@ -354,10 +354,10 @@ class TestPPORllib(unittest.TestCase):
 
     
     def test_lstm_ppo_dict_obs_spaces(self):
-        self.test_ppo_dict_obs_spaces(self, lstm=True)
+        self.test_ppo_dict_obs_spaces(lstm=True)
 
     def test_lstm_ppo_bc(self):
-        self.test_ppo_bc(self, lstm=True)
+        self.test_ppo_bc(lstm=True)
 
 def _clear_pickle():
     # Write an empty dictionary to our static "expected" results location
@@ -390,9 +390,10 @@ if __name__ == '__main__':
     suite.addTest(TestPPORllib('test_load_data_from_files', **args))
     suite.addTest(TestPPORllib('test_ppo_bc', **args))
 
+
     if args['run_lstm_tests']:
-        suite.addTest(TestBCTraining('test_lstm_ppo_dict_obs_spaces', **args))
-        suite.addTest(TestBCTraining('test_lstm_ppo_bc', **args))
+        suite.addTest(TestPPORllib('test_lstm_ppo_dict_obs_spaces', **args))
+        suite.addTest(TestPPORllib('test_lstm_ppo_bc', **args))
     
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)
