@@ -23,7 +23,7 @@ def get_base_mlam(mdp_params, env_params, outer_shape=None, mdp_params_schedule_
 
 def get_base_ae(mdp_params, env_params, outer_shape=None, mdp_params_schedule_fn=None):
     """
-    mdp_params: one set of fixed mdp parameter used by the enviroment
+    mdp_params: one set of fixed mdp parameter used by the environment
     env_params: env parameters (horizon, etc)
     outer_shape: outer shape of the environment
     mdp_params_schedule_fn: the schedule for varying mdp params

@@ -43,7 +43,7 @@ class RllibPPOModel(TFModelV2):
 
         if auxillary_info_input_layer is not None:
             self.inputs.append(auxillary_info_input_layer)
-        # Apply initial conv layer with a larger kenel (why?)
+        # Apply initial conv layer with a larger kernel (why?)
         if num_convs > 0:
             out = tf.keras.layers.Conv2D(
                 filters=num_filters,

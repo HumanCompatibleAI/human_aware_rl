@@ -43,7 +43,8 @@ class DictObsSpacePPOTFPolicy(PPOTFPolicy):
             timestep = None,
             **kwargs):
         """
-        method used in PPOTFPolicy but edited to handle dict inputs at runtime (it is handled at training by existing rllib code, but not for using already trained model)
+        method used in PPOTFPolicy but edited to handle dict inputs at runtime  (it is handled 
+            at training by existing rllib code, but not for using already trained model)
         """
         explore = explore if explore is not None else self.config["explore"]
         timestep = timestep if timestep is not None else self.global_timestep
@@ -535,7 +536,7 @@ class TrainingCallbacks(DefaultCallbacks):
         sparse_reward (int) - total reward from deliveries agent earned this episode
         shaped_reward (int) - total reward shaping reward the agent earned this episode
         """
-        # Get rllib.OvercookedMultiAgentEnv refernce from rllib wraper
+        # Get rllib.OvercookedMultiAgentEnv reference from rllib wrapper
         env = base_env.get_unwrapped()[0]
         # Both agents share the same info so it doesn't matter whose we use, just use 0th agent's
         info_dict = episode.last_info_for(env.current_ml_agents_ids[0])
@@ -622,7 +623,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
                 if policy_name == 'bc':
                     featurize_fns[i] = bc_featurization
         
-        # Compute the evauation rollout. Note this doesn't use the rllib passed in evaluation_workers, so this 
+        # Compute the evaluation rollout. Note this doesn't use the rllib passed in evaluation_workers, so this 
         # computation all happens on the CPU. Could change this if evaluation becomes a bottleneck
         results = evaluate(eval_params, eval_mdp_params, outer_shape, policies, featurize_fns)
 

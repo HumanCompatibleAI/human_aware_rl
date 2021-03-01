@@ -36,7 +36,7 @@ from human_aware_rl.ppo.ppo_rllib import RllibPPOModel, RllibLSTMPPOModel
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params, DictObsSpacePPOTFPolicy
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR
 # Note: human_aware_rl.utils also contains tf code so it needs to be imported after rllib
-from human_aware_rl.utils import load_dict_from_unkown_filetype
+from human_aware_rl.utils import load_dict_from_unknown_filetype
 
 ###################### Temp Documentation #######################
 #   run the following command in order to train a PPO self-play #
@@ -239,7 +239,7 @@ def my_config():
     }
     mlam_params_file = None
     if mlam_params_file:
-        mlam_params = load_dict_from_unkown_filetype(mlam_params_file)
+        mlam_params = load_dict_from_unknown_filetype(mlam_params_file)
 
     mlam_use_all_counters = False
     if mlam_use_all_counters:
@@ -287,7 +287,7 @@ def my_config():
     if bc_schedule is not None:
         agents_schedule = OvercookedMultiAgent.bc_schedule_to_agents_schedule(bc_schedule)
     elif agents_schedule_file:
-        agents_schedule = load_dict_from_unkown_filetype(agents_schedule_file)
+        agents_schedule = load_dict_from_unknown_filetype(agents_schedule_file)
     else:
         agents_schedule = OvercookedMultiAgent.self_play_schedule
 
@@ -307,12 +307,12 @@ def my_config():
     featurize_fns = copy.deepcopy(OvercookedMultiAgent.default_featurize_fns)
     featurize_fns_file = None
     if featurize_fns_file:
-        featurize_fns = load_dict_from_unkown_filetype(featurize_fns_file)
+        featurize_fns = load_dict_from_unknown_filetype(featurize_fns_file)
 
     observation_spaces = copy.deepcopy(OvercookedMultiAgent.default_observation_spaces)
     observation_spaces_file = None
     if observation_spaces_file:
-        observation_spaces = load_dict_from_unkown_filetype(observation_spaces_file)
+        observation_spaces = load_dict_from_unknown_filetype(observation_spaces_file)
 
 
 

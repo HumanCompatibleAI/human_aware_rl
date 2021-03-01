@@ -199,11 +199,11 @@ class RllibUtilsTest(unittest.TestCase):
                 # compare names as new instance of env is created
                 self.assertEqual(encoding_fn_from_name.__name__, encoding_fn.__name__) 
         
-        expected_enocoded_state_dict = {str(i): fn(state) for i, fn in enumerate(example_encoding_fns)}
-        actual_enocoded_state_dict = get_encoding_function({str(i): fn_name for i, fn_name in enumerate(example_encoding_fns_names)}, env=env)(state)
-        self.assertEqual(expected_enocoded_state_dict.keys(), actual_enocoded_state_dict.keys())
-        for k in expected_enocoded_state_dict.keys():
-            self.assertTrue(np.array_equal(expected_enocoded_state_dict[k], actual_enocoded_state_dict[k]))
+        expected_encoded_state_dict = {str(i): fn(state) for i, fn in enumerate(example_encoding_fns)}
+        actual_encoded_state_dict = get_encoding_function({str(i): fn_name for i, fn_name in enumerate(example_encoding_fns_names)}, env=env)(state)
+        self.assertEqual(expected_encoded_state_dict.keys(), actual_encoded_state_dict.keys())
+        for k in expected_encoded_state_dict.keys():
+            self.assertTrue(np.array_equal(expected_encoded_state_dict[k], actual_encoded_state_dict[k]))
 
     def test_get_gym_space(self):
         mdp = OvercookedGridworld.from_layout_name("cramped_room")

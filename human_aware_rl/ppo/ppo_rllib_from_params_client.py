@@ -2,7 +2,7 @@
 import argparse, os, sys, copy
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.agents.agent import StayAgent, RandomAgent, GreedyHumanModel
-from human_aware_rl.utils import load_dict_from_unkown_filetype
+from human_aware_rl.utils import load_dict_from_unknown_filetype
 import numpy as np
 # import whole agent module so any agent can be supplied in non_ml_agents_params_file
 from overcooked_ai_py.agents import agent
@@ -305,7 +305,7 @@ def my_config():
     if bc_schedule is not None:
         agents_schedule = OvercookedMultiAgent.bc_schedule_to_agents_schedule(bc_schedule)
     elif agents_schedule_file:
-        agents_schedule = load_dict_from_unkown_filetype(agents_schedule_file)
+        agents_schedule = load_dict_from_unknown_filetype(agents_schedule_file)
     else:
         agents_schedule = OvercookedMultiAgent.self_play_schedule
     agents_schedule_file = None
@@ -326,12 +326,12 @@ def my_config():
     featurize_fns = copy.deepcopy(OvercookedMultiAgent.default_featurize_fns)
     featurize_fns_file = None
     if featurize_fns_file:
-        featurize_fns = load_dict_from_unkown_filetype(featurize_fns_file)
+        featurize_fns = load_dict_from_unknown_filetype(featurize_fns_file)
 
     observation_spaces = copy.deepcopy(OvercookedMultiAgent.default_observation_spaces)
     observation_spaces_file = None
     if observation_spaces_file:
-        observation_spaces = load_dict_from_unkown_filetype(observation_spaces_file)
+        observation_spaces = load_dict_from_unknown_filetype(observation_spaces_file)
 
 
 

@@ -19,7 +19,7 @@ MEMORY_INPUT_NAME = "memory_in"
 ACTION_OUTPUT_NAME = "logits"
 ORDERS_OUTPUT_NAME = "orders_logits"
 
-# Boolean indicating whether all param dependencies have been loaded. Used to prevent re-loading unceccesarily
+# Boolean indicating whether all param dependencies have been loaded. Used to prevent re-loading unnecessarily
 _params_initalized = False
 
 def _get_base_ae(bc_params):
@@ -293,7 +293,7 @@ def evaluate_bc_model(model, bc_params):
     Arguments
 
         - model (tf.keras.Model)        A function that maps featurized overcooked states to action logits
-        - bc_params (dict)              Specifies the environemnt in which to evaluate the agent (i.e. layout, reward_shaping_param)
+        - bc_params (dict)              Specifies the environment in which to evaluate the agent (i.e. layout, reward_shaping_param)
                                             as well as the configuration for the rollout (rollout_length)
 
     Returns
@@ -468,7 +468,7 @@ class BehaviorCloningPolicy(RllibPolicy):
 
         observation_space (gym.Space|tuple)     Shape of the featurized observations
         action_space (gym.space|tuple)          Shape of the action space (len(Action.All_ACTIONS),)
-        config (dict)                           Dictionary of relavant bc params
+        config (dict)                           Dictionary of relevant bc params
             - model_dir (str)                   Path to pickled keras.Model used to map observations to action logits
             - stochastic (bool)                 Whether action should return logit argmax or sample over distribution
             - bc_model (keras.Model)            Pointer to loaded policy model. Overrides model_dir
