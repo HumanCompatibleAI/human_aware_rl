@@ -91,10 +91,13 @@ class OvercookedMultiAgent(MultiAgentEnv):
     """
 
     # List of all agent types currently supported
-    supported_agents = ['ppo', 'bc']
+    supported_agents = ['ppo', 'bc', 'tom']
 
     # Default bc_schedule, includes no bc agent at any time
     bc_schedule = self_play_bc_schedule = [(0, 0), (float('inf'), 0)]
+
+    # Default tom_schedule, includes no tom agent at any time
+    tom_schedule = self_play_tom_schedule = [(0, 0), (float('inf'), 0)]
 
     # Default environment params used for creation
     DEFAULT_CONFIG = {
@@ -112,12 +115,13 @@ class OvercookedMultiAgent(MultiAgentEnv):
             "reward_shaping_factor" : 0.0,
             "reward_shaping_horizon" : 0,
             "bc_schedule" : self_play_bc_schedule,
+            "tom_schedule" : self_play_tom_schedule,
             "use_phi" : True
         }
     }
 
     def __init__(self, base_env, reward_shaping_factor=0.0, reward_shaping_horizon=0,
-                            bc_schedule=None, use_phi=True):
+                            bc_schedule=None, tom_schedule=None, use_phi=True):
         """
         base_env: OvercookedEnv
         reward_shaping_factor (float): Coefficient multiplied by dense reward before adding to sparse reward to determine shaped reward
@@ -126,14 +130,18 @@ class OvercookedMultiAgent(MultiAgentEnv):
             with linear interpolation in between the t_i
         use_phi (bool): Whether to use 'shaped_r_by_agent' or 'phi_s_prime' - 'phi_s' to determine dense reward
         """
-        if bc_schedule:
-            self.bc_schedule = bc_schedule
+        self.bc_schedule = bc_schedule if bc_schedule else OvercookedMultiAgent.self_play_bc_schedule
         self._validate_schedule(self.bc_schedule)
+
+        self.tom_schedule = tom_schedule if tom_schedule else OvercookedMultiAgent.self_play_tom_schedule
+        self._validate_schedule(self.tom_schedule)
+
         self.base_env = base_env
         # since we are not passing featurize_fn in as an argument, we create it here and check its validity
         self.featurize_fn_map = {
             "ppo": lambda state: self.base_env.lossless_state_encoding_mdp(state),
-            "bc": lambda state: self.base_env.featurize_state_mdp(state)
+            "bc": lambda state: self.base_env.featurize_state_mdp(state),
+            "tom": lambda state: self.base_env.lossless_state_encoding_mdp(state),
         }
         self._validate_featurize_fns(self.featurize_fn_map)
         self._initial_reward_shaping_factor = reward_shaping_factor
@@ -143,6 +151,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self._setup_observation_space()
         self.action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
         self.anneal_bc_factor(0)
+        self.anneal_tom_factor(0)
         self.reset()
     
     def _validate_featurize_fns(self, mapping):
@@ -188,6 +197,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
             return lambda state: self.base_env.lossless_state_encoding_mdp(state)
         if agent_id.startswith('bc'):
             return lambda state: self.base_env.featurize_state_mdp(state)
+        if agent_id.startswith('tom'):
+            return lambda state: self.base_env.lossless_state_encoding_mdp(state)
         raise ValueError("Unsupported agent type {0}".format(agent_id))
 
     def _get_obs(self, state):
@@ -196,12 +207,28 @@ class OvercookedMultiAgent(MultiAgentEnv):
 
         return ob_p0, ob_p1
 
+    def _normalize_factors(self):
+        if self.bc_factor + self.tom_factor > 1:
+            normalization = 1/(self.bc_factor + self.tom_factor)
+            self.bc_factor *= normalization
+            self.tom_factor *= normalization
+        assert self.bc_factor + self.tom_factor <= 1
+
     def _populate_agents(self):
         # Always include at least one ppo agent (i.e. bc_sp not supported for simplicity)
         agents = ['ppo']
 
-        # Coin flip to determine whether other agent should be ppo or bc
-        other_agent = 'bc' if np.random.uniform() < self.bc_factor else 'ppo'
+        # Coin flip to determine whether other agent should be ppo or bc or tom
+        rd = np.random.uniform()
+        self._normalize_factors()
+        if rd <= self.bc_factor + self.tom_factor:
+            if rd < self.bc_factor:
+                other_agent = 'bc'
+            else:
+                other_agent = 'tom'
+        else:
+            other_agent = 'ppo'
+
         agents.append(other_agent)
 
         # Randomize starting indices
@@ -296,11 +323,31 @@ class OvercookedMultiAgent(MultiAgentEnv):
         new_factor = self._anneal(start_v, timesteps, end_t, end_v, start_t)
         self.set_bc_factor(new_factor)
 
-    def set_reward_shaping_factor(self, factor):
-        self.reward_shaping_factor = factor
-
     def set_bc_factor(self, factor):
         self.bc_factor = factor
+
+    def anneal_tom_factor(self, timesteps):
+        """
+        Set the current bc factor such that we anneal linearly until self.tom_factor_horizon
+        timesteps, given that we are currently at timestep "timesteps"
+        """
+        p_0 = self.tom_schedule[0]
+        p_1 = self.tom_schedule[1]
+        i = 2
+        while timesteps > p_1[0] and i < len(self.tom_schedule):
+            p_0 = p_1
+            p_1 = self.tom_schedule[i]
+            i += 1
+        start_t, start_v = p_0
+        end_t, end_v = p_1
+        new_factor = self._anneal(start_v, timesteps, end_t, end_v, start_t)
+        self.set_tom_factor(new_factor)
+
+    def set_tom_factor(self, factor):
+        self.tom_factor = factor
+
+    def set_reward_shaping_factor(self, factor):
+        self.reward_shaping_factor = factor
 
     def seed(self, seed):
         """
@@ -408,7 +455,7 @@ class TrainingCallbacks(DefaultCallbacks):
         pass
 
 
-def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shape, agent_0_policy_str='ppo', agent_1_policy_str='ppo'):
+def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shape, agent_0_policy_str='ppo', agent_1_policy_str_lst=tuple(['ppo'])):
     """
     Used to "curry" rllib evaluation function by wrapping additional parameters needed in a local scope, and returning a
     function with rllib custom_evaluation_function compatible signature
@@ -418,7 +465,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
     env_params (dict): Used to create underlying OvercookedEnv (see that class for configuration)
     outer_shape (list): a list of 2 item specifying the outer shape of the evaluation layout
     agent_0_policy_str (str): Key associated with the rllib policy object used to select actions (must be either 'ppo' or 'bc')
-    agent_1_policy_str (str): Key associated with the rllib policy object used to select actions (must be either 'ppo' or 'bc')
+    agent_1_policy_str_lst (tuple of str): Key associated with the rllib policy object used to select actions (must be either 'ppo' or 'bc')
     Note: Agent policies are shuffled each time, so agent_0_policy_str and agent_1_policy_str are symmetric
     Returns:
         _evaluate (func): Runs an evaluation specified by the curried params, ignores the rllib parameter 'evaluation_workers'
@@ -426,7 +473,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
 
     def _evaluate(trainer, evaluation_workers):
         print("Computing rollout of current trained policy")
-
+        agent_1_policy_str = np.random.choice(agent_1_policy_str_lst)
         # Randomize starting indices
         policies = [agent_0_policy_str, agent_1_policy_str]
         np.random.shuffle(policies)
@@ -518,6 +565,7 @@ def gen_trainer_from_params(params, load_only=False):
     environment_params = params['environment_params']
     evaluation_params = params['evaluation_params']
     bc_params = params['bc_params']
+    tom_params = params['tom_params']
     multi_agent_params = params['environment_params']['multi_agent_params']
 
     env = OvercookedMultiAgent.from_config(environment_params)
@@ -525,7 +573,7 @@ def gen_trainer_from_params(params, load_only=False):
     # Returns a properly formatted policy tuple to be passed into ppotrainer config
     def gen_policy(policy_type="ppo"):
         # supported policy types thus far
-        assert policy_type in ["ppo", "bc"]
+        assert policy_type in ["ppo", "bc", "tom"]
 
         if policy_type == "ppo":
             config = {
@@ -540,6 +588,11 @@ def gen_trainer_from_params(params, load_only=False):
             bc_cls = bc_params['bc_policy_cls']
             bc_config = bc_params['bc_config']
             return (bc_cls, env.bc_observation_space, env.action_space, bc_config)
+
+        elif policy_type == "tom":
+            tom_cls = tom_params['tom_policy_cls']
+            tom_config = tom_params['tom_config']
+            return (tom_cls, env.ppo_observation_space, env.action_space, tom_config)
 
     # Rllib compatible way of setting the directory we store agent checkpoints in
     logdir_prefix = "{0}_{1}_{2}".format(params["experiment_name"], params['training_params']['seed'], timestr)
@@ -565,10 +618,13 @@ def gen_trainer_from_params(params, load_only=False):
     multi_agent_config = {}
     all_policies = ['ppo']
 
-    # Whether both agents should be learned
-    self_play = iterable_equal(multi_agent_params['bc_schedule'], OvercookedMultiAgent.self_play_bc_schedule)
-    if not self_play:
+    # Whether to include bc
+    if not iterable_equal(multi_agent_params['bc_schedule'], OvercookedMultiAgent.self_play_bc_schedule):
         all_policies.append('bc')
+
+    # Whether to include tom
+    if not iterable_equal(multi_agent_params['tom_schedule'], OvercookedMultiAgent.self_play_tom_schedule):
+        all_policies.append('tom')
 
     multi_agent_config['policies'] = { policy : gen_policy(policy) for policy in all_policies }
 
@@ -577,6 +633,8 @@ def gen_trainer_from_params(params, load_only=False):
             return 'ppo'
         if agent_id.startswith('bc'):
             return 'bc'
+        if agent_id.startswith('tom'):
+            return 'tom'
     multi_agent_config['policy_mapping_fn'] = select_policy
     multi_agent_config['policies_to_train'] = 'ppo'
 
@@ -585,11 +643,15 @@ def gen_trainer_from_params(params, load_only=False):
 
     if "mdp_params" in environment_params:
         environment_params["eval_mdp_params"] = environment_params["mdp_params"]
+
+    # make directory for evaluation if not already exist
+    os.makedirs(evaluation_params["store_dir"], exist_ok=True)
+
     trainer = PPOTrainer(env="overcooked_multi_agent", config={
         "multiagent": multi_agent_config,
         "callbacks" : TrainingCallbacks,
         "custom_eval_function" : get_rllib_eval_function(evaluation_params, environment_params['eval_mdp_params'], environment_params['env_params'],
-                                        environment_params["outer_shape"], 'ppo', 'ppo' if self_play else 'bc'),
+                                        environment_params["outer_shape"], 'ppo', tuple(all_policies[1:]) if len(all_policies) > 1 else tuple(["ppo"])),
         "env_config" : environment_params,
         "eager" : False,
         **training_params
