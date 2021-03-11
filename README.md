@@ -60,7 +60,7 @@ $ conda activate harl_rllib
 
 Finally, install the latest stable version of tensorflow compatible with rllib
 ```bash
-(harl_rllib) $ pip install tensorflow==2.0.2
+(harl_rllib) $ pip install tensorflow==2.4.1
 ```
 Or, if working with gpus, install a version of tensorflow 2.*.* and cuDNN that is compatible with the available Cuda drivers. The following example works for Cuda 10.0.0. You can verify what version of Cuda is installed by running `nvcc --version`. For a full list of driver compatibility, refer [here](https://www.tensorflow.org/install/source#gpu)
 ```bash
