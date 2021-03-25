@@ -616,15 +616,16 @@ def gen_trainer_from_params(params, load_only=False):
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
-    all_policies = ['ppo']
+    all_policies = ['ppo', 'tom']
 
     # Whether to include bc
     if not iterable_equal(multi_agent_params['bc_schedule'], OvercookedMultiAgent.self_play_bc_schedule):
         all_policies.append('bc')
 
     # Whether to include tom
-    if not iterable_equal(multi_agent_params['tom_schedule'], OvercookedMultiAgent.self_play_tom_schedule):
-        all_policies.append('tom')
+    # Update: always include tom for future trainer
+    # if not iterable_equal(multi_agent_params['tom_schedule'], OvercookedMultiAgent.self_play_tom_schedule):
+    #     all_policies.append('tom')
 
     multi_agent_config['policies'] = { policy : gen_policy(policy) for policy in all_policies }
 
