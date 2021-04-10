@@ -21,7 +21,7 @@ jobs:
         python-version: 3.7
     - name: Miniconda Setup
       run: |
-        echo ::add-path::$CONDA/condabin
+        echo "$CONDA/condabin" >> $GITHUB_PATH
         sudo chown -R runner $CONDA
     - name: Install dependencies
       run: |
