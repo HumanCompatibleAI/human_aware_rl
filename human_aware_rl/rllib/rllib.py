@@ -166,7 +166,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
         values = [p[1] for p in schedule]
 
         assert len(schedule) >= 2, "Need at least 2 points to linearly interpolate schedule"
-        assert schedule[0][0] == 0, "Schedule must start at timestep 0"
+        # This is no longer needed because we can resume checkpoints
+        # assert schedule[0][0] == 0, "Schedule must start at timestep 0"
         assert all([t >=0 for t in timesteps]), "All timesteps in schedule must be non-negative"
         assert all([v >=0 and v <= 1 for v in values]), "All values in schedule must be between 0 and 1"
         assert sorted(timesteps) == timesteps, "Timesteps must be in increasing order in schedule"
@@ -245,6 +246,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
             # No annealing if horizon is zero
             return start_v
         else:
+            if curr_t < start_t:
+                return 0
             off_t = curr_t - start_t
             # Calculate the new value based on linear annealing formula
             fraction = max(1 - float(off_t) / (end_t - start_t), 0)
@@ -487,7 +490,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         if 'bc' in policies:
             base_ae = get_base_ae(eval_mdp_params, env_params)
             base_env = base_ae.env
-            bc_featurize_fn = lambda state : base_env.mdp.featurize_state(state)
+            bc_featurize_fn = lambda state : base_env.featurize_state_mdp(state)
             if policies[0] == 'bc':
                 agent_0_feat_fn = bc_featurize_fn
             if policies[1] == 'bc':
@@ -616,16 +619,19 @@ def gen_trainer_from_params(params, load_only=False):
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
-    all_policies = ['ppo', 'tom']
+    all_policies = ['ppo', 'tom', 'bc']
 
-    # Whether to include bc
+    eval_policies = ['ppo']
+
+    # Whether to include bc in evaluation
     if not iterable_equal(multi_agent_params['bc_schedule'], OvercookedMultiAgent.self_play_bc_schedule):
-        all_policies.append('bc')
+        print("EVALUATING WITH BC BECAUSE OF TRAINING WITH IT")
+        eval_policies.append('bc')
 
-    # Whether to include tom
-    # Update: always include tom for future trainer
-    # if not iterable_equal(multi_agent_params['tom_schedule'], OvercookedMultiAgent.self_play_tom_schedule):
-    #     all_policies.append('tom')
+    # Whether to include tom in evaluation
+    if not iterable_equal(multi_agent_params['tom_schedule'], OvercookedMultiAgent.self_play_tom_schedule):
+        print("EVALUTATING WITH TOM BECAUSE OF TRAINING WITH IT")
+        eval_policies.append('tom')
 
     multi_agent_config['policies'] = { policy : gen_policy(policy) for policy in all_policies }
 
@@ -652,7 +658,7 @@ def gen_trainer_from_params(params, load_only=False):
         "multiagent": multi_agent_config,
         "callbacks" : TrainingCallbacks,
         "custom_eval_function" : get_rllib_eval_function(evaluation_params, environment_params['eval_mdp_params'], environment_params['env_params'],
-                                        environment_params["outer_shape"], 'ppo', tuple(all_policies[1:]) if len(all_policies) > 1 else tuple(["ppo"])),
+                                        environment_params["outer_shape"], 'ppo', tuple(eval_policies[1:]) if len(eval_policies) > 1 else tuple(["ppo"])),
         "env_config" : environment_params,
         "eager" : False,
         **training_params

@@ -28,11 +28,12 @@ DEFAULT_MLP_PARAMS = {
     # Number of fully connected layers to use in our network
     "num_layers" : 2,
     # Each int represents a layer of that hidden size
-    "net_arch" : [64, 64]
+    "net_arch" : [128, 64]
 }
 
 DEFAULT_TRAINING_PARAMS = {
     "epochs" : 100,
+    "slice_freq": 10,
     "validation_split" : 0.15,
     "batch_size" : 64,
     "learning_rate" : 1e-3,
@@ -41,7 +42,7 @@ DEFAULT_TRAINING_PARAMS = {
 
 DEFAULT_EVALUATION_PARAMS = {
     "ep_length" : 400,
-    "num_games" : 1,
+    "num_games" : 2,
     "display" : False
 }
 
@@ -76,7 +77,7 @@ def _get_observation_shape(bc_params):
     obs_shape = base_env.featurize_state_mdp(dummy_state)[0].shape
     return obs_shape
 
-# For lazing loading the default params. Prevents loading on every import of this module 
+# For lazing loading the default params. Prevents loading on every import of this module
 def get_default_bc_params():
     global _params_initalized, DEFAULT_BC_PARAMS
     if not _params_initalized:
@@ -125,14 +126,24 @@ def build_bc_model(use_lstm=True, eager=False, **kwargs):
         return _build_lstm_model(**kwargs)
     else:
         return _build_model(**kwargs)
-    
 
-def train_bc_model(model_dir, bc_params, verbose=False):
-    inputs, seq_lens, targets = load_data(bc_params, verbose)
+def initialized_bc_model(model_dir, bc_params):
+    model = build_bc_model(**bc_params)
+    save_bc_model(model_dir, model, bc_params)
+    return model
+
+def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
+    # The preprocessed_data is added to allow direct feed of data into the bc model
+    if preprocessed_data:
+        inputs = preprocessed_data['inputs']
+        seq_lens = preprocessed_data['seq_lens']
+        targets = preprocessed_data['targets']
+    else:
+        inputs, seq_lens, targets = load_data(bc_params, verbose)
 
     training_params = bc_params["training_params"]
 
-    
+
     if training_params['use_class_weights']:
         # Get class counts, and use these to compute balanced class weights
         classes, counts = np.unique(targets.flatten(), return_counts=True)
@@ -196,10 +207,19 @@ def train_bc_model(model_dir, bc_params, verbose=False):
 
     # Batch size doesn't include time dimension (seq_len) so it should be smaller for rnn model
     batch_size = 1 if bc_params['use_lstm'] else training_params['batch_size']
-    model.fit(inputs, targets, callbacks=callbacks, batch_size=batch_size, 
-                epochs=training_params['epochs'], validation_split=training_params["validation_split"],
-                class_weight=class_weights,
-                verbose=2 if verbose else 0)
+    best_eval_score_so_far = 0
+    eval_scores = []
+    for i in range(training_params['epochs']//training_params['slice_freq']):
+        print("slice", i)
+        print(eval_scores)
+        model.fit(inputs, targets, callbacks=callbacks, batch_size=batch_size,
+                    epochs=training_params['slice_freq'], validation_split=training_params["validation_split"],
+                    class_weight=class_weights,
+                    verbose=2 if verbose else 0)
+        eval_score = evaluate_bc_model(model, bc_params)
+        # early breaking if eval score start to go down significantly
+        best_eval_score_so_far = max(eval_score, best_eval_score_so_far)
+        eval_scores.append(eval_score)
 
     # Save the model
     save_bc_model(model_dir, model, bc_params)
@@ -236,6 +256,19 @@ def load_bc_model(model_dir):
         bc_params = pickle.load(f)
     return model, bc_params
 
+def load_bc_agent(model_dir, agent_index, featurize_fn=None):
+    model, bc_params = load_bc_model(model_dir)
+    policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)
+    if featurize_fn is None:
+        layout_name = bc_params["mdp_params"]["layout_name"]
+        dummy_mdp = OvercookedGridworld.from_layout_name(layout_name)
+        mlam = MediumLevelActionManager.from_pickle_or_compute(dummy_mdp, NO_COUNTERS_PARAMS, force_compute=True)
+        featurize_fn = lambda state: dummy_mdp.featurize_state(state, mlam)
+
+    bc_agent = RlLibAgent(policy, agent_index=agent_index, featurize_fn=featurize_fn)
+    return bc_agent
+
+
 def evaluate_bc_model(model, bc_params):
     """
     Creates an AgentPair object containing two instances of BC Agents, whose policies are specified by `model`. Runs
@@ -265,12 +298,12 @@ def evaluate_bc_model(model, bc_params):
     agent_1_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)
 
     # Compute the results of the rollout(s)
-    results = evaluate(eval_params=evaluation_params, 
-                       mdp_params=mdp_params, 
+    results = evaluate(eval_params=evaluation_params,
+                       mdp_params=mdp_params,
                        outer_shape=None,
-                       agent_0_policy=agent_0_policy, 
-                       agent_1_policy=agent_1_policy, 
-                       agent_0_featurize_fn=featurize_fn, 
+                       agent_0_policy=agent_0_policy,
+                       agent_1_policy=agent_1_policy,
+                       agent_0_featurize_fn=featurize_fn,
                        agent_1_featurize_fn=featurize_fn)
 
     # Compute the average sparse return obtained in each rollout
