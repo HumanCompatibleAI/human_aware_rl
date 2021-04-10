@@ -11,7 +11,7 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
-from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal
+from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal, DEFAULT_TOM_PARAMES
 from datetime import datetime
 import tempfile
 import gym
@@ -568,7 +568,7 @@ def gen_trainer_from_params(params, load_only=False):
     environment_params = params['environment_params']
     evaluation_params = params['evaluation_params']
     bc_params = params['bc_params']
-    tom_params = params['tom_params']
+    tom_params = params['tom_params'] if 'tom_params' in params else DEFAULT_TOM_PARAMS
     multi_agent_params = params['environment_params']['multi_agent_params']
 
     env = OvercookedMultiAgent.from_config(environment_params)
