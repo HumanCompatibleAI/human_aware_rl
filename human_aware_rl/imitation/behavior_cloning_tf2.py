@@ -8,7 +8,9 @@ from human_aware_rl.static import HUMAN_DATA_PATH
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
 from overcooked_ai_py.mdp.actions import Action
+from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.mdp.overcooked_env import DEFAULT_ENV_PARAMS
+from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
 from ray.rllib.policy import Policy as RllibPolicy
 
 #################
@@ -34,6 +36,7 @@ DEFAULT_MLP_PARAMS = {
 DEFAULT_TRAINING_PARAMS = {
     "epochs" : 100,
     "slice_freq": 10,
+    "seed": 0,
     "validation_split" : 0.15,
     "batch_size" : 64,
     "learning_rate" : 1e-3,
@@ -152,6 +155,14 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
     else:
         # Default is uniform class weights
         class_weights = None
+
+    if "seed" in training_params and training_params["seed"] != 0:
+        seed = training_params["seed"]
+        print("USING SPECIFIC SEED", seed)
+        np.random.seed(seed)
+        tf.random.set_seed(seed)
+    else:
+        print("DOES NOT USE CUSTOM SEED")
 
     # Retrieve un-initialized keras model
     model = build_bc_model(**bc_params, max_seq_len=np.max(seq_lens))

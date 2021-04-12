@@ -3,9 +3,8 @@ import numpy as np
 import inspect
 
 DEFAULT_TOM_PARAMES = {
-    "tom_policy_cls": ToMPolicy,
     "tom_config": {
-        "stochastic": tom_stochastic,
+        "stochastic": False,
         "tom_attributes": {
             "prob_random_action": 0,
             "compliance": 0.5,
