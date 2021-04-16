@@ -30,7 +30,7 @@ DEFAULT_MLP_PARAMS = {
     # Number of fully connected layers to use in our network
     "num_layers" : 2,
     # Each int represents a layer of that hidden size
-    "net_arch" : [128, 64]
+    "net_arch" : [64, 64]
 }
 
 DEFAULT_TRAINING_PARAMS = {
@@ -39,13 +39,13 @@ DEFAULT_TRAINING_PARAMS = {
     "seed": 0,
     "validation_split" : 0.15,
     "batch_size" : 64,
-    "learning_rate" : 1e-3,
+    "learning_rate" : 5e-4,
     "use_class_weights" : False
 }
 
 DEFAULT_EVALUATION_PARAMS = {
     "ep_length" : 400,
-    "num_games" : 2,
+    "num_games" : 20,
     "display" : False
 }
 
@@ -220,6 +220,8 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
     batch_size = 1 if bc_params['use_lstm'] else training_params['batch_size']
     best_eval_score_so_far = 0
     eval_scores = []
+    TIMEOUT = 3
+    ticking = 0
     for i in range(training_params['epochs']//training_params['slice_freq']):
         print("slice", i)
         print(eval_scores)
@@ -228,12 +230,21 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
                     class_weight=class_weights,
                     verbose=2 if verbose else 0)
         eval_score = evaluate_bc_model(model, bc_params)
-        # early breaking if eval score start to go down significantly
+        # save the best bc model
+        if eval_score > best_eval_score_so_far:
+            # Save the model
+            print("new best:", eval_score)
+            save_bc_model(model_dir, model, bc_params)
+            # reset the tick
+            ticking = 0
+        else:
+            ticking += 1
+            if ticking > TIMEOUT:
+                print("breaking out due to failure to improve after %d steps" % TIMEOUT)
+                print("best is ", best_eval_score_so_far)
+                break
         best_eval_score_so_far = max(eval_score, best_eval_score_so_far)
         eval_scores.append(eval_score)
-
-    # Save the model
-    save_bc_model(model_dir, model, bc_params)
 
     return model
     
