@@ -619,7 +619,11 @@ def gen_trainer_from_params(params, load_only=False):
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
-    all_policies = ['ppo', 'tom', 'bc']
+    # resolve attempt to load bc checkpoint on load_only executions
+    if load_only:
+        all_policies = ['ppo']
+    else:
+        all_policies = ['ppo', 'tom', 'bc']
 
     eval_policies = ['ppo']
 
