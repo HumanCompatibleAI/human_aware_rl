@@ -220,8 +220,7 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
     batch_size = 1 if bc_params['use_lstm'] else training_params['batch_size']
     best_eval_score_so_far = 0
     eval_scores = []
-    TIMEOUT = 3
-    ticking = 0
+
     for i in range(training_params['epochs']//training_params['slice_freq']):
         print("slice", i)
         print(eval_scores)
@@ -235,18 +234,13 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
             # Save the model
             print("new best:", eval_score)
             save_bc_model(model_dir, model, bc_params)
-            # reset the tick
-            ticking = 0
-        else:
-            ticking += 1
-            if ticking > TIMEOUT:
-                print("breaking out due to failure to improve after %d steps" % TIMEOUT)
-                print("best is ", best_eval_score_so_far)
-                break
         best_eval_score_so_far = max(eval_score, best_eval_score_so_far)
         eval_scores.append(eval_score)
-
-    return model
+    # save the eval scores as a pickle file
+    with open(model_dir + '/eval_scores.pickle', 'wb') as handle:
+        pickle.dump(eval_scores, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    best_model = load_bc_model(model_dir)
+    return best_model
     
 
 
