@@ -1,6 +1,10 @@
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
+from human_aware_rl.data_dir import DATA_DIR
 import numpy as np
 import inspect
+import os
+
+DEFAULT_BC_DATA_DIR = os.path.join(DATA_DIR, "bc_runs", "default")
 
 DEFAULT_TOM_PARAMES = {
     "tom_config": {

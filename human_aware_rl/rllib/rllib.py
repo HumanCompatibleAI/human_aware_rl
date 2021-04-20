@@ -11,7 +11,7 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
-from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal, DEFAULT_TOM_PARAMES
+from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal, DEFAULT_BC_DATA_DIR, DEFAULT_TOM_PARAMES
 from datetime import datetime
 import tempfile
 import gym
@@ -568,6 +568,8 @@ def gen_trainer_from_params(params, load_only=False):
     environment_params = params['environment_params']
     evaluation_params = params['evaluation_params']
     bc_params = params['bc_params']
+    if load_only:
+        bc_params["bc_config"]["model_dir"] = DEFAULT_BC_DATA_DIR
     tom_params = params['tom_params'] if 'tom_params' in params else DEFAULT_TOM_PARAMS
     multi_agent_params = params['environment_params']['multi_agent_params']
 
@@ -621,19 +623,17 @@ def gen_trainer_from_params(params, load_only=False):
     multi_agent_config = {}
     # resolve attempt to load bc checkpoint on load_only executions
     eval_policies = ['ppo']
-    if load_only:
-        all_policies = ['ppo']
-    else:
-        all_policies = ['ppo', 'tom', 'bc']
-        # Whether to include bc in evaluation
-        if not iterable_equal(multi_agent_params['bc_schedule'], OvercookedMultiAgent.self_play_bc_schedule):
-            print("EVALUATING WITH BC BECAUSE OF TRAINING WITH IT")
-            eval_policies.append('bc')
 
-        # Whether to include tom in evaluation
-        if not iterable_equal(multi_agent_params['tom_schedule'], OvercookedMultiAgent.self_play_tom_schedule):
-            print("EVALUTATING WITH TOM BECAUSE OF TRAINING WITH IT")
-            eval_policies.append('tom')
+    all_policies = ['ppo', 'tom', 'bc']
+    # Whether to include bc in evaluation
+    if not iterable_equal(multi_agent_params['bc_schedule'], OvercookedMultiAgent.self_play_bc_schedule):
+        print("EVALUATING WITH BC BECAUSE OF TRAINING WITH IT")
+        eval_policies.append('bc')
+
+    # Whether to include tom in evaluation
+    if not iterable_equal(multi_agent_params['tom_schedule'], OvercookedMultiAgent.self_play_tom_schedule):
+        print("EVALUTATING WITH TOM BECAUSE OF TRAINING WITH IT")
+        eval_policies.append('tom')
 
     multi_agent_config['policies'] = { policy : gen_policy(policy) for policy in all_policies }
 
