@@ -11,6 +11,7 @@ from overcooked_ai_py.mdp.layout_generator import LayoutGenerator
 from overcooked_ai_py.mdp.layout_evaluator import stats_from_analaysis
 
 from human_aware_rl.rllib.rllib import load_agent_pair, load_agent
+from human_aware_rl.imitation.behavior_cloning_tf2 import load_bc_agent
 
 # Whether or not to display the game during evaluation process
 DISPLAY = False
@@ -33,10 +34,12 @@ def single_layout_stats(evaluator, agent_pair, num_games=5):
     """
     trajectory = evaluator.evaluate_agent_pair(agent_pair=agent_pair, num_games=num_games, native_eval=True, display=DISPLAY)
     sparse_reward_arr = trajectory["ep_returns"]
+    ep_states = trajectory["ep_states"]
+    ep_actions = trajectory["ep_actions"]
 
     if PRINTING:
         print("sparse rewards", sparse_reward_arr)
-    return sparse_reward_arr, [], [], []
+    return sparse_reward_arr, [], [], [], ep_states, ep_actions
 
 
 def agent_pair_lst_compare_stats(evaluator, agent_pair_lst, num_layouts=1, num_games_per_layout=40):
@@ -54,6 +57,9 @@ def agent_pair_lst_compare_stats(evaluator, agent_pair_lst, num_layouts=1, num_g
     sparse_reward_mean_lst = np.zeros((num_layouts, num_agent_pairs))
     sparse_reward_std_lst = np.zeros((num_layouts, num_agent_pairs))
 
+    # trajectory dictionary (state + actions) for the rollouts
+    traj_record = {}
+
     for i in range(num_layouts):
         if PRINTING:
             print("layout", i)
@@ -64,16 +70,21 @@ def agent_pair_lst_compare_stats(evaluator, agent_pair_lst, num_layouts=1, num_g
             print("===========================================")
             # print(evaluator.env.mdp.layout_name)
         layout_namelst.append(evaluator.env.mdp.layout_name)
+        # initialize the dictionary
+        traj_record[evaluator.env.mdp.layout_name] = {}
         for j in range(num_agent_pairs):
             if PRINTING:
                 print("starting pair", j)
             agent_pair = agent_pair_lst[j]
             # to ensure that starting position for each agent pair is the same
             assert evaluator.env.mdp.layout_name == layout_namelst[-1]
-            sr, c1, c2, c3 = single_layout_stats(evaluator, agent_pair, num_games_per_layout)
+            sr, c1, c2, c3, ep_states, ep_actions = single_layout_stats(evaluator, agent_pair, num_games_per_layout)
             spares_reward_lst[i][j] = np.array(sr)
             sparse_reward_mean_lst[i][j] = np.mean(sr)
             sparse_reward_std_lst[i][j] = np.std(sr)
+            # convert ep_states to dictionaries
+            ep_states_dict = [[state.to_dict() for state in ep_states_i] for ep_states_i in ep_states]
+            traj_record[evaluator.env.mdp.layout_name][j] = [ep_states_dict, ep_actions]
         evaluator.env.reset(regen_mdp=True)
 
     if PRINTING:
@@ -89,6 +100,9 @@ def agent_pair_lst_compare_stats(evaluator, agent_pair_lst, num_layouts=1, num_g
 
     with open(SAVE_DIR + 'stats' + file_name + '.pkl', 'wb') as f:
         pickle.dump(stats_lst, f)
+
+    with open(SAVE_DIR + 'traj' + file_name + '.pkl', 'wb') as f:
+        pickle.dump(traj_record, f)
 
     np.savez(SAVE_DIR + 'data' + file_name + ".npz",
              sparse_reward_lst=spares_reward_lst,
@@ -184,18 +198,22 @@ def from_params_stats_ppo_agent_pair_lst_human_play(mdp_gen_param, include_greed
             agent_pair_lst.append(agent_pair_9)
 
         for h_checkpoint_path in h_checkpoint_path_lst:
+            if h_checkpoint_path.startswith("bc_runs"):
+                agent_h_2i = load_bc_agent(h_checkpoint_path, agent_index=1,
+                                         featurize_fn=lambda state: eva.env.featurize_state_mdp(state))
+                agent_h_2i_plus_one = load_bc_agent(h_checkpoint_path, agent_index=0,
+                                                  featurize_fn=lambda state: eva.env.featurize_state_mdp(state))
+            else:
+                raise NotImplementedError("only support bc checkpoint now. Trying to load %s" % h_checkpoint_path )
+
             agent_2i = load_agent(ai_checkpoint_path, agent_index=0,
                                  featurize_fn=lambda state: eva.env.lossless_state_encoding_mdp(state))
-            agent_bc_2i = load_agent(h_checkpoint_path, policy_id='bc', agent_index=1,
-                                 featurize_fn=lambda state: eva.env.featurize_state(state))
-            agent_pair_2i = AgentPair(agent_2i, agent_bc_2i)
+            agent_pair_2i = AgentPair(agent_2i, agent_h_2i)
             agent_pair_lst.append(agent_pair_2i)
 
-            agent_bc_2i_plus_one = load_agent(h_checkpoint_path, policy_id='bc', agent_index=0,
-                                 featurize_fn=lambda state: eva.env.featurize_state(state))
             agent_2i_plus_one = load_agent(ai_checkpoint_path, agent_index=1,
                                  featurize_fn=lambda state: eva.env.lossless_state_encoding_mdp(state))
-            agent_pair_2i_plus_one = AgentPair(agent_bc_2i_plus_one, agent_2i_plus_one)
+            agent_pair_2i_plus_one = AgentPair(agent_h_2i_plus_one, agent_2i_plus_one)
             agent_pair_lst.append(agent_pair_2i_plus_one)
 
     if include_greedy_human:
@@ -225,11 +243,14 @@ def from_params_stats_ppo_agent_pair_lst_human_play(mdp_gen_param, include_greed
         agent_pair_lst.append(agent_pair_g89)
 
     for h_checkpoint_path in h_checkpoint_path_lst:
-        agent_bc_i = load_agent(h_checkpoint_path, policy_id='bc', agent_index=0,
-                              featurize_fn=lambda state: eva.env.featurize_state(state))
-        agent_bc_i_plus_one = load_agent(h_checkpoint_path, policy_id='bc', agent_index=1,
-                                 featurize_fn=lambda state: eva.env.featurize_state(state))
-        agent_pair_i = AgentPair(agent_bc_i, agent_bc_i_plus_one)
+        if h_checkpoint_path.startswith("bc_runs"):
+            agent_h_i = load_bc_agent(h_checkpoint_path, agent_index=0,
+                                  featurize_fn=lambda state: eva.env.featurize_state_mdp(state))
+            agent_h_i_plus_one = load_bc_agent(h_checkpoint_path, agent_index=1,
+                                     featurize_fn=lambda state: eva.env.featurize_state_mdp(state))
+        else:
+            raise NotImplementedError("only support bc checkpoint now. Trying to load %s" % h_checkpoint_path )
+        agent_pair_i = AgentPair(agent_h_i, agent_h_i_plus_one)
         agent_pair_lst.append(agent_pair_i)
 
     return agent_pair_lst_compare_stats(eva, agent_pair_lst, num_layouts, num_games)

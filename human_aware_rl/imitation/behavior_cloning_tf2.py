@@ -236,6 +236,7 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
             save_bc_model(model_dir, model, bc_params)
         best_eval_score_so_far = max(eval_score, best_eval_score_so_far)
         eval_scores.append(eval_score)
+    print("FINAL EVAL_SCORES", eval_scores)
     # save the eval scores as a pickle file
     with open(model_dir + '/eval_scores.pickle', 'wb') as handle:
         pickle.dump(eval_scores, handle, protocol=pickle.HIGHEST_PROTOCOL)

@@ -128,6 +128,18 @@ def custom_h_cp_path_lst_box(form_item_layout=DEFAULT_FORM_ITEM_LAYOUT):
         layout=form_item_layout
     )
 
+def custom_bc_cp_path_lst_box(form_item_layout=DEFAULT_FORM_ITEM_LAYOUT):
+    """
+    Return a Box that takes in a string-list of behavior cloning checkpoint paths, separated by comma
+    """
+    return Box(
+        [Label(value='custom_bc_cp_path_lst'),
+         Textarea(
+             placeholder='Enter relative path from bc_runs directory, separated by comma',
+         )],
+        layout=form_item_layout
+    )
+
 ##### visualization params Boxes #####
 
 def load_path_box(default_value, form_item_layout=DEFAULT_FORM_ITEM_LAYOUT):
@@ -182,6 +194,17 @@ def custom_h_cp_display_lst_box(form_item_layout=DEFAULT_FORM_ITEM_LAYOUT):
          )], layout=form_item_layout
     )
 
+def custom_bc_cp_display_lst_box(form_item_layout=DEFAULT_FORM_ITEM_LAYOUT):
+    """
+    Return a Box that takes in a string-list of bc checkpoint display, separated by comma
+    """
+    return Box(
+        [Label(value='custom_bc_cp_display_lst'),
+         Textarea(
+             placeholder='Enter display name for bc cp agent, separated by comma',
+         )], layout=form_item_layout
+    )
+
 
 def save_fig_box(default_value="True", form_item_layout=DEFAULT_FORM_ITEM_LAYOUT):
     """
@@ -227,7 +250,16 @@ def parse_custom_h_cp_path_lst_org(custom_h_cp_path_lst_org):
         custom_h_cp_path_lst_arg = ""
     return custom_h_cp_path_lst, custom_h_cp_path_lst_arg
 
-
+def parse_custom_bc_cp_path_lst_org(custom_bc_cp_path_lst_org):
+    custom_bc_cp_path_lst = parse_str_to_lst(custom_bc_cp_path_lst_org)
+    if custom_bc_cp_path_lst:
+        custom_bc_cp_path_lst = ["bc_runs/" + path for path in custom_bc_cp_path_lst]
+        custom_bc_cp_path_lst_str = " ".join(custom_bc_cp_path_lst)
+        custom_bc_cp_path_lst_arg = "-bcc %s" % custom_bc_cp_path_lst_str
+    else:
+        # we don't want to pass in the -hc flag unless there are actally more than 1 custom checkpoint
+        custom_bc_cp_path_lst_arg = ""
+    return custom_bc_cp_path_lst, custom_bc_cp_path_lst_arg
 
 ################################
 ########### OPTION 1 ###########
