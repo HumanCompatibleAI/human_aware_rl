@@ -84,6 +84,9 @@ class RlLibAgent(Agent):
 
         return agent_action, agent_action_info
 
+    def set_featurize_fn(self, featurize_fn):
+        self.featurize = featurize_fn
+
 
 class OvercookedMultiAgent(MultiAgentEnv):
     """
