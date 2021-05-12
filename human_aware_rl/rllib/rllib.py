@@ -11,7 +11,7 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
-from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal, DEFAULT_BC_DATA_DIR, DEFAULT_TOM_PARAMES
+from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal, DEFAULT_BC_DATA_DIR, DEFAULT_TOM_PARAMS
 from datetime import datetime
 import tempfile
 import gym

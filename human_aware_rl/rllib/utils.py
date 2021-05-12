@@ -6,7 +6,7 @@ import os
 
 DEFAULT_BC_DATA_DIR = os.path.join(DATA_DIR, "bc_runs", "default")
 
-DEFAULT_TOM_PARAMES = {
+DEFAULT_TOM_PARAMS = {
     "tom_config": {
         "stochastic": False,
         "tom_attributes": {
