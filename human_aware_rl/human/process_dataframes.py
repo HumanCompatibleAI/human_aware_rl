@@ -7,8 +7,7 @@ from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.utils import mean_and_std_err
 
 from human_aware_rl.data_dir import DATA_DIR
-from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to_overcooked_single, \
-    extract_df_for_worker_on_layout, df_traj_to_python_joint_traj
+from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to_overcooked_single, df_traj_to_python_joint_traj
 
 
 ######################

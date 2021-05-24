@@ -5,6 +5,8 @@ from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedState, ObjectState, PlayerState, OvercookedGridworld
 
+AI_ID = 'I am robot, bite my shiny metal ass!'
+
 
 ####################
 # CONVERSION UTILS #
@@ -33,7 +35,10 @@ def json_state_to_python_state(df_state):
 
 
 def extract_df_for_worker_on_layout(main_trials, worker_id, layout_name):
-    """Extract trajectory for a specific layout and worker pair from main_trials df"""
+    """
+    WARNING: this function has been deprecated and is no longer compatible with current schema
+    Extract trajectory for a specific layout and worker pair from main_trials df
+    """
     worker_trajs_df = main_trials[main_trials['workerid_num'] == worker_id]
     worker_layout_traj_df = worker_trajs_df[worker_trajs_df['layout_name'] == layout_name]
     return worker_layout_traj_df

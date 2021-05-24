@@ -1,14 +1,10 @@
 import unittest, os, shutil, copy, pickle, random, argparse, sys
 import numpy as np
 import tensorflow as tf
+from human_aware_rl.utils import set_global_seed
 from human_aware_rl.imitation.behavior_cloning_tf2 import BC_SAVE_DIR, get_default_bc_params, train_bc_model, build_bc_model, save_bc_model, load_bc_model, evaluate_bc_model
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
 from human_aware_rl.static import BC_EXPECTED_DATA_PATH
-
-def set_global_seed(seed):
-    random.seed(seed)
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
 
 class TestBCTraining(unittest.TestCase):
 
