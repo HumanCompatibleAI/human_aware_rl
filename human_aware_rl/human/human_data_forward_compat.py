@@ -29,37 +29,50 @@ def write_csv(data, output_file_path):
 
 
 def main(input_file, output_file, is_human_ai=False):
+    ### Load in data ###
     print("Loading data from {}...".format(input_file))
     data = pd.read_csv(input_file, header=0)
     print("Success!")
 
 
+    ### Update schema ###
     print("Updating schema...")
+
+    # Ensure proper legacy schema
     assert (set(data.columns) == OLD_SCHEMA), "Input data has unexected schema"
     
+    # add unique trial_id to each game. A game is defined as a single trajectory on a single layout. 
+    # This only works because the data is stored in chronological order
     data['trial_id'] = (data['layout_name'] != data['layout_name'].shift(1)).astype(int).cumsum() - 1
+
+    # Unique for each human-human pairing. Note, one pairing will play multiple games
     data['pairing_id'] = (data['workerid_num'] != data['workerid_num'].shift(1)).astype(int).cumsum()
+
+    # Drop redundant games
+    # Note: this is necessary due to how data was collected on the backend. If player A and B are paired, the game is recorded twice.
+    # once with player A as player 0 and once with player B as player 0
+    data = data[data['is_leader']]
 
 
     if not is_human_ai:
         data['player_0_is_human'] = True
         data['player_1_is_human'] = True
-        data['player_0_id'] = str(data['pairing_id'] * 2)
-        data['player_1_id'] = str(data['pairing_id'] * 2 + 1)
+        data['player_0_id'] = (data['pairing_id'] * 2).astype(str)
+        data['player_1_id'] = (data['pairing_id'] * 2 + 1).astype(str)
     else:
         data['player_0_is_human'] = True
         data['player_1_is_human'] = False
-        data['player_0_id'] = str(data['pairing_id'])
+        data['player_0_id'] = data['pairing_id'].astype(str)
         data['player_1_id'] = AI_ID
 
-    columns_to_drop = (OLD_SCHEMA - NEW_SCHEMA).union(set(['pairing_id']))
 
+    columns_to_drop = (OLD_SCHEMA - NEW_SCHEMA).union(set(['pairing_id']))
     data = data.drop(columns=columns_to_drop)
 
     assert (set(data.columns == NEW_SCHEMA)), "Output data has misformed schema"
-
     print("Success!")
 
+    ### Write out data ###
     print("Writing data to {}...".format(output_file))
     write_csv(data, output_file)
     print("Success!")
