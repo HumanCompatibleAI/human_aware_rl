@@ -3,6 +3,7 @@ import re
 import git
 import shutil
 import random
+import itertools
 import numpy as np
 import tensorflow as tf
 
@@ -119,3 +120,16 @@ class Node(object):
         self.agent_name = agent_name
         self.params = params
         self.parent = parent
+
+def get_flattened_keys(dictionary):
+    if type(dictionary) != dict:
+        return []
+    return list(dictionary.keys()) + list(itertools.chain(*[get_flattened_keys(dictionary[key]) for key in dictionary]))
+
+def recursive_dict_update(map, key, value):
+    if type(map) != dict:
+        return False
+    if key in map:
+        map[key] = value
+        return True
+    return any([recursive_dict_update(child, key, value) for child in map.values()])

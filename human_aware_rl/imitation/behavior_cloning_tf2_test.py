@@ -4,7 +4,7 @@ import tensorflow as tf
 from human_aware_rl.utils import set_global_seed
 from human_aware_rl.imitation.behavior_cloning_tf2 import BC_SAVE_DIR, get_default_bc_params, train_bc_model, build_bc_model, save_bc_model, load_bc_model, evaluate_bc_model
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
-from human_aware_rl.static import BC_EXPECTED_DATA_PATH
+from human_aware_rl.static import BC_EXPECTED_DATA_PATH, DUMMY_HUMAN_DATA_PATH
 
 class TestBCTraining(unittest.TestCase):
 
@@ -26,7 +26,7 @@ class TestBCTraining(unittest.TestCase):
     
     def setUp(self):
         set_global_seed(0)
-        self.bc_params = get_default_bc_params()
+        self.bc_params = get_default_bc_params(**{"data_path" : DUMMY_HUMAN_DATA_PATH})
         self.bc_params["mdp_params"]["layout_name"] = "cramped_room"
         self.bc_params["training_params"]["epochs"] = 1
         self.model_dir = os.path.join(BC_SAVE_DIR, "test_model")

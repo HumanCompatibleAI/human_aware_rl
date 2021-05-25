@@ -15,6 +15,8 @@ AI_ID = 'I am robot, bite my shiny metal ass!'
 def json_action_to_python_action(action):
     if type(action) is list:
         action = tuple(action)
+    if type(action) is str:
+        action = action.lower()
     assert action in Action.ALL_ACTIONS
     return action
 
@@ -22,7 +24,12 @@ def json_action_to_python_action(action):
 def json_joint_action_to_python_action(json_joint_action):
     """Port format from javascript to python version of Overcooked"""
     if type(json_joint_action) is str:
-        json_joint_action = json.loads(json_joint_action)
+        try:
+            json_joint_action = json.loads(json_joint_action)
+        except json.decoder.JSONDecodeError:
+            # hacky fix to circumvent 'INTERACT' action being malformed json (because of single quotes)
+            # Might need to find a more robust way around this in the future
+            json_joint_action = eval(json_joint_action)
     return tuple(json_action_to_python_action(a) for a in json_joint_action)
 
 
@@ -32,6 +39,14 @@ def json_state_to_python_state(df_state):
         df_state = json.loads(df_state)
 
     return OvercookedState.from_dict(df_state)
+
+def is_interact(joint_action):
+    joint_action = json_joint_action_to_python_action(joint_action)
+    return np.array([int(joint_action[0] == Action.INTERACT), int(joint_action[1] == Action.INTERACT)])
+
+def is_button_press(joint_action):
+    joint_action = json_joint_action_to_python_action(joint_action)
+    return np.array([int(joint_action[0] != Action.STAY), int(joint_action[1] != Action.STAY)])
 
 
 def extract_df_for_worker_on_layout(main_trials, worker_id, layout_name):
