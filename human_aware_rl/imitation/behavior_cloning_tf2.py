@@ -1,4 +1,3 @@
-from human_aware_rl.human_aware_rl.static import CLEAN_2019_HUMAN_DATA_TRAIN
 import os, pickle, copy
 from tensorflow import keras
 import tensorflow as tf
