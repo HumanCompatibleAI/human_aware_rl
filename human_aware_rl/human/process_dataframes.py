@@ -6,7 +6,8 @@ from collections import defaultdict
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.utils import mean_and_std_err
 
-from human_aware_rl.data_dir import DATA_DIR
+from human_aware_rl.utils import get_dict_stats
+from human_aware_rl.static import CLEAN_HUMAN_DATA_TEST, CLEAN_HUMAN_DATA_TRAIN
 from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to_overcooked_single, df_traj_to_python_joint_traj, is_button_press, is_interact
 
 
@@ -14,25 +15,19 @@ from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to
 # HIGH LEVEL METHODS #
 ######################
 
-def get_human_human_trajectories(layouts, dataset_type, processed=False):
+def get_human_human_trajectories(layouts, dataset_type, processed=False, ordered_trajs=False):
     """Get human-human trajectories"""
     assert dataset_type in ["train", "test"]
-    # please double check this
-    from human_aware_rl.imitation.behavior_cloning_tf2 import DEFAULT_BC_PARAMS
+
+    data_path = CLEAN_HUMAN_DATA_TRAIN if dataset_type == 'train' else CLEAN_HUMAN_DATA_TEST
 
     expert_data = {}
     for layout in layouts:
-        print(layout)
-        bc_params = copy.deepcopy(DEFAULT_BC_PARAMS)
-        bc_params["data_params"]['train_mdps'] = [layout]
-        bc_params["data_params"]['data_path'] = DATA_DIR + "human/anonymized/clean_{}_trials.pkl".format(dataset_type)
-        bc_params["mdp_params"]['layout_name'] = layout
-        bc_params["mdp_params"]['start_order_list'] = None
-        expert_data[layout] = get_trajs_from_data(**bc_params["data_params"], silent=True, processed=processed)[0]
+        expert_data[layout] = get_trajs_from_data(data_path, train_mdps=[layout], ordered_trajs=ordered_trajs, silent=True, processed=processed)[0]
 
     return expert_data
 
-def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshold=0.25):
+def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshold=0.25, train_test_split=True, **kwargs):
     """
     High level function that converts raw CSV data into well formatted and cleaned pickled pandas dataframes.
 
@@ -42,33 +37,43 @@ def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshol
         - out_file_prefix(str): common prefix for all saved files
         - button_presses_threshold (float): minimum button presses per timestep over rollout required to 
             keep entire game
+        - train_test_split (bool): Whether to partition dataset into training and testing portions
+        - kwargs (dict): keyword args to pass to all helper functions
 
     After running, the following files are created
-
-        /{out_dir}
-            - {out_file_prefix}_all.pickle
-            - {out_file_prefix}_train.pickle
-            - {out_file_prefix}_test.pickle
+        
+        if traintest_split:
+            /{out_dir}
+                - {out_file_prefix}_all.pickle
+                - {out_file_prefix}_train.pickle
+                - {out_file_prefix}_test.pickle
+        else:
+            /{out_dir}
+                - {out_file_prefix}_all.pickle
 
     Returns:
-        - clean_trials (pd.DataFrame): Dataframe containing _all_ cleaned and formatted transitions
+        if train_test_split:
+            - tuple(pd.DataFrame, pd.DateFrame): tuple of train data, test data
+        else:
+            - clean_trials (pd.DataFrame): Dataframe containing _all_ cleaned and formatted transitions
     """
     all_trials = pd.read_csv(csv_path)
-    all_trials = format_trials_df(all_trials, False)
+    all_trials = format_trials_df(all_trials, **kwargs)
     def filter_func(row):
         return row['button_presses_per_timstep'] >= button_presses_threshold
-    clean_trials = filter_trials(all_trials, filter_func)
-    cleaned_trials_dict = train_test_split(clean_trials)
-    
-    layouts = np.unique(clean_trials['layout_name'])
-    train_trials = pd.concat([cleaned_trials_dict[layout]["train"] for layout in layouts])
-    test_trials = pd.concat([cleaned_trials_dict[layout]["test"] for layout in layouts])
-    clean_trials = pd.concat([train_trials, test_trials])
+    clean_trials = filter_trials(all_trials, filter_func, **kwargs)
 
     full_outfile_prefix = os.path.join(out_dir, out_file_prefix)
     clean_trials.to_pickle(full_outfile_prefix + "_all.pickle")
-    train_trials.to_pickle(full_outfile_prefix + "_train.pickle")
-    test_trials.to_pickle(full_outfile_prefix + "_test.pickle")
+
+    if train_test_split:
+        cleaned_trials_dict = train_test_split(clean_trials, **kwargs)
+        layouts = np.unique(clean_trials['layout_name'])
+        train_trials = pd.concat([cleaned_trials_dict[layout]["train"] for layout in layouts])
+        test_trials = pd.concat([cleaned_trials_dict[layout]["test"] for layout in layouts])
+        clean_trials = pd.concat([train_trials, test_trials])
+        train_trials.to_pickle(full_outfile_prefix + "_train.pickle")
+        test_trials.to_pickle(full_outfile_prefix + "_test.pickle")
 
     return clean_trials
 
@@ -77,7 +82,7 @@ def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshol
 # DATAFRAME TO TRAJECTORIES #
 #############################
 
-def get_trajs_from_data(data_path, train_mdps, ordered_trajs, processed, silent=False):
+def get_trajs_from_data(data_path, train_mdps=['cramped_room'], ordered_trajs=False, processed=False, silent=False):
     """
     Converts and returns trajectories from dataframe at `data_path` to overcooked trajectories.
     """
@@ -97,52 +102,32 @@ def get_trajs_from_data(data_path, train_mdps, ordered_trajs, processed, silent=
 
 
 ############################
-## TRAJ DISPLAY FUNCTIONS ##
-############################
-
-def interactive_from_traj_df(df_traj):
-    python_traj = df_traj_to_python_joint_traj(df_traj)
-    AgentEvaluator.interactive_from_traj(python_traj, traj_idx=0)
-
-
-def display_interactive_by_workerid(main_trials, worker_id, limit=None):
-    print("Displaying main trials for worker", worker_id)
-    worker_trials = main_trials[main_trials['player_0_id'] == worker_id | main_trials['player_1_id'] == worker_id]
-    count = 0
-    for _, rtrials in worker_trials.groupby(['trial_id']):
-        interactive_from_traj_df(rtrials)
-        count += 1
-        if limit is not None and count >= limit:
-            return
-
-
-def display_interactive_by_layout(main_trials, layout_name, limit=None):
-    print("Displaying main trials for layout", layout_name)
-    layout_trials = main_trials[main_trials['layout_name'] == layout_name]
-    count = 0
-    for wid, wtrials in layout_trials.groupby('player_0_id'):
-        print("Worker: ", wid)
-        for _, rtrials in wtrials.groupby(['trial_id']):
-            interactive_from_traj_df(rtrials)
-            count += 1
-            if limit is not None and count >= limit:
-                return
-    for wid, wtrials in layout_trials.groupby('player_1_id'):
-        print("Worker: ", wid)
-        for _, rtrials in wtrials.groupby(['trial_id']):
-            interactive_from_traj_df(rtrials)
-            count += 1
-            if limit is not None and count >= limit:
-                return
-
-
-############################
 # DATAFRAME PRE-PROCESSING #
 ############################
 
-# General utility functions
+def format_trials_df(trials, clip_400=False, **kwargs):
+    """Get trials for layouts in standard format for data exploration, cumulative reward and length information + interactivity metrics"""
+    layouts = np.unique(trials['layout_name'])
+    print("Layouts found", layouts)
 
-def filter_trials(trials, filter):
+    if clip_400:
+        trials = trials[trials["cur_gameloop"] <= 400]
+
+    # Add game length for each round
+    trials = trials.join(trials.groupby(['trial_id'])['cur_gameloop'].count(), on=['trial_id'], rsuffix='_total')
+
+    # Calculate total reward for each round
+    trials = trials.join(trials.groupby(['trial_id'])['score'].max(), on=['trial_id'], rsuffix='_total')
+
+    # Add interactivity metadata
+    trials = _add_interactivity_metrics(trials)
+    trials['button_presses_per_timstep'] = trials['button_press_total'] / trials['cur_gameloop_total']
+
+
+    return trials
+
+
+def filter_trials(trials, filter, **kwargs):
     """
     Prune games based on user-defined fileter function
 
@@ -183,33 +168,6 @@ def filter_transitions(trials, filter):
 
     return pd.concat(cleaned_trial_dfs)
 
-
-def get_trials_scenario_and_worker_rews(trials):
-    scenario_rews = defaultdict(list)
-    worker_rews = defaultdict(list)
-    for _, trial in trials.groupby('trial_id'):
-        datapoint = trial.iloc[0]
-        layout = datapoint['layout_name']
-        player_0, player_1 = datapoint['player_0_id'], datapoint['player_1_id']
-        tot_rew = datapoint['score_total']
-        scenario_rews[layout].append(tot_rew)
-        worker_rews[player_0].append(tot_rew)
-        worker_rews[player_1].append(tot_rew)
-    return dict(scenario_rews), dict(worker_rews)
-
-
-def get_dict_stats(d):
-    new_d = d.copy()
-    for k, v in d.items():
-        new_d[k] = {
-            'mean': np.mean(v),
-            'standard_error': np.std(v) / np.sqrt(len(v)),
-            'max': np.max(v),
-            'n': len(v)
-        }
-    return new_d
-
-
 def train_test_split(trials, train_size=0.7, print_stats=False):
     cleaned_trials_dict = defaultdict(dict)
 
@@ -240,13 +198,28 @@ def train_test_split(trials, train_size=0.7, print_stats=False):
                     layout, len(train_trials), train_dset_avg_rew, len(test_trials), test_dset_avg_rew,
                 ))
 
-        # if train_dset_avg_rew > test_dset_avg_rew or test_dset_avg_rew - train_dset_avg_rew > 30:
-        #     return None
-
         cleaned_trials_dict[layout]["train"] = layout_train
         cleaned_trials_dict[layout]["test"] = layout_test
     return cleaned_trials_dict
 
+
+def get_trials_scenario_and_worker_rews(trials):
+    scenario_rews = defaultdict(list)
+    worker_rews = defaultdict(list)
+    for _, trial in trials.groupby('trial_id'):
+        datapoint = trial.iloc[0]
+        layout = datapoint['layout_name']
+        player_0, player_1 = datapoint['player_0_id'], datapoint['player_1_id']
+        tot_rew = datapoint['score_total']
+        scenario_rews[layout].append(tot_rew)
+        worker_rews[player_0].append(tot_rew)
+        worker_rews[player_1].append(tot_rew)
+    return dict(scenario_rews), dict(worker_rews)
+
+
+#####################
+# Lower-level Utils #
+#####################
 
 def remove_worker(trials, worker_id):
     return trials[trials["player_0_id"] != worker_id & trials['player_1_id'] != worker_id]
@@ -259,8 +232,6 @@ def remove_worker_on_map(trials, workerid_num, layout):
     assert to_remove.sum() > 0
     return trials[to_keep]
 
-
-## Human-human dataframe processing functions
 
 def _add_interactivity_metrics(trials):
     # this method is non-destructive
@@ -289,29 +260,13 @@ def _add_interactivity_metrics(trials):
 
     return trials
 
-def format_trials_df(trials, clip_400):
-    """Get trials for layouts in standard format for data exploration, cumulative reward and length information + interactivity metrics"""
-    layouts = np.unique(trials['layout_name'])
-    print("Layouts found", layouts)
-
-    if clip_400:
-        trials = trials[trials["cur_gameloop"] <= 400]
-
-    # Add game length for each round
-    trials = trials.join(trials.groupby(['trial_id'])['cur_gameloop'].count(), on=['trial_id'], rsuffix='_total')
-
-    # Calculate total reward for each round
-    trials = trials.join(trials.groupby(['trial_id'])['score'].max(), on=['trial_id'], rsuffix='_total')
-
-    # Add interactivity metadata
-    trials = _add_interactivity_metrics(trials)
-    trials['button_presses_per_timstep'] = trials['button_press_total'] / trials['cur_gameloop_total']
 
 
-    return trials
 
 
-## Human-AI dataframe data processing functions
+##############
+# DEPRECATED #
+##############
 
 def trial_type_by_unique_id_dict(trial_questions_df):
     trial_type_dict = {}
@@ -321,7 +276,6 @@ def trial_type_by_unique_id_dict(trial_questions_df):
         model_type, player_index = person_data['MODEL_TYPE'].iloc[0], int(person_data['PLAYER_INDEX'].iloc[0])
         trial_type_dict[unique_id] = (model_type, player_index)
     return trial_type_dict
-
 
 def add_means_and_stds_from_df(data, main_trials, algo_name):
     """Calculate means and SEs for each layout, and add them to the data dictionary under algo name `algo`"""
@@ -346,4 +300,38 @@ def add_means_and_stds_from_df(data, main_trials, algo_name):
 
         idx_1_trials = layout_trials[layout_trials['plaer_1_id'].isin(idx_1_workers)]
         data[layout][algo_name + "_1"] = mean_and_std_err(idx_1_trials.groupby('plaer_1_id')['score_total'].mean())
-pd.DataFrame(data={'a' : [0, 0, 1, 1, 1], 'b' : [1, 2, 3, 2, 1]})
+
+def interactive_from_traj_df(df_traj):
+    python_traj = df_traj_to_python_joint_traj(df_traj)
+    AgentEvaluator.interactive_from_traj(python_traj, traj_idx=0)
+
+
+def display_interactive_by_workerid(main_trials, worker_id, limit=None):
+    print("Displaying main trials for worker", worker_id)
+    worker_trials = main_trials[main_trials['player_0_id'] == worker_id | main_trials['player_1_id'] == worker_id]
+    count = 0
+    for _, rtrials in worker_trials.groupby(['trial_id']):
+        interactive_from_traj_df(rtrials)
+        count += 1
+        if limit is not None and count >= limit:
+            return
+
+
+def display_interactive_by_layout(main_trials, layout_name, limit=None):
+    print("Displaying main trials for layout", layout_name)
+    layout_trials = main_trials[main_trials['layout_name'] == layout_name]
+    count = 0
+    for wid, wtrials in layout_trials.groupby('player_0_id'):
+        print("Worker: ", wid)
+        for _, rtrials in wtrials.groupby(['trial_id']):
+            interactive_from_traj_df(rtrials)
+            count += 1
+            if limit is not None and count >= limit:
+                return
+    for wid, wtrials in layout_trials.groupby('player_1_id'):
+        print("Worker: ", wid)
+        for _, rtrials in wtrials.groupby(['trial_id']):
+            interactive_from_traj_df(rtrials)
+            count += 1
+            if limit is not None and count >= limit:
+                return

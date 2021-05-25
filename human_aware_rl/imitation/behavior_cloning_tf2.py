@@ -4,7 +4,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
-from human_aware_rl.static import DEFAULT_HUMAN_DATA_PATH
+from human_aware_rl.static import CLEAN_HUMAN_DATA_TRAIN
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.utils import recursive_dict_update, get_flattened_keys
@@ -22,7 +22,7 @@ DEFAULT_DATA_PARAMS = {
     "train_mdps": ["cramped_room"],
     "ordered_trajs": False,
     "processed" : True,
-    "data_path": DEFAULT_HUMAN_DATA_PATH
+    "data_path": CLEAN_HUMAN_DATA_TRAIN
 }
 
 DEFAULT_MLP_PARAMS = {
