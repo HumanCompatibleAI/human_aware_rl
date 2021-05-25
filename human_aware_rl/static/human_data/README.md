@@ -71,5 +71,27 @@ In the course of pre-processing, several additional columns are computed from th
 
 # Processing Utils
 
-TODO
+All data processing utils are found in the [human](../../human/) directory. 
+
+* [process_dataframes.py](../../human/process_dataframes.py)
+  * High level, user facing methods are found in this file
+  * [get_human_human_trajectories](https://github.com/HumanCompatibleAI/human_aware_rl/blob/c041369d14cdacf3de10664ef94351b4e1ad8930/human_aware_rl/human/process_dataframes.py#L18) accepts a layout name and returns de-serialized overcooked trajectories, if data for that layout exists. Highest level function used by BC training pipeline
+  * [csv_to_df_pickle](https://github.com/HumanCompatibleAI/human_aware_rl/blob/c041369d14cdacf3de10664ef94351b4e1ad8930/human_aware_rl/human/process_dataframes.py#L30) loads, processes, and filters raw CSV data and saves as pickled DataFrame
+  * [format_trials_df](https://github.com/HumanCompatibleAI/human_aware_rl/blob/c041369d14cdacf3de10664ef94351b4e1ad8930/human_aware_rl/human/process_dataframes.py#L108) helper to `csv_to_df_pickle`, this method handles all pre-processing and builds the processed schema mentioned in previous section
+  * [filter_trials](https://github.com/HumanCompatibleAI/human_aware_rl/blob/c041369d14cdacf3de10664ef94351b4e1ad8930/human_aware_rl/human/process_dataframes.py#L130) helper to `csv_to_df_pickle`, this method allows user to specify a filter function that filters entire trials
+  * [filter_transitions](https://github.com/HumanCompatibleAI/human_aware_rl/blob/c041369d14cdacf3de10664ef94351b4e1ad8930/human_aware_rl/human/process_dataframes.py#L151) allows user to specify filter function that filters at a transition-by-transition level
+* [data_processing_utils.py](../../human/data_processing_utils.py)
+  * Lower level helper functions found in this file
+  * Primarily for converting CSV and DataFrame representations into python Overcooked objects
+  * One abstraction level lower than `process_dataframs.py`, recommended to be used by advanced users only
+* [data_wrangling.ipynb](../../human/data_wrangling.ipynb)
+  * Interactive Jupyter Notebook examplifying use of the `process_dataframes` functionality
+* [process_human_trials.py](../../human/process_human_trials.py)
+  * Script for converting legacy dynamics into form comaptible with current dynamics
+  * Previously, Overcooked MDP began automatically cooking a soup once valid recipe was in pot, now, an INTERACT action is explicitely required to begin cooking
+  * This script imputes dummy INTERACT actions at every timestep where soup cooking begins
+  * See [overcooked-ai](https://github.com/HumanCompatibleAI/overcooked_ai) for more details on MDP dynamics and game rules
+* [human_data_forward_comp.py](../../human/human_data_forward_comp.py)
+  * Utils script for converting deprecated schema to updated schema listed in previous section
+  * All data currently in repo is under updated schema, so this is only included for legacy reasons
 
