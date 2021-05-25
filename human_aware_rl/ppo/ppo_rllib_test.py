@@ -2,10 +2,10 @@ import unittest, os, shutil, pickle, ray, random, argparse, sys, glob
 os.environ['RUN_ENV'] = 'local'
 from human_aware_rl.ppo.ppo_rllib_client import ex
 from human_aware_rl.ppo.ppo_rllib_from_params_client import ex_fp
-from human_aware_rl.imitation.behavior_cloning_tf2 import get_default_bc_params, train_bc_model
 from human_aware_rl.static import PPO_EXPECTED_DATA_PATH
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.rllib.rllib import load_agent, load_agent_pair
+from human_aware_rl.imitation.behavior_cloning_tf2 import train_bc_model, get_bc_params
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import tensorflow as tf
@@ -235,26 +235,28 @@ class TestPPORllib(unittest.TestCase):
             self.assertDictEqual(results, self.expected['test_ppo_fp_sp_yes_phi'])
 
 
-    # temporarily deprecated until BC is fully functional
-    # def test_ppo_bc(self):
-    #     # Train bc model
-    #     model_dir = self.temp_model_dir
-    #     bc_params = get_default_bc_params()
-    #     bc_params['training_params']['epochs'] = 10
-    #     train_bc_model(model_dir, bc_params)
-    #
-    #     # Train rllib model
-    #     results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], "num_training_iters" : 20, "bc_model_dir" : model_dir, "evaluation_interval" : 5}).result
-    #
-    #     # Sanity check
-    #     self.assertGreaterEqual(results['average_total_reward'], 20.0)
-    #
-    #     if self.compute_pickle:
-    #         self.expected['test_ppo_bc'] = results
-    #
-    #     # Reproducibility test
-    #     if self.strict:
-    #         self.assertDictEqual(results, self.expected['test_ppo_bc'])
+    def test_ppo_bc(self):
+        # Train bc model
+        model_dir = self.temp_model_dir
+        params_to_override = { 
+            "train_mdps" : ['inverse_marshmallow_experiment'],
+            "epochs" : 10
+        }
+        bc_params = get_bc_params(**params_to_override)
+        train_bc_model(model_dir, bc_params)
+    
+        # Train rllib model
+        results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], "num_training_iters" : 20, "bc_model_dir" : model_dir, "evaluation_interval" : 5}).result
+    
+        # Sanity check
+        self.assertGreaterEqual(results['average_total_reward'], 20.0)
+    
+        if self.compute_pickle:
+            self.expected['test_ppo_bc'] = results
+    
+        # Reproducibility test
+        if self.strict:
+            self.assertDictEqual(results, self.expected['test_ppo_bc'])
 
 def _clear_pickle():
     # Write an empty dictionary to our static "expected" results location
@@ -275,12 +277,12 @@ if __name__ == '__main__':
         _clear_pickle()
 
     suite = unittest.TestSuite()
-    suite.addTest(TestPPORllib('test_save_load', **args))
-    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_bc', args.compute_pickle, args.strict))
+    # suite.addTest(TestPPORllib('test_save_load', **args))
+    # suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_bc', **args))
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)
         

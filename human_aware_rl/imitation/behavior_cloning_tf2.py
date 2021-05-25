@@ -1,10 +1,11 @@
+from human_aware_rl.human_aware_rl.static import CLEAN_2019_HUMAN_DATA_TRAIN
 import os, pickle, copy
 from tensorflow import keras
 import tensorflow as tf
 import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
-from human_aware_rl.static import CLEAN_HUMAN_DATA_TRAIN
+from human_aware_rl.static import CLEAN_2019_HUMAN_DATA_TRAIN
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.utils import recursive_dict_update, get_flattened_keys
@@ -19,10 +20,10 @@ from ray.rllib.policy import Policy as RllibPolicy
 BC_SAVE_DIR = os.path.join(DATA_DIR, "bc_runs")
 
 DEFAULT_DATA_PARAMS = {
-    "train_mdps": ["cramped_room"],
-    "ordered_trajs": False,
-    "processed" : True,
-    "data_path": CLEAN_HUMAN_DATA_TRAIN
+    "layouts": ["cramped_room"],
+    "check_trajectories": False,
+    "featurize_states" : True,
+    "data_path": CLEAN_2019_HUMAN_DATA_TRAIN
 }
 
 DEFAULT_MLP_PARAMS = {
@@ -125,8 +126,15 @@ def _pad(sequences, maxlen=None, default=0):
     return sequences
 
 def load_data(bc_params, verbose):
+    print("beginning trajectory processing")
+    print(bc_params['data_params'])
     processed_trajs, _ = get_trajs_from_data(**bc_params["data_params"], silent=not verbose)
+    print("finished traj processing")
     inputs, targets = processed_trajs["ep_observations"], processed_trajs["ep_actions"]
+    print(type(inputs))
+    print(type(targets))
+    print(len(inputs))
+    print(len(targets))
 
     if bc_params['use_lstm']:
         seq_lens = np.array([len(seq) for seq in inputs])

@@ -1,3 +1,4 @@
+from human_aware_rl.static import OLD_SCHEMA, NEW_SCHEMA
 from human_aware_rl.human.data_processing_utils import AI_ID
 import pandas as pd
 import numpy as np
@@ -10,14 +11,6 @@ Note: This script, and working with the raw CSV files in general, should only be
 It is recommended that most users work with the pre-processed pickle files in /human_aware_rl/data/cleaned.
 See docs for more info
 """
-
-
-OLD_SCHEMA = set(['Unnamed: 0', 'Unnamed: 0.1', 'cur_gameloop', 'datetime', 'is_leader', 'joint_action', 'layout', 
-              'layout_name', 'next_state', 'reward', 'round_num', 'round_type', 'score', 'state', 'time_elapsed', 
-              'time_left', 'is_wait', 'completed', 'run', 'workerid_num'])
-
-NEW_SCHEMA = set(['state', 'joint_action', 'reward', 'time_left', 'score', 'time_elapsed', 'cur_gameloop', 'layout', 
-              'layout_name', 'trial_id', 'player_0_id', 'player_1_id', 'player_0_is_human', 'player_1_is_human'])
 
 def write_csv(data, output_file_path):
     if os.path.exists(output_file_path):

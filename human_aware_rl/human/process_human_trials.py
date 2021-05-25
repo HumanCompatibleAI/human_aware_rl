@@ -1,6 +1,6 @@
 import pickle
 import pandas as pd
-import json
+import json, os, argparse
 import copy
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, OvercookedState
 from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUNTERS_PARAMS
@@ -9,13 +9,8 @@ from overcooked_ai_py.planning.planners import MediumLevelActionManager, NO_COUN
 # This flag is meant to correct the fact that in the new dynamics, an additional INTERACT action is required
 # to get soups to start cooking after the last onion is dropped in
 # (previously, when the last onion is dropped in, the soup automatically start cooking).
-INSERT_COOKING_INTERACT = True
 
-# whether to display the processed states
-VERBOSE = False
-
-# which type of data we are dealing with
-DATA_TYPE = "test"
+JSON_FIXES = [('\'', '"'), ('False', 'false'), ('True', 'true'), ('INTERACT', 'interact')]
 
 '''
 First parse raw pickle file indicated using the first command
@@ -163,63 +158,76 @@ def display_state_dict_and_action(state_dict, actions):
     print()
 
 
-DATA_FILEPATH = 'clean_%s_trials.pkl' % DATA_TYPE
 
-raw_data = pd.read_pickle(DATA_FILEPATH)
-N = len(raw_data)
+def main(data_infile, data_outdir, insert_interacts, verbose):
+    raw_data = pd.read_pickle(data_infile)
+    N = len(raw_data)
 
-JSON_FIXES = [('\'', '"'), ('False', 'false'), ('True', 'true'), ('INTERACT', 'interact')]
+    print("Processing Raw Data")
+    state_action_pairs = dict()
+    i = 0
+    for index, datapoint in raw_data.iterrows():
+        i += 1
+        print(f"Processing {i}/{N}", end = '\r')
 
-print("Processing Raw Data")
-state_action_pairs = dict()
-i = 0
-for index, datapoint in raw_data.iterrows():
-    i += 1
-    print(f"Processing {i}/{N}", end = '\r')
+        layout_name = datapoint.layout_name
+        if layout_name == 'random0':
+            layout_name = 'forced_coordination'
+        elif layout_name == 'random3':
+            layout_name = 'counter_circuit_o_1order'
+        if (layout_name not in state_action_pairs):
+            state_action_pairs[layout_name] = []
 
-    layout_name = datapoint.layout_name
-    if layout_name == 'random0':
-        layout_name = 'forced_coordination'
-    elif layout_name == 'random3':
-        layout_name = 'counter_circuit_o_1order'
-    if (layout_name not in state_action_pairs):
-        state_action_pairs[layout_name] = []
+        # Fix formatting issues then parse json state
+        state = datapoint.state
+        for (old, new) in JSON_FIXES:
+            state = state.replace(old, new)
+        old_state_dict = json.loads(state)
+        state_dict, insertion_needed = old_state_dict_to_new_state_dict(old_state_dict)
 
-    # Fix formatting issues then parse json state
-    state = datapoint.state
-    for (old, new) in JSON_FIXES:
-        state = state.replace(old, new)
-    old_state_dict = json.loads(state)
-    state_dict, insertion_needed = old_state_dict_to_new_state_dict(old_state_dict)
+        actions = datapoint.joint_action
+        for (old, new) in JSON_FIXES:
+            actions = actions.replace(old, new)
+        actions = json.loads(actions)
+        actions = [tuple(a) if a != 'interact' else a for a in actions]
 
-    actions = datapoint.joint_action
-    for (old, new) in JSON_FIXES:
-        actions = actions.replace(old, new)
-    actions = json.loads(actions)
-    actions = [tuple(a) if a != 'interact' else a for a in actions]
+        # take care of insertion of interact
+        if insert_interacts and insertion_needed:
+            if verbose:
+                print("INSERTING NEEDED, PERFORMING")
+            state_dict_insert, actions_insert = insert_cooking_interact(state_dict)
+            if verbose:
+                display_state_dict_and_action(state_dict_insert, actions_insert)
+            state_action_pairs[layout_name].append((state_dict_insert, actions_insert))
+        if verbose:
+            display_state_dict_and_action(state_dict, actions)
+        state_action_pairs[layout_name].append((state_dict, actions))
+    print("Done processing raw data!")
 
-    # take care of insertion of interact
-    if INSERT_COOKING_INTERACT and insertion_needed:
-        if VERBOSE:
-            print("INSERTING NEEDED, PERFORMING")
-        state_dict_insert, actions_insert = insert_cooking_interact(state_dict)
-        if VERBOSE:
-            display_state_dict_and_action(state_dict_insert, actions_insert)
-        state_action_pairs[layout_name].append((state_dict_insert, actions_insert))
-    if VERBOSE:
-        display_state_dict_and_action(state_dict, actions)
-    state_action_pairs[layout_name].append((state_dict, actions))
-print("Done processing raw data!")
+    '''
+    Use a dummy initialization of the overcooked game to featurize states
+    and replace action with ordered indices.
+    '''
 
-'''
-Use a dummy initialization of the overcooked game to featurize states
-and replace action with ordered indices.
-'''
+    # The tag to the file such that we know whether insertion has been performed
+    filename = os.path.basename(data_infile)
+    tag = "inserted" if insert_interacts else "original"
 
-# The tag to the file such that we know whether insertion has been performed
-tag = "inserted" if INSERT_COOKING_INTERACT else "original"
+    data_outfile = os.path.join(data_outdir, filename + "_state_dict_and_action_{}.pickle".format(tag))
+    with open(data_outfile, 'wb') as f:
+        pickle.dump(state_action_pairs, f)
 
-pickle.dump(state_action_pairs, open("human_data_%s_state_dict_and_action_%s.pkl" % (DATA_TYPE, tag), "wb"))
+    return data_outfile
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--data-infile', type=str, required=True)
+    parser.add_argument('-o', '--data-outdir', type=str, required=True)
+    parser.add_argument('-ii', '-insert-interacts', action='store_true')
+    parser.add_argument('-v', '--verbose', action='store_true')
+
+    args = vars(parser.parse_args())
+    main(**args)
 
 
 

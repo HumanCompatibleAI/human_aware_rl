@@ -7,7 +7,7 @@ from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.utils import mean_and_std_err
 
 from human_aware_rl.utils import get_dict_stats
-from human_aware_rl.static import CLEAN_HUMAN_DATA_TEST, CLEAN_HUMAN_DATA_TRAIN
+from human_aware_rl.static import *
 from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to_overcooked_single, df_traj_to_python_joint_traj, is_button_press, is_interact
 
 
@@ -15,15 +15,34 @@ from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to
 # HIGH LEVEL METHODS #
 ######################
 
-def get_human_human_trajectories(layouts, dataset_type, processed=False, ordered_trajs=False):
-    """Get human-human trajectories"""
-    assert dataset_type in ["train", "test"]
+def get_human_human_trajectories(layouts, dataset_type='train', data_path=None, **kwargs):
+    """
+    Get human-human trajectories for a layout. Automatically 
 
-    data_path = CLEAN_HUMAN_DATA_TRAIN if dataset_type == 'train' else CLEAN_HUMAN_DATA_TEST
+    Arguments:
+        layouts (list): List of strings corresponding to layouts we wish to retrieve data for
+        data_path (str): Full path to pickled DataFrame we wish to load. If not specified, default to CLEAN_{2019|2020}_HUMAN_DATA_{train|test|all}
+        dataset_type (str): Either 'train', 'test', or 'all', determines which data to load if data_path=None
+
+    Keyword Arguments:
+        featurize_states (bool): Whether the states in returned trajectories should be OvercookedState objects (false) or vectorized np.Arrays (true)
+        check_trajectories (bool): If True, we ensure the consistency of the MDP dynamics within the trajectory. This is slow and has lots of overhead
+        silent (bool): If true, silence logging and print statements
+    """
+    if not set(layouts).issubset(LAYOUTS_WITH_DATA):
+        # Note: doesn't necessarily mean we'll find data for this layout as this is a loose check
+        # for example, if layouts=['cramped_room'] and the data path is CLEAN_HUMAN_DATA_{train|test|all}, no data will be found
+        raise ValueError("Layout for which no data collected detected")
+    
+    if data_path and not os.path.exists(data_path):
+        raise FileNotFoundError("Tried to load human data from {} but file does not exist!".format(data_path))
+
 
     expert_data = {}
     for layout in layouts:
-        expert_data[layout] = get_trajs_from_data(data_path, train_mdps=[layout], ordered_trajs=ordered_trajs, silent=True, processed=processed)[0]
+        # Future TODO: load in data exactly once instead of once for each layout for efficiency purposes
+        curr_data_path = _get_data_path(layout, dataset_type, data_path)
+        expert_data[layout] = get_trajs_from_data(curr_data_path, layouts=[layout], **kwargs)[0]
 
     return expert_data
 
@@ -82,20 +101,19 @@ def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshol
 # DATAFRAME TO TRAJECTORIES #
 #############################
 
-def get_trajs_from_data(data_path, train_mdps=['cramped_room'], ordered_trajs=False, processed=False, silent=False):
+def get_trajs_from_data(data_path, layouts, silent=True, **kwargs):
     """
     Converts and returns trajectories from dataframe at `data_path` to overcooked trajectories.
     """
-    print("Loading data from {}".format(data_path))
+    if not silent:
+        print("Loading data from {}".format(data_path))
 
     main_trials = pd.read_pickle(data_path)
 
     trajs, info = convert_joint_df_trajs_to_overcooked_single(
         main_trials,
-        train_mdps,
-        ordered_pairs=ordered_trajs,
-        processed=processed,
-        silent=silent
+        layouts,
+        **kwargs
     )
 
     return trajs, info
@@ -105,10 +123,11 @@ def get_trajs_from_data(data_path, train_mdps=['cramped_room'], ordered_trajs=Fa
 # DATAFRAME PRE-PROCESSING #
 ############################
 
-def format_trials_df(trials, clip_400=False, **kwargs):
+def format_trials_df(trials, clip_400=False, silent=False, **kwargs):
     """Get trials for layouts in standard format for data exploration, cumulative reward and length information + interactivity metrics"""
     layouts = np.unique(trials['layout_name'])
-    print("Layouts found", layouts)
+    if not silent:
+        print("Layouts found", layouts)
 
     if clip_400:
         trials = trials[trials["cur_gameloop"] <= 400]
@@ -260,7 +279,15 @@ def _add_interactivity_metrics(trials):
 
     return trials
 
-
+def _get_data_path(layout, dataset_type, data_path):
+    if data_path:
+        return data_path
+    if dataset_type == 'train':
+        return CLEAN_2019_HUMAN_DATA_TRAIN if layout in LAYOUTS_WITH_DATA_2019 else CLEAN_2020_HUMAN_DATA_TRAIN
+    if dataset_type == 'test':
+        return CLEAN_2019_HUMAN_DATA_TEST if layout in LAYOUTS_WITH_DATA_2019 else CLEAN_2020_HUMAN_DATA_TEST
+    if dataset_type == 'all':
+        return CLEAN_2019_HUMAN_DATA_ALL if layout in LAYOUTS_WITH_DATA_2019 else CLEAN_2020_HUMAN_DATA_ALL
 
 
 

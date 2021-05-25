@@ -59,7 +59,7 @@ def extract_df_for_worker_on_layout(main_trials, worker_id, layout_name):
     return worker_layout_traj_df
 
 
-def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
+def df_traj_to_python_joint_traj(traj_df, check_trajectories=True, **kwargs):
     if len(traj_df) == 0:
         return None
 
@@ -98,16 +98,15 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
     }
     trajectories = {k: np.array(v) if k not in ["ep_actions", "metadatas"] else v for k, v in trajectories.items()}
 
-    if complete_traj:
+    if check_trajectories:
         agent_evaluator.check_trajectories(trajectories)
     return trajectories
 
 
-def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, ordered_pairs=True, processed=False,
-                                                silent=False):
+def convert_joint_df_trajs_to_overcooked_single(main_trials, layouts, silent=False, **kwargs):
     """
     Takes in a dataframe `main_trials` containing joint trajectories, and extract trajectories of workers `worker_ids`
-    on layouts `layout_names`, with specific options.
+    on layouts `layouts`, with specific options.
     """
 
     single_agent_trajectories = {
@@ -128,7 +127,7 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, order
 
     human_indices = []
     num_trials_for_layout = {}
-    for layout_name in layout_names:
+    for layout_name in layouts:
         trial_ids = np.unique(main_trials[main_trials['layout_name'] == layout_name]['trial_id'])
         num_trials_for_layout[layout_name] = len(trial_ids)
         for trial_id in trial_ids:
@@ -136,16 +135,16 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, order
             one_traj_df = main_trials[main_trials['trial_id'] == trial_id]
 
             # Get python trajectory data and information on which player(s) was/were human
-            joint_traj_data = df_traj_to_python_joint_traj(one_traj_df, complete_traj=ordered_pairs)
+            joint_traj_data = df_traj_to_python_joint_traj(one_traj_df, **kwargs)
 
             human_idx = get_human_player_index_for_df(one_traj_df)
             human_indices.append(human_idx)
 
             # Convert joint trajectories to single agent trajectories, appending recovered info to the `trajectories` dict
-            joint_state_trajectory_to_single(single_agent_trajectories, joint_traj_data, human_idx, processed=processed,
-                                             silent=silent)
+            joint_state_trajectory_to_single(single_agent_trajectories, joint_traj_data, human_idx, **kwargs)
 
-    if not silent: print("Number of trajectories processed for each layout: {}".format(num_trials_for_layout))
+    if not silent: 
+        print("Number of trajectories processed for each layout: {}".format(num_trials_for_layout))
     return single_agent_trajectories, human_indices
 
 
@@ -163,8 +162,8 @@ def get_human_player_index_for_df(one_traj_df):
     return human_player_indices
 
 
-def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indices_to_convert=None, processed=True,
-                                     silent=False):
+def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indices_to_convert=None, featurize_states=True,
+                                     silent=False, **kwargs):
     """
     Take a joint trajectory and split it into two single-agent trajectories, adding data to the `trajectories` dictionary
     player_indices_to_convert: which player indexes' trajs we should return
@@ -183,7 +182,7 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
         for i in range(len(states)):
             state, action = states[i], joint_actions[i][agent_idx]
 
-            if processed:
+            if featurize_states:
                 # Pre-processing (default is state featurization)
                 action = np.array([Action.ACTION_TO_INDEX[action]]).astype(int)
 
