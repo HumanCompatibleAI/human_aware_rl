@@ -4,7 +4,7 @@ import tensorflow as tf
 from human_aware_rl.utils import set_global_seed
 from human_aware_rl.imitation.behavior_cloning_tf2 import BC_SAVE_DIR, get_bc_params, train_bc_model, build_bc_model, save_bc_model, load_bc_model, evaluate_bc_model
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
-from human_aware_rl.static import BC_EXPECTED_DATA_PATH, CLEAN_2019_HUMAN_DATA_TRAIN
+from human_aware_rl.static import BC_EXPECTED_DATA_PATH, CLEAN_2019_HUMAN_DATA_TRAIN, DUMMY_2019_CLEAN_HUMAN_DATA_PATH
 
 class TestBCTraining(unittest.TestCase):
 
@@ -26,7 +26,7 @@ class TestBCTraining(unittest.TestCase):
     
     def setUp(self):
         set_global_seed(0)
-        self.bc_params = get_bc_params(**{"data_path" : CLEAN_2019_HUMAN_DATA_TRAIN})
+        self.bc_params = get_bc_params(**{"data_path" : DUMMY_2019_CLEAN_HUMAN_DATA_PATH})
         self.bc_params["mdp_params"]["layout_name"] = "cramped_room"
         self.bc_params["training_params"]["epochs"] = 1
         self.model_dir = os.path.join(BC_SAVE_DIR, "test_model")
@@ -74,7 +74,6 @@ class TestBCTraining(unittest.TestCase):
     def test_agent_evaluation(self):
         self.bc_params["training_params"]["epochs"] = 20
         model = train_bc_model(self.model_dir, self.bc_params)
-        print(type(model))
         results = evaluate_bc_model(model, self.bc_params)
 
         # Sanity Check

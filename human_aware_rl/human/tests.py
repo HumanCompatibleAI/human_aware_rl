@@ -15,18 +15,23 @@ from human_aware_rl.human.process_human_trials import main as process_human_tria
 class TestProcessDataFrames(unittest.TestCase):
 
     temp_data_dir = 'this_is_a_temp'
+    data_len_2019 = 3546
+    data_len_2020 = 1189
 
     base_csv_to_df_params = {
-        "csv_path" : DUMMY_RAW_HUMAN_DATA_PATH,
+        "csv_path" : DUMMY_2020_RAW_HUMAN_DATA_PATH,
+        "out_dir" : "this_is_a_temp",
         "out_file_prefix" : 'unittest',
-        "train_test_split" : False,
-        "silent" : False
+        "button_presses_threshold" : 0.25,
+        "perform_train_test_split" : False,
+        "silent" : True
     }
 
     base_get_trajs_from_data_params = {
+        "data_path" : DUMMY_2019_CLEAN_HUMAN_DATA_PATH,
         "featurize_states" : False,
         "check_trajectories" : False,
-        "silent" : False,
+        "silent" : True,
         "layouts" : ['cramped_room']
     }
 
@@ -37,6 +42,31 @@ class TestProcessDataFrames(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_data_dir)
 
+    def test_csv_to_df_pickle_2019(self):
+        params = copy.deepcopy(self.base_csv_to_df_params)
+        params['csv_path'] = DUMMY_2019_RAW_HUMAN_DATA_PATH
+        params['button_presses_threshold'] = 0.0
+        data = csv_to_df_pickle(**params)
+        self.assertEqual(len(data), self.data_len_2019)
+
+        params = copy.deepcopy(self.base_csv_to_df_params)
+        params['csv_path'] = DUMMY_2019_RAW_HUMAN_DATA_PATH
+        params['button_presses_threshold'] = 0.7
+        data = csv_to_df_pickle(**params)
+        self.assertLess(len(data), self.data_len_2019)
+
+    def test_csv_to_df_pickle_2020(self):
+        params = copy.deepcopy(self.base_csv_to_df_params)
+        params['button_presses_threshold'] = 0.0
+        data = csv_to_df_pickle(**params)
+        self.assertEqual(len(data), self.data_len_2020)
+
+        params = copy.deepcopy(self.base_csv_to_df_params)
+        params['button_presses_threshold'] = 0.7
+        data = csv_to_df_pickle(**params)
+        self.assertLess(len(data), self.data_len_2020)
+        
+
     def test_csv_to_df_pickle(self):
         # Try various button thresholds (hand-picked to lie between different values for dummy data games)
         button_thresholds = [0.2, 0.6, 0.7]
@@ -44,7 +74,6 @@ class TestProcessDataFrames(unittest.TestCase):
         for threshold in button_thresholds:
             # dummy dataset is too small to partion so we set train_test_split=False
             params = copy.deepcopy(self.base_csv_to_df_params)
-            params['out_dir'] = self.temp_data_dir
             params['button_presses_threshold'] = threshold
             data = csv_to_df_pickle(**params)
             lengths.append(len(data))
@@ -55,40 +84,36 @@ class TestProcessDataFrames(unittest.TestCase):
 
         # Picking a threshold that's suficiently high discards all data, should result in value error
         params = copy.deepcopy(self.base_csv_to_df_params)
-        params['out_dir'] = self.temp_data_dir
         params['button_presses_threshold'] = 0.8
-        self.assertRaises(ValueError, csv_to_df_pickle, out_dir=self.temp_data_dir, button_presses_threshold=0.8, **self.base_csv_to_df_params)
+        self.assertRaises(ValueError, csv_to_df_pickle, **params)
 
-    def test_get_trajs_from_data(self):
+    def test_get_trajs_from_data_2019(self):
         params = copy.deepcopy(self.base_get_trajs_from_data_params)
-        params['data_path'] = DUMMY_CLEAN_HUMAN_DATA_PATH
         trajectories = get_trajs_from_data(**params)
 
-    def test_get_trajs_from_data_featurize(self):
+    def test_get_trajs_from_data_2019_featurize(self):
         params = copy.deepcopy(self.base_get_trajs_from_data_params)
-        params['data_path'] = DUMMY_CLEAN_HUMAN_DATA_PATH
         params['featurize_states'] = True
         trajectories = get_trajs_from_data(**params)
 
-    def test_get_trajs_from_data_tomato(self):
+    def test_get_trajs_from_data_2020(self):
         # Ensure we can properly deserialize states with updated objects (i.e tomatoes)
         params = copy.deepcopy(self.base_get_trajs_from_data_params)
         params['layouts'] = ['inverse_marshmallow_experiment']
-        params['data_path'] = os.path.join(DUMMY_HUMAN_DATA_DIR, 'dummy_hh_trials_tomato_all.pickle')
+        params['data_path'] = DUMMY_2020_CLEAN_HUMAN_DATA_PATH
         trajectories = get_trajs_from_data(**params)
 
-    def test_get_trajs_from_data_tomato_featurize(self):
+    def test_get_trajs_from_data_2020_featurize(self):
         # Ensure we can properly featurize states with updated dynamics and updated objects (i.e tomatoes)
         params = copy.deepcopy(self.base_get_trajs_from_data_params)
         params['layouts'] = ['inverse_marshmallow_experiment']
-        params['data_path'] = os.path.join(DUMMY_HUMAN_DATA_DIR, 'dummy_hh_trials_tomato_all.pickle')
+        params['data_path'] = DUMMY_2020_CLEAN_HUMAN_DATA_PATH
         params['featurize_states'] = True
         trajectories = get_trajs_from_data(**params)
 
     def test_csv_to_df_to_trajs_integration(self):
         # Ensure the output of 'csv_to_df_pickle' works as valid input to 'get_trajs_from_data'
         params = copy.deepcopy(self.base_csv_to_df_params)
-        params['out_dir'] = self.temp_data_dir
         _ = csv_to_df_pickle(**params)
 
         params = copy.deepcopy(self.base_get_trajs_from_data_params)
@@ -99,7 +124,7 @@ class TestProcessDataFrames(unittest.TestCase):
 class TestHumanDataConversion(unittest.TestCase):
 
     temp_dir = 'this_is_also_a_temp'
-    infile = DUMMY_CLEAN_HUMAN_DATA_PATH
+    infile = DUMMY_2020_CLEAN_HUMAN_DATA_PATH
     horizon = 400
     DATA_TYPE = "train"
     layout_name = "coordination_ring"

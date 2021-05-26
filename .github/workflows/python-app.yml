@@ -34,6 +34,5 @@ jobs:
         source ~/.bash_profile
         conda activate harl
         sudo chmod 777 ./run_tests.sh
-        # ./run_tests.sh
-        python ./human_aware_rl/human/tests.py TestProcessDataFrames.test_csv_to_df_pickle 
+        ./run_tests.sh
     

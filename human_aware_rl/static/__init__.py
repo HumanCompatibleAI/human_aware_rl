@@ -21,8 +21,11 @@ RAW_2019_HUMAN_DATA = os.path.join(RAW_HUMAN_DATA_DIR, '2019_hh_trials.csv')
 
 # Human data tests (smaller datasets for more efficient sanity checks)
 DUMMY_HUMAN_DATA_DIR = os.path.join(HUMAN_DATA_DIR, "dummy")
-DUMMY_CLEAN_HUMAN_DATA_PATH = os.path.join(DUMMY_HUMAN_DATA_DIR, "dummy_hh_trials.pickle")
-DUMMY_RAW_HUMAN_DATA_PATH = os.path.join(DUMMY_HUMAN_DATA_DIR, "dummy_hh_trials.csv")
+DUMMY_2020_CLEAN_HUMAN_DATA_PATH = os.path.join(DUMMY_HUMAN_DATA_DIR, "dummy_2020_hh_trials.pickle")
+DUMMY_2020_RAW_HUMAN_DATA_PATH = os.path.join(DUMMY_HUMAN_DATA_DIR, "dummy_2020_hh_trials.csv")
+DUMMY_2019_CLEAN_HUMAN_DATA_PATH = os.path.join(DUMMY_HUMAN_DATA_DIR, "dummy_2019_hh_trials_all.pickle")
+DUMMY_2019_RAW_HUMAN_DATA_PATH = os.path.join(DUMMY_HUMAN_DATA_DIR, "dummy_2019_hh_trials.csv")
+
 
 # Expected values for reproducibility unit tests
 BC_EXPECTED_DATA_PATH = os.path.join(_curr_directory, "testing_data", "bc", "expected.pickle")

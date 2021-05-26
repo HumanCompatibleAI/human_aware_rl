@@ -47,7 +47,7 @@ def get_human_human_trajectories(layouts, dataset_type='train', data_path=None, 
 
     return expert_data
 
-def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshold=0.25, train_test_split=True, silent=True, **kwargs):
+def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshold=0.25, perform_train_test_split=True, silent=True, **kwargs):
     """
     High level function that converts raw CSV data into well formatted and cleaned pickled pandas dataframes.
 
@@ -57,7 +57,7 @@ def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshol
         - out_file_prefix(str): common prefix for all saved files
         - button_presses_threshold (float): minimum button presses per timestep over rollout required to 
             keep entire game
-        - train_test_split (bool): Whether to partition dataset into training and testing portions
+        - perform_train_test_split (bool): Whether to partition dataset into training and testing portions
         - kwargs (dict): keyword args to pass to all helper functions
 
     After running, the following files are created
@@ -72,7 +72,7 @@ def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshol
                 - {out_file_prefix}_all.pickle
 
     Returns:
-        if train_test_split:
+        if perform_train_test_split:
             - tuple(pd.DataFrame, pd.DateFrame): tuple of train data, test data
         else:
             - clean_trials (pd.DataFrame): Dataframe containing _all_ cleaned and formatted transitions
@@ -88,7 +88,7 @@ def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshol
 
     if not silent:
         print("Formatting...")
-    all_trials = format_trials_df(all_trials, **kwargs)
+    all_trials = format_trials_df(all_trials, silent=silent, **kwargs)
     if not silent:
         print("Success!")
     
@@ -109,7 +109,7 @@ def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshol
     if not silent:
         print("Success!")
 
-    if train_test_split:
+    if perform_train_test_split:
         if not silent:
             print("Performing train/test split...")
         cleaned_trials_dict = train_test_split(clean_trials, **kwargs)
