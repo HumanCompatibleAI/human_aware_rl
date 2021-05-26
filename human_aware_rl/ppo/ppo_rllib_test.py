@@ -239,7 +239,7 @@ class TestPPORllib(unittest.TestCase):
         # Train bc model
         model_dir = self.temp_model_dir
         params_to_override = { 
-            "train_mdps" : ['inverse_marshmallow_experiment'],
+            "layouts" : ['inverse_marshmallow_experiment'],
             "epochs" : 10
         }
         bc_params = get_bc_params(**params_to_override)

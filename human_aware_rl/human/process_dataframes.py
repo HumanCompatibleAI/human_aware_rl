@@ -1,5 +1,6 @@
 import random, json, copy, os
 import numpy as np
+from numpy.core.numeric import full
 import pandas as pd
 from collections import defaultdict
 
@@ -46,7 +47,7 @@ def get_human_human_trajectories(layouts, dataset_type='train', data_path=None, 
 
     return expert_data
 
-def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshold=0.25, train_test_split=True, **kwargs):
+def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshold=0.25, train_test_split=True, silent=True, **kwargs):
     """
     High level function that converts raw CSV data into well formatted and cleaned pickled pandas dataframes.
 
@@ -76,16 +77,41 @@ def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshol
         else:
             - clean_trials (pd.DataFrame): Dataframe containing _all_ cleaned and formatted transitions
     """
+    if not silent:
+        print("Loading raw data from", csv_path)
     all_trials = pd.read_csv(csv_path)
+    if not silent:
+        print("Success")
+
+    if not silent:
+        print("Raw data columns:", all_trials.columns)
+
+    if not silent:
+        print("Formatting...")
     all_trials = format_trials_df(all_trials, **kwargs)
+    if not silent:
+        print("Success!")
+    
     def filter_func(row):
         return row['button_presses_per_timstep'] >= button_presses_threshold
-    clean_trials = filter_trials(all_trials, filter_func, **kwargs)
 
+    if not silent:
+        print("Filtering...")
+    clean_trials = filter_trials(all_trials, filter_func, **kwargs)
+    if not silent:
+        print("Success!")
+
+    
     full_outfile_prefix = os.path.join(out_dir, out_file_prefix)
+    if not silent:
+        print("Saving processed pickle data with prefix", full_outfile_prefix)
     clean_trials.to_pickle(full_outfile_prefix + "_all.pickle")
+    if not silent:
+        print("Success!")
 
     if train_test_split:
+        if not silent:
+            print("Performing train/test split...")
         cleaned_trials_dict = train_test_split(clean_trials, **kwargs)
         layouts = np.unique(clean_trials['layout_name'])
         train_trials = pd.concat([cleaned_trials_dict[layout]["train"] for layout in layouts])
@@ -93,6 +119,8 @@ def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshol
         clean_trials = pd.concat([train_trials, test_trials])
         train_trials.to_pickle(full_outfile_prefix + "_train.pickle")
         test_trials.to_pickle(full_outfile_prefix + "_test.pickle")
+        if not silent:
+            print("Success!")
 
     return clean_trials
 
