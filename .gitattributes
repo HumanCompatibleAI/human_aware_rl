@@ -1,3 +1,7 @@
 *.ipynb linguist-vendored
-*.csv filter=lfs diff=lfs merge=lfs -text
+
+# Track all CSVs with LFS
 **/*.csv filter=lfs diff=lfs merge=lfs -text
+
+# Exclude CSVs from this particularly directory from LFS
+human_aware_rl/static/human_data/dummy/*.csv filter= diff= merge= text
