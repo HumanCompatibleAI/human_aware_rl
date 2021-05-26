@@ -19,13 +19,14 @@ class TestProcessDataFrames(unittest.TestCase):
     base_csv_to_df_params = {
         "csv_path" : DUMMY_RAW_HUMAN_DATA_PATH,
         "out_file_prefix" : 'unittest',
-        "train_test_split" : False
+        "train_test_split" : False,
+        "silent" : False
     }
 
     base_get_trajs_from_data_params = {
         "featurize_states" : False,
         "check_trajectories" : False,
-        "silent" : True,
+        "silent" : False,
         "layouts" : ['cramped_room']
     }
 
