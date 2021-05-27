@@ -178,8 +178,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
         # bc observation
         featurize_fn_bc = lambda state: self.base_env.featurize_state_mdp(state)
         obs_shape = featurize_fn_bc(dummy_state)[0].shape
-        high = np.ones(obs_shape) * 10
-        low = np.ones(obs_shape) * -10
+        high = np.ones(obs_shape) * 100
+        low = np.ones(obs_shape) * -100
         self.bc_observation_space = gym.spaces.Box(low, high, dtype=np.float32)
 
     def _get_featurize_fn(self, agent_id):
@@ -439,7 +439,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         if 'bc' in policies:
             base_ae = get_base_ae(eval_mdp_params, env_params)
             base_env = base_ae.env
-            bc_featurize_fn = lambda state : base_env.mdp.featurize_state(state)
+            bc_featurize_fn = lambda state : base_env.featurize_state_mdp(state)
             if policies[0] == 'bc':
                 agent_0_feat_fn = bc_featurize_fn
             if policies[1] == 'bc':

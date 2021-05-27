@@ -35,7 +35,7 @@ class TestBCTraining(unittest.TestCase):
             os.makedirs(self.model_dir)
 
         processed_trajs, _ = get_trajs_from_data(**self.bc_params["data_params"], silent=True)
-        self.dummy_input = np.vstack(processed_trajs["ep_observations"])[:1, :]
+        self.dummy_input = np.vstack(processed_trajs["ep_states"])[:1, :]
         self.initial_states = [np.zeros((1, self.bc_params['cell_size'])), np.zeros((1, self.bc_params['cell_size']))]
         with open(BC_EXPECTED_DATA_PATH, "rb") as f:
             self.expected = pickle.load(f)

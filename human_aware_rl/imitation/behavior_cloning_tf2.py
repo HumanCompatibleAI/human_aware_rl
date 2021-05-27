@@ -3,7 +3,7 @@ from tensorflow import keras
 import tensorflow as tf
 import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
-from human_aware_rl.human.process_dataframes import get_trajs_from_data
+from human_aware_rl.human.process_dataframes import get_trajs_from_data, get_human_human_trajectories
 from human_aware_rl.static import CLEAN_2019_HUMAN_DATA_TRAIN
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
@@ -125,15 +125,8 @@ def _pad(sequences, maxlen=None, default=0):
     return sequences
 
 def load_data(bc_params, verbose):
-    print("beginning trajectory processing")
-    print(bc_params['data_params'])
-    processed_trajs, _ = get_trajs_from_data(**bc_params["data_params"], silent=not verbose)
-    print("finished traj processing")
-    inputs, targets = processed_trajs["ep_observations"], processed_trajs["ep_actions"]
-    print(type(inputs))
-    print(type(targets))
-    print(len(inputs))
-    print(len(targets))
+    processed_trajs = get_human_human_trajectories(**bc_params["data_params"], silent=not verbose)
+    inputs, targets = processed_trajs["ep_states"], processed_trajs["ep_actions"]
 
     if bc_params['use_lstm']:
         seq_lens = np.array([len(seq) for seq in inputs])

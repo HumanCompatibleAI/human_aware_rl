@@ -240,6 +240,7 @@ class TestPPORllib(unittest.TestCase):
         model_dir = self.temp_model_dir
         params_to_override = { 
             "layouts" : ['inverse_marshmallow_experiment'],
+            "data_path" : None,
             "epochs" : 10
         }
         bc_params = get_bc_params(**params_to_override)

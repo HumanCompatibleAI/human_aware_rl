@@ -1,13 +1,14 @@
 import random, json, copy, os
+from typing import DefaultDict
 import numpy as np
 from numpy.core.numeric import full
 import pandas as pd
 from collections import defaultdict
 
+from overcooked_ai_py.mdp.overcooked_trajectory import append_trajectories
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.utils import mean_and_std_err
 
-from human_aware_rl.utils import get_dict_stats
 from human_aware_rl.static import *
 from human_aware_rl.human.data_processing_utils import convert_joint_df_trajs_to_overcooked_single, df_traj_to_python_joint_traj, is_button_press, is_interact
 
@@ -39,13 +40,21 @@ def get_human_human_trajectories(layouts, dataset_type='train', data_path=None, 
         raise FileNotFoundError("Tried to load human data from {} but file does not exist!".format(data_path))
 
 
-    expert_data = {}
-    for layout in layouts:
-        # Future TODO: load in data exactly once instead of once for each layout for efficiency purposes
-        curr_data_path = _get_data_path(layout, dataset_type, data_path)
-        expert_data[layout] = get_trajs_from_data(curr_data_path, layouts=[layout], **kwargs)[0]
+    data = {}
 
-    return expert_data
+    # Determine which paths are needed for which layouts (according to hierarchical path resolution rules outlined in docstring)
+    data_path_to_layouts = DefaultDict(list)
+    for layout in layouts:
+        curr_data_path = _get_data_path(layout, dataset_type, data_path)
+        data_path_to_layouts[curr_data_path].append(layout)
+    
+    # For each data path, load data once and parse trajectories for all corresponding layouts
+    for data_path in data_path_to_layouts:
+        curr_data = get_trajs_from_data(curr_data_path, layouts=[layout], **kwargs)[0]
+        data = append_trajectories(data, curr_data)
+
+    # Return all accumulated data for desired layouts
+    return data
 
 def csv_to_df_pickle(csv_path, out_dir, out_file_prefix, button_presses_threshold=0.25, perform_train_test_split=True, silent=True, **kwargs):
     """
@@ -141,6 +150,7 @@ def get_trajs_from_data(data_path, layouts, silent=True, **kwargs):
     trajs, info = convert_joint_df_trajs_to_overcooked_single(
         main_trials,
         layouts,
+        silent=silent,
         **kwargs
     )
 

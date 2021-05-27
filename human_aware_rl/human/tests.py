@@ -89,19 +89,19 @@ class TestProcessDataFrames(unittest.TestCase):
 
     def test_get_trajs_from_data_2019(self):
         params = copy.deepcopy(self.base_get_trajs_from_data_params)
-        trajectories = get_trajs_from_data(**params)
+        trajectories, _ = get_trajs_from_data(**params)
 
     def test_get_trajs_from_data_2019_featurize(self):
         params = copy.deepcopy(self.base_get_trajs_from_data_params)
         params['featurize_states'] = True
-        trajectories = get_trajs_from_data(**params)
+        trajectories, _ = get_trajs_from_data(**params)
 
     def test_get_trajs_from_data_2020(self):
         # Ensure we can properly deserialize states with updated objects (i.e tomatoes)
         params = copy.deepcopy(self.base_get_trajs_from_data_params)
         params['layouts'] = ['inverse_marshmallow_experiment']
         params['data_path'] = DUMMY_2020_CLEAN_HUMAN_DATA_PATH
-        trajectories = get_trajs_from_data(**params)
+        trajectories, _ = get_trajs_from_data(**params)
 
     def test_get_trajs_from_data_2020_featurize(self):
         # Ensure we can properly featurize states with updated dynamics and updated objects (i.e tomatoes)
@@ -109,7 +109,7 @@ class TestProcessDataFrames(unittest.TestCase):
         params['layouts'] = ['inverse_marshmallow_experiment']
         params['data_path'] = DUMMY_2020_CLEAN_HUMAN_DATA_PATH
         params['featurize_states'] = True
-        trajectories = get_trajs_from_data(**params)
+        trajectories, _ = get_trajs_from_data(**params)
 
     def test_csv_to_df_to_trajs_integration(self):
         # Ensure the output of 'csv_to_df_pickle' works as valid input to 'get_trajs_from_data'
@@ -179,6 +179,7 @@ class TestHumanDataConversion(unittest.TestCase):
         print("++++++++++++++++++++++++++++++")
         print("%s is completely good" % self.layout_name)
         print("++++++++++++++++++++++++++++++")
+
 
 if __name__ == '__main__':
     unittest.main()

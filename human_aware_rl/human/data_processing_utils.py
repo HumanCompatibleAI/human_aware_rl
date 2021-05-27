@@ -1,4 +1,4 @@
-import json
+import json, time
 import numpy as np
 
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
@@ -80,7 +80,7 @@ def df_traj_to_python_joint_traj(traj_df, check_trajectories=True, **kwargs):
         overcooked_rewards) == datapoint.score_total, "Rewards didn't sum up to cumulative rewards. Probably trajectory df is corrupted / not complete"
 
     trajectories = {
-        "ep_observations": [overcooked_states],
+        "ep_states": [overcooked_states],
         "ep_actions": [overcooked_actions],
         "ep_rewards": [overcooked_rewards],  # Individual (dense) reward values
         "ep_dones": [[False] * len(overcooked_states)],  # Individual done values
@@ -110,8 +110,8 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, layouts, silent=Fal
     """
 
     single_agent_trajectories = {
-        # With shape (n_timesteps, game_len), where game_len might vary across games:
-        "ep_observations": [],
+        # With shape (n_episodes, game_len), where game_len might vary across games:
+        "ep_states": [],
         "ep_actions": [],
         "ep_rewards": [],  # Individual reward values
         "ep_dones": [],  # Individual done values
@@ -129,7 +129,12 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, layouts, silent=Fal
     num_trials_for_layout = {}
     for layout_name in layouts:
         trial_ids = np.unique(main_trials[main_trials['layout_name'] == layout_name]['trial_id'])
-        num_trials_for_layout[layout_name] = len(trial_ids)
+        num_trials = len(trial_ids)
+        num_trials_for_layout[layout_name] = num_trials
+
+        if num_trials == 0:
+            print("WARNING: No trajectories found on {} layout!".format(layout_name))
+        
         for trial_id in trial_ids:
             # Get an single game
             one_traj_df = main_trials[main_trials['trial_id'] == trial_id]
@@ -171,8 +176,8 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
 
     env = joint_traj_data['metadatas']['env'][0]
 
-    assert len(joint_traj_data['ep_observations']) == 1, "This method only takes in one trajectory"
-    states, joint_actions = joint_traj_data['ep_observations'][0], joint_traj_data['ep_actions'][0]
+    assert len(joint_traj_data['ep_states']) == 1, "This method only takes in one trajectory"
+    states, joint_actions = joint_traj_data['ep_states'][0], joint_traj_data['ep_actions'][0]
     rewards, length = joint_traj_data['ep_rewards'][0], joint_traj_data['ep_lengths'][0]
 
     # Getting trajectory for each agent
@@ -183,11 +188,7 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
             state, action = states[i], joint_actions[i][agent_idx]
 
             if featurize_states:
-                # Pre-processing (default is state featurization)
                 action = np.array([Action.ACTION_TO_INDEX[action]]).astype(int)
-
-                # NOTE: Could parallelize a bit more if slow
-                # state = mdp.preprocess_observation(state)[agent_idx]
                 state = env.featurize_state_mdp(state)[agent_idx]
 
             ep_obs.append(state)
@@ -196,7 +197,7 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
 
         ep_dones[-1] = True
 
-        trajectories["ep_observations"].append(ep_obs)
+        trajectories["ep_states"].append(ep_obs)
         trajectories["ep_actions"].append(ep_acts)
         trajectories["ep_rewards"].append(rewards)
         trajectories["ep_dones"].append(ep_dones)
