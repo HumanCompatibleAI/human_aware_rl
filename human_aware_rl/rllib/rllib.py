@@ -17,6 +17,7 @@ import gym
 import numpy as np
 import os, copy, dill
 import ray
+import logging
 
 action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
 obs_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
@@ -173,14 +174,14 @@ class OvercookedMultiAgent(MultiAgentEnv):
         obs_shape = featurize_fn_ppo(dummy_state)[0].shape
         high = np.ones(obs_shape) * float("inf")
         low = np.ones(obs_shape) * 0
-        self.ppo_observation_space = gym.spaces.Box(low, high, dtype=np.float32)
+        self.ppo_observation_space = gym.spaces.Box(np.float32(low), np.float32(high), dtype=np.float32)
 
         # bc observation
         featurize_fn_bc = lambda state: self.base_env.featurize_state_mdp(state)
         obs_shape = featurize_fn_bc(dummy_state)[0].shape
         high = np.ones(obs_shape) * 100
         low = np.ones(obs_shape) * -100
-        self.bc_observation_space = gym.spaces.Box(low, high, dtype=np.float32)
+        self.bc_observation_space = gym.spaces.Box(np.float32(low), np.float32(high), dtype=np.float32)
 
     def _get_featurize_fn(self, agent_id):
         if agent_id.startswith('ppo'):
@@ -407,7 +408,7 @@ class TrainingCallbacks(DefaultCallbacks):
         pass
 
 
-def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shape, agent_0_policy_str='ppo', agent_1_policy_str='ppo'):
+def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shape, agent_0_policy_str='ppo', agent_1_policy_str='ppo', verbose=False):
     """
     Used to "curry" rllib evaluation function by wrapping additional parameters needed in a local scope, and returning a
     function with rllib custom_evaluation_function compatible signature
@@ -424,7 +425,8 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
     """
 
     def _evaluate(trainer, evaluation_workers):
-        print("Computing rollout of current trained policy")
+        if verbose:
+            print("Computing rollout of current trained policy")
 
         # Randomize starting indices
         policies = [agent_0_policy_str, agent_1_policy_str]
@@ -447,7 +449,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
 
         # Compute the evauation rollout. Note this doesn't use the rllib passed in evaluation_workers, so this 
         # computation all happens on the CPU. Could change this if evaluation becomes a bottleneck
-        results = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_feat_fn, agent_1_feat_fn)
+        results = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_feat_fn, agent_1_feat_fn, verbose=verbose)
 
         # Log any metrics we care about for rllib tensorboard visualization
         metrics = {}
@@ -457,7 +459,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
     return _evaluate
 
 
-def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_featurize_fn=None, agent_1_featurize_fn=None):
+def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_featurize_fn=None, agent_1_featurize_fn=None, verbose=False):
     """
     Used to visualize rollouts of trained policies
 
@@ -469,7 +471,8 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
     agent_0_featurize_fn (func): Used to preprocess states for agent 0, defaults to lossless_state_encoding if 'None'
     agent_1_featurize_fn (func): Used to preprocess states for agent 1, defaults to lossless_state_encoding if 'None'
     """
-    print("eval mdp params", mdp_params)
+    if verbose:
+        print("eval mdp params", mdp_params)
     evaluator = get_base_ae(mdp_params, {"horizon" : eval_params['ep_length'], "num_mdp":1}, outer_shape)
 
     # Override pre-processing functions with defaults if necessary
@@ -489,7 +492,8 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
                                             num_games=eval_params['num_games'],
                                             display=eval_params['display'],
                                             dir=eval_params['store_dir'],
-                                            display_phi=eval_params['display_phi'])
+                                            display_phi=eval_params['display_phi'],
+                                            info=verbose)
 
     return results
 
@@ -502,7 +506,14 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
 def gen_trainer_from_params(params):
     # All ray environment set-up
     if not ray.is_initialized():
-        ray.init(ignore_reinit_error=True, include_webui=False, temp_dir=params['ray_params']['temp_dir'])
+        init_params = {
+            "ignore_reinit_error" : True,
+            "include_webui" : False,
+            "temp_dir" : params['ray_params']['temp_dir'],
+            "log_to_driver" : params['verbose'],
+            "logging_level" : logging.INFO if params['verbose'] else logging.CRITICAL
+        }
+        ray.init(**init_params)
     register_env("overcooked_multi_agent", params['ray_params']['env_creator'])
     ModelCatalog.register_custom_model(params['ray_params']['custom_model_id'], params['ray_params']['custom_model_cls'])
 
@@ -580,7 +591,8 @@ def gen_trainer_from_params(params):
         "multiagent": multi_agent_config,
         "callbacks" : TrainingCallbacks,
         "custom_eval_function" : get_rllib_eval_function(evaluation_params, environment_params['eval_mdp_params'], environment_params['env_params'],
-                                        environment_params["outer_shape"], 'ppo', 'ppo' if self_play else 'bc'),
+                                        environment_params["outer_shape"], 'ppo', 'ppo' if self_play else 'bc',
+                                        verbose=params['verbose']),
         "env_config" : environment_params,
         "eager" : False,
         **training_params

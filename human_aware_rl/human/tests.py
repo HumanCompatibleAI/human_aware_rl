@@ -118,67 +118,52 @@ class TestProcessDataFrames(unittest.TestCase):
 
         params = copy.deepcopy(self.base_get_trajs_from_data_params)
         params['data_path'] = os.path.join(self.temp_data_dir, 'unittest_all.pickle')
-        params['train_mdps'] = ['inverse_marshmallow_experiment']
+        params['layouts'] = ['inverse_marshmallow_experiment']
         _ = get_trajs_from_data(**params)
 
 class TestHumanDataConversion(unittest.TestCase):
 
     temp_dir = 'this_is_also_a_temp'
-    infile = DUMMY_2020_CLEAN_HUMAN_DATA_PATH
+    infile = DUMMY_2019_CLEAN_HUMAN_DATA_PATH
     horizon = 400
     DATA_TYPE = "train"
-    layout_name = "coordination_ring"
+    layout_name = "cramped_room"
 
     def _equal_pickle_and_env_state_dict(self, pickle_state_dict, env_state_dict):
-        return equal_dicts(pickle_state_dict, env_state_dict, ['timestep'])
+        return equal_dicts(pickle_state_dict, env_state_dict, ['timestep', 'all_orders', 'bonus_orders'])
 
     def setUp(self):
+        if not os.path.exists(self.temp_dir):
+            os.makedirs(self.temp_dir)
+        
         self.base_mdp = OvercookedGridworld.from_layout_name(self.layout_name)
         self.mlam = MediumLevelActionManager.from_pickle_or_compute(self.base_mdp, NO_COUNTERS_PARAMS,
-                                                                    force_compute=True)
-        self.env = OvercookedEnv.from_mdp(self.base_mdp, horizon=self.horizon)
+                                                                    force_compute=True, info=False)
+        self.env = OvercookedEnv.from_mdp(self.base_mdp, horizon=self.horizon, info_level=0)
         self.starting_state_dict = self.base_mdp.get_standard_start_state().to_dict()
 
-        outfile = process_human_trials_main(self.infile, self.temp_dir, insert_interacts=True, verbose=False)
+        outfile = process_human_trials_main(self.infile, self.temp_dir, insert_interacts=True, verbose=False,  forward_port=False, fix_json=False)
         with open(outfile, 'rb') as f:
             self.human_data = pickle.load(f)[self.layout_name]
-        print("loaded data of length", len(self.human_data))
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir)
 
     def test_state(self):
-        print(self.starting_state_dict)
         idx = 0
         for state_dict, joint_action in self.human_data[:100]:
             if state_dict.items() == self.starting_state_dict.items():
                 self.env.reset()
             else:
-                if not self.equal_pickle_and_env_state_dict(state_dict, self.env.state.to_dict()):
-                    print('s_{t-1}')
-                    print(self.base_mdp.state_string(OvercookedState.from_dict(self.human_data[idx-1][0])))
-                    print('a_{t-1}')
-                    print(self.human_data[idx - 1][1])
-                    print("------------------>")
-
-                    print("s_t: pickle")
-                    print(self.base_mdp.state_string(OvercookedState.from_dict(self.human_data[idx][0])))
-                    print("s_t: env")
-                    print(self.base_mdp.state_string(self.env.state))
-
-                    print("s_t dict: pickle")
-                    print(self.human_data[idx][0])
-                    print("s_t dict: env")
-                    print(self.env.state.to_dict())
-
-                    print("=================")
-                    print("=================")
-                    raise NotImplementedError()
+                self.assertTrue(
+                    self._equal_pickle_and_env_state_dict(state_dict, self.env.state.to_dict()),
+                    "Expected state:\t\n{}\n\nActual state:\t\n{}".format(
+                        self.env.state.to_dict(),
+                        state_dict
+                    )
+                )
             self.env.step(joint_action=joint_action)
             idx += 1
-        print("++++++++++++++++++++++++++++++")
-        print("%s is completely good" % self.layout_name)
-        print("++++++++++++++++++++++++++++++")
 
 
 if __name__ == '__main__':

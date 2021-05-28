@@ -43,6 +43,7 @@ class TestPPORllib(unittest.TestCase):
         self.temp_results_dir = os.path.join(os.path.abspath('.'), 'results_temp')
         self.temp_model_dir = os.path.join(os.path.abspath('.'), 'model_temp')
 
+
         # Make all necessary directories
         if not os.path.exists(self.temp_model_dir):
             os.makedirs(self.temp_model_dir)
@@ -83,8 +84,10 @@ class TestPPORllib(unittest.TestCase):
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
                 "use_phi": False,
-                "evaluation_display": False
-            }
+                "evaluation_display": False,
+                "verbose" : False
+            },
+            options={'--loglevel': 'ERROR'}
         )
 
         # Kill all ray processes to ensure loading works in a vaccuum
@@ -113,7 +116,7 @@ class TestPPORllib(unittest.TestCase):
         ae = AgentEvaluator.from_layout_name(mdp_params={"layout_name" : "cramped_room"}, env_params={"horizon" : 400})
 
         # We assume no runtime errors => success, no performance consistency check for now
-        ae.evaluate_agent_pair(agent_pair, 1)
+        ae.evaluate_agent_pair(agent_pair, 1, info=False)
 
 
     def test_ppo_sp_no_phi(self):
@@ -130,8 +133,10 @@ class TestPPORllib(unittest.TestCase):
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
                 "use_phi": False,
-                "evaluation_display": False
-            }
+                "evaluation_display": False,
+                "verbose" : False
+            },
+            options={'--loglevel': 'ERROR'}
         ).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
@@ -158,8 +163,10 @@ class TestPPORllib(unittest.TestCase):
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
                 "use_phi": True,
-                "evaluation_display": False
-            }
+                "evaluation_display": False,
+                "verbose" : False
+            },
+            options={'--loglevel': 'ERROR'}
         ).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
@@ -189,8 +196,10 @@ class TestPPORllib(unittest.TestCase):
                 "lr": 7e-4,
                 "seeds": [0],
                 "outer_shape": (5, 4),
-                "evaluation_display": False
-            }
+                "evaluation_display": False,
+                "verbose" : False
+            },
+            options={'--loglevel': 'ERROR'}
         ).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
@@ -220,8 +229,10 @@ class TestPPORllib(unittest.TestCase):
                 "lr": 7e-4,
                 "seeds": [0],
                 "outer_shape": (5, 4),
-                "evaluation_display": False
-            }
+                "evaluation_display": False,
+                "verbose" : False
+            },
+            options={'--loglevel': 'ERROR'}
         ).result
 
         # Sanity check (make sure it begins to learn to receive dense reward)
@@ -247,10 +258,18 @@ class TestPPORllib(unittest.TestCase):
         train_bc_model(model_dir, bc_params)
     
         # Train rllib model
-        results = ex.run(config_updates={"results_dir" : self.temp_results_dir, "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], "num_training_iters" : 20, "bc_model_dir" : model_dir, "evaluation_interval" : 5}).result
+        config_updates = { 
+            "results_dir" : self.temp_results_dir, 
+            "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], 
+            "num_training_iters" : 20, 
+            "bc_model_dir" : model_dir, 
+            "evaluation_interval" : 5,
+            "verbose" : False
+        }
+        results = ex.run(config_updates=config_updates, options={'--loglevel': 'ERROR'}).result
     
         # Sanity check
-        self.assertGreaterEqual(results['average_total_reward'], 20.0)
+        self.assertGreaterEqual(results['average_total_reward'], self.min_performance)
     
         if self.compute_pickle:
             self.expected['test_ppo_bc'] = results
@@ -273,16 +292,15 @@ if __name__ == '__main__':
     args = vars(parser.parse_args())
 
     assert not (args['compute_pickle'] and args['strict']), "Cannot compute pickle and run strict reproducibility tests at same time"
-    print(args['compute_pickle'], args['strict'])
     if args['compute_pickle']:
         _clear_pickle()
 
     suite = unittest.TestSuite()
-    # suite.addTest(TestPPORllib('test_save_load', **args))
-    # suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_save_load', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
     suite.addTest(TestPPORllib('test_ppo_bc', **args))
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)

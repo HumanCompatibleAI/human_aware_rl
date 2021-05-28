@@ -6,6 +6,7 @@ from human_aware_rl.imitation.behavior_cloning_tf2 import BC_SAVE_DIR, get_bc_pa
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
 from human_aware_rl.static import BC_EXPECTED_DATA_PATH, DUMMY_2019_CLEAN_HUMAN_DATA_PATH
 
+
 class TestBCTraining(unittest.TestCase):
 
     """
@@ -39,6 +40,9 @@ class TestBCTraining(unittest.TestCase):
         self.initial_states = [np.zeros((1, self.bc_params['cell_size'])), np.zeros((1, self.bc_params['cell_size']))]
         with open(BC_EXPECTED_DATA_PATH, "rb") as f:
             self.expected = pickle.load(f)
+
+        # Disable TF warnings and infos
+        tf.get_logger().setLevel('ERROR')
 
     def tearDown(self):
         if self.compute_pickle:

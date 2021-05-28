@@ -59,7 +59,7 @@ def extract_df_for_worker_on_layout(main_trials, worker_id, layout_name):
     return worker_layout_traj_df
 
 
-def df_traj_to_python_joint_traj(traj_df, check_trajectories=True, **kwargs):
+def df_traj_to_python_joint_traj(traj_df, check_trajectories=True, silent=True, **kwargs):
     if len(traj_df) == 0:
         return None
 
@@ -99,7 +99,7 @@ def df_traj_to_python_joint_traj(traj_df, check_trajectories=True, **kwargs):
     trajectories = {k: np.array(v) if k not in ["ep_actions", "metadatas"] else v for k, v in trajectories.items()}
 
     if check_trajectories:
-        agent_evaluator.check_trajectories(trajectories)
+        agent_evaluator.check_trajectories(trajectories, verbose=not silent)
     return trajectories
 
 
@@ -140,7 +140,7 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, layouts, silent=Fal
             one_traj_df = main_trials[main_trials['trial_id'] == trial_id]
 
             # Get python trajectory data and information on which player(s) was/were human
-            joint_traj_data = df_traj_to_python_joint_traj(one_traj_df, **kwargs)
+            joint_traj_data = df_traj_to_python_joint_traj(one_traj_df, silent=silent,**kwargs)
 
             human_idx = get_human_player_index_for_df(one_traj_df)
             human_indices.append(human_idx)

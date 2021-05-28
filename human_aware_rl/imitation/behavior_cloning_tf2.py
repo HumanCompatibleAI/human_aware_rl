@@ -124,7 +124,7 @@ def _pad(sequences, maxlen=None, default=0):
         seq.extend([default]*pad_len)
     return sequences
 
-def load_data(bc_params, verbose):
+def load_data(bc_params, verbose=False):
     processed_trajs = get_human_human_trajectories(**bc_params["data_params"], silent=not verbose)
     inputs, targets = processed_trajs["ep_states"], processed_trajs["ep_actions"]
 
@@ -163,7 +163,7 @@ def train_bc_model(model_dir, bc_params, verbose=False):
         class_weights = None
 
     # Retrieve un-initialized keras model
-    model = build_bc_model(**bc_params, max_seq_len=np.max(seq_lens))
+    model = build_bc_model(**bc_params, max_seq_len=np.max(seq_lens), verbose=verbose)
 
     # Initialize the model
     # Note: have to use lists for multi-output model support and not dicts because of tensorlfow 2.0.0 bug
@@ -222,13 +222,13 @@ def train_bc_model(model_dir, bc_params, verbose=False):
                 verbose=2 if verbose else 0)
 
     # Save the model
-    save_bc_model(model_dir, model, bc_params)
+    save_bc_model(model_dir, model, bc_params, verbose=verbose)
 
     return model
     
 
 
-def save_bc_model(model_dir, model, bc_params):
+def save_bc_model(model_dir, model, bc_params, verbose=False):
     """
     Saves the specified model under the directory model_dir. This creates three items
 
@@ -238,25 +238,27 @@ def save_bc_model(model_dir, model, bc_params):
 
     Additionally, saves a pickled dictionary containing all the parameters used to construct this model
     at model_dir/metadata.pickle
-    """   
-    print("Saving bc model at ", model_dir)
+    """
+    if verbose:
+        print("Saving bc model at ", model_dir)
     model.save(model_dir, save_format='tf')
     with open(os.path.join(model_dir, "metadata.pickle"), 'wb') as f:
         pickle.dump(bc_params, f)
 
 
-def load_bc_model(model_dir):
+def load_bc_model(model_dir, verbose=False):
     """
     Returns the model instance (including all compilation data like optimizer state) and a dictionary of parameters
     used to create the model
     """
-    print("Loading bc model from ", model_dir)
+    if verbose:
+        print("Loading bc model from ", model_dir)
     model = keras.models.load_model(model_dir, custom_objects={ 'tf' : tf })
     with open(os.path.join(model_dir, "metadata.pickle"), "rb") as f:
         bc_params = pickle.load(f)
     return model, bc_params
 
-def evaluate_bc_model(model, bc_params):
+def evaluate_bc_model(model, bc_params, verbose=False):
     """
     Creates an AgentPair object containing two instances of BC Agents, whose policies are specified by `model`. Runs
     a rollout using AgentEvaluator class in an environment specified by bc_params
@@ -291,7 +293,8 @@ def evaluate_bc_model(model, bc_params):
                        agent_0_policy=agent_0_policy, 
                        agent_1_policy=agent_1_policy, 
                        agent_0_featurize_fn=featurize_fn, 
-                       agent_1_featurize_fn=featurize_fn)
+                       agent_1_featurize_fn=featurize_fn,
+                       verbose=verbose)
 
     # Compute the average sparse return obtained in each rollout
     reward = np.mean(results['ep_returns'])
