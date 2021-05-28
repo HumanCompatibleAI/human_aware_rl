@@ -5,4 +5,4 @@ cd ..
 
 pip install -e .
 
-conda install protobuf
+conda install protobuf -y

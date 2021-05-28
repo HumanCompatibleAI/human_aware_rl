@@ -15,6 +15,7 @@ For more information about the Overcooked-AI environment, check out [this](https
 * [Troubleshooting](#troubleshooting)
 * [Playing With Agents](#playing-with-agents)
 * [Reproducing Results](#repoducing-results)
+* [Human Data](./human_aware_rl/static/human_data/README.md)
 
 # Installation
 

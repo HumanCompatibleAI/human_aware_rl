@@ -1,9 +1,11 @@
-import json
+import json, time
 import numpy as np
 
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedState, ObjectState, PlayerState, OvercookedGridworld
+
+AI_ID = 'I am robot, bite my shiny metal ass!'
 
 
 ####################
@@ -13,6 +15,8 @@ from overcooked_ai_py.mdp.overcooked_mdp import OvercookedState, ObjectState, Pl
 def json_action_to_python_action(action):
     if type(action) is list:
         action = tuple(action)
+    if type(action) is str:
+        action = action.lower()
     assert action in Action.ALL_ACTIONS
     return action
 
@@ -20,7 +24,12 @@ def json_action_to_python_action(action):
 def json_joint_action_to_python_action(json_joint_action):
     """Port format from javascript to python version of Overcooked"""
     if type(json_joint_action) is str:
-        json_joint_action = json.loads(json_joint_action)
+        try:
+            json_joint_action = json.loads(json_joint_action)
+        except json.decoder.JSONDecodeError:
+            # hacky fix to circumvent 'INTERACT' action being malformed json (because of single quotes)
+            # Might need to find a more robust way around this in the future
+            json_joint_action = eval(json_joint_action)
     return tuple(json_action_to_python_action(a) for a in json_joint_action)
 
 def json_state_to_python_state(df_state):
@@ -30,15 +39,26 @@ def json_state_to_python_state(df_state):
 
     return OvercookedState.from_dict(df_state)
 
+def is_interact(joint_action):
+    joint_action = json_joint_action_to_python_action(joint_action)
+    return np.array([int(joint_action[0] == Action.INTERACT), int(joint_action[1] == Action.INTERACT)])
+
+def is_button_press(joint_action):
+    joint_action = json_joint_action_to_python_action(joint_action)
+    return np.array([int(joint_action[0] != Action.STAY), int(joint_action[1] != Action.STAY)])
+
 
 def extract_df_for_worker_on_layout(main_trials, worker_id, layout_name):
-    """Extract trajectory for a specific layout and worker pair from main_trials df"""
+    """
+    WARNING: this function has been deprecated and is no longer compatible with current schema
+    Extract trajectory for a specific layout and worker pair from main_trials df
+    """
     worker_trajs_df = main_trials[main_trials['workerid_num'] == worker_id]
     worker_layout_traj_df = worker_trajs_df[worker_trajs_df['layout_name'] == layout_name]
     return worker_layout_traj_df
 
 
-def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
+def df_traj_to_python_joint_traj(traj_df, check_trajectories=True, silent=True, **kwargs):
     if len(traj_df) == 0:
         return None
 
@@ -58,7 +78,7 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
     assert sum(overcooked_rewards) == datapoint.score_total, "Rewards didn't sum up to cumulative rewards. Probably trajectory df is corrupted / not complete"
 
     trajectories = {
-        "ep_observations": [overcooked_states],
+        "ep_states": [overcooked_states],
         "ep_actions": [overcooked_actions],
         "ep_rewards": [overcooked_rewards],  # Individual (dense) reward values
         "ep_dones": [[False] * len(overcooked_states)],  # Individual done values
@@ -76,19 +96,20 @@ def df_traj_to_python_joint_traj(traj_df, complete_traj=True):
     }
     trajectories = {k: np.array(v) if k not in ["ep_actions", "metadatas"] else v for k, v in trajectories.items()}
 
-    if complete_traj:
-        agent_evaluator.check_trajectories(trajectories)
+    if check_trajectories:
+        agent_evaluator.check_trajectories(trajectories, verbose=not silent)
     return trajectories
 
-def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, ordered_pairs=True, processed=False, silent=False):
+
+def convert_joint_df_trajs_to_overcooked_single(main_trials, layouts, silent=False, **kwargs):
     """
     Takes in a dataframe `main_trials` containing joint trajectories, and extract trajectories of workers `worker_ids`
-    on layouts `layout_names`, with specific options.
+    on layouts `layouts`, with specific options.
     """
 
     single_agent_trajectories = {
-        # With shape (n_timesteps, game_len), where game_len might vary across games:
-        "ep_observations": [],
+        # With shape (n_episodes, game_len), where game_len might vary across games:
+        "ep_states": [],
         "ep_actions": [],
         "ep_rewards": [],  # Individual reward values
         "ep_dones": [],  # Individual done values
@@ -104,23 +125,29 @@ def convert_joint_df_trajs_to_overcooked_single(main_trials, layout_names, order
 
     human_indices = []
     num_trials_for_layout = {}
-    for layout_name in layout_names:
+    for layout_name in layouts:
         trial_ids = np.unique(main_trials[main_trials['layout_name'] == layout_name]['trial_id'])
-        num_trials_for_layout[layout_name] = len(trial_ids)
+        num_trials = len(trial_ids)
+        num_trials_for_layout[layout_name] = num_trials
+
+        if num_trials == 0:
+            print("WARNING: No trajectories found on {} layout!".format(layout_name))
+        
         for trial_id in trial_ids:
             # Get an single game
             one_traj_df = main_trials[main_trials['trial_id'] == trial_id]
 
             # Get python trajectory data and information on which player(s) was/were human
-            joint_traj_data = df_traj_to_python_joint_traj(one_traj_df, complete_traj=ordered_pairs)
+            joint_traj_data = df_traj_to_python_joint_traj(one_traj_df, silent=silent,**kwargs)
 
             human_idx = get_human_player_index_for_df(one_traj_df)
             human_indices.append(human_idx)
 
             # Convert joint trajectories to single agent trajectories, appending recovered info to the `trajectories` dict
-            joint_state_trajectory_to_single(single_agent_trajectories, joint_traj_data, human_idx, processed=processed, silent=silent)
+            joint_state_trajectory_to_single(single_agent_trajectories, joint_traj_data, human_idx, silent=silent, **kwargs)
 
-    if not silent: print("Number of trajectories processed for each layout: {}".format(num_trials_for_layout))
+    if not silent: 
+        print("Number of trajectories processed for each layout: {}".format(num_trials_for_layout))
     return single_agent_trajectories, human_indices
 
 
@@ -138,8 +165,8 @@ def get_human_player_index_for_df(one_traj_df):
     return human_player_indices
 
 
-def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indices_to_convert=None, processed=True,
-                                     silent=False):
+def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indices_to_convert=None, featurize_states=True,
+                                     silent=False, **kwargs):
     """
     Take a joint trajectory and split it into two single-agent trajectories, adding data to the `trajectories` dictionary
     player_indices_to_convert: which player indexes' trajs we should return
@@ -147,8 +174,8 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
 
     env = joint_traj_data['metadatas']['env'][0]
 
-    assert len(joint_traj_data['ep_observations']) == 1, "This method only takes in one trajectory"
-    states, joint_actions = joint_traj_data['ep_observations'][0], joint_traj_data['ep_actions'][0]
+    assert len(joint_traj_data['ep_states']) == 1, "This method only takes in one trajectory"
+    states, joint_actions = joint_traj_data['ep_states'][0], joint_traj_data['ep_actions'][0]
     rewards, length = joint_traj_data['ep_rewards'][0], joint_traj_data['ep_lengths'][0]
 
     # Getting trajectory for each agent
@@ -158,12 +185,8 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
         for i in range(len(states)):
             state, action = states[i], joint_actions[i][agent_idx]
 
-            if processed:
-                # Pre-processing (default is state featurization)
+            if featurize_states:
                 action = np.array([Action.ACTION_TO_INDEX[action]]).astype(int)
-
-                # NOTE: Could parallelize a bit more if slow
-                # state = mdp.preprocess_observation(state)[agent_idx]
                 state = env.featurize_state_mdp(state)[agent_idx]
 
             ep_obs.append(state)
@@ -172,7 +195,7 @@ def joint_state_trajectory_to_single(trajectories, joint_traj_data, player_indic
 
         ep_dones[-1] = True
 
-        trajectories["ep_observations"].append(ep_obs)
+        trajectories["ep_states"].append(ep_obs)
         trajectories["ep_actions"].append(ep_acts)
         trajectories["ep_rewards"].append(rewards)
         trajectories["ep_dones"].append(ep_dones)

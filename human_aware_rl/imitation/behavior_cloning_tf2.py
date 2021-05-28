@@ -3,10 +3,11 @@ from tensorflow import keras
 import tensorflow as tf
 import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
-from human_aware_rl.human.process_dataframes import get_trajs_from_data
-from human_aware_rl.static import HUMAN_DATA_PATH
+from human_aware_rl.human.process_dataframes import get_trajs_from_data, get_human_human_trajectories
+from human_aware_rl.static import CLEAN_2019_HUMAN_DATA_TRAIN
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
+from human_aware_rl.utils import recursive_dict_update, get_flattened_keys
 from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.mdp.overcooked_env import DEFAULT_ENV_PARAMS
 from ray.rllib.policy import Policy as RllibPolicy
@@ -18,10 +19,10 @@ from ray.rllib.policy import Policy as RllibPolicy
 BC_SAVE_DIR = os.path.join(DATA_DIR, "bc_runs")
 
 DEFAULT_DATA_PARAMS = {
-    "train_mdps": ["cramped_room"],
-    "ordered_trajs": False,
-    "processed" : True,
-    "data_path": HUMAN_DATA_PATH
+    "layouts": ["cramped_room"],
+    "check_trajectories": False,
+    "featurize_states" : True,
+    "data_path": CLEAN_2019_HUMAN_DATA_TRAIN
 }
 
 DEFAULT_MLP_PARAMS = {
@@ -76,13 +77,32 @@ def _get_observation_shape(bc_params):
     obs_shape = base_env.featurize_state_mdp(dummy_state)[0].shape
     return obs_shape
 
-# For lazing loading the default params. Prevents loading on every import of this module 
-def get_default_bc_params():
+# For lazily loading the default params. Prevents loading on every import of this module 
+def get_bc_params(**args_to_override):
+    """
+    Loads default bc params defined globally. For each key in args_to_override, overrides the default with the
+    value specified for that key. Recursively checks all children. If key not found, creates new top level parameter.
+
+    Note: Even though children can share keys, for simplicity, we enforce the condition that all keys at all levels must be distict
+    """
     global _params_initalized, DEFAULT_BC_PARAMS
     if not _params_initalized:
         DEFAULT_BC_PARAMS['observation_shape'] = _get_observation_shape(DEFAULT_BC_PARAMS)
         _params_initalized = False
-    return copy.deepcopy(DEFAULT_BC_PARAMS)
+    params = copy.deepcopy(DEFAULT_BC_PARAMS)
+    
+    for arg, val in args_to_override.items():
+        updated = recursive_dict_update(params, arg, val)
+        if not updated:
+            print("WARNING, no value for specified bc argument {} found in schema. Adding as top level parameter".format(arg))
+    
+    all_keys = get_flattened_keys(params)
+    if len(all_keys) != len(set(all_keys)):
+        raise ValueError("Every key at every level must be distict for BC params!")
+    
+    return params
+
+
 
 
 
@@ -104,9 +124,9 @@ def _pad(sequences, maxlen=None, default=0):
         seq.extend([default]*pad_len)
     return sequences
 
-def load_data(bc_params, verbose):
-    processed_trajs, _ = get_trajs_from_data(**bc_params["data_params"], silent=not verbose)
-    inputs, targets = processed_trajs["ep_observations"], processed_trajs["ep_actions"]
+def load_data(bc_params, verbose=False):
+    processed_trajs = get_human_human_trajectories(**bc_params["data_params"], silent=not verbose)
+    inputs, targets = processed_trajs["ep_states"], processed_trajs["ep_actions"]
 
     if bc_params['use_lstm']:
         seq_lens = np.array([len(seq) for seq in inputs])
@@ -143,7 +163,7 @@ def train_bc_model(model_dir, bc_params, verbose=False):
         class_weights = None
 
     # Retrieve un-initialized keras model
-    model = build_bc_model(**bc_params, max_seq_len=np.max(seq_lens))
+    model = build_bc_model(**bc_params, max_seq_len=np.max(seq_lens), verbose=verbose)
 
     # Initialize the model
     # Note: have to use lists for multi-output model support and not dicts because of tensorlfow 2.0.0 bug
@@ -202,13 +222,13 @@ def train_bc_model(model_dir, bc_params, verbose=False):
                 verbose=2 if verbose else 0)
 
     # Save the model
-    save_bc_model(model_dir, model, bc_params)
+    save_bc_model(model_dir, model, bc_params, verbose=verbose)
 
     return model
     
 
 
-def save_bc_model(model_dir, model, bc_params):
+def save_bc_model(model_dir, model, bc_params, verbose=False):
     """
     Saves the specified model under the directory model_dir. This creates three items
 
@@ -218,25 +238,27 @@ def save_bc_model(model_dir, model, bc_params):
 
     Additionally, saves a pickled dictionary containing all the parameters used to construct this model
     at model_dir/metadata.pickle
-    """   
-    print("Saving bc model at ", model_dir)
+    """
+    if verbose:
+        print("Saving bc model at ", model_dir)
     model.save(model_dir, save_format='tf')
     with open(os.path.join(model_dir, "metadata.pickle"), 'wb') as f:
         pickle.dump(bc_params, f)
 
 
-def load_bc_model(model_dir):
+def load_bc_model(model_dir, verbose=False):
     """
     Returns the model instance (including all compilation data like optimizer state) and a dictionary of parameters
     used to create the model
     """
-    print("Loading bc model from ", model_dir)
+    if verbose:
+        print("Loading bc model from ", model_dir)
     model = keras.models.load_model(model_dir, custom_objects={ 'tf' : tf })
     with open(os.path.join(model_dir, "metadata.pickle"), "rb") as f:
         bc_params = pickle.load(f)
     return model, bc_params
 
-def evaluate_bc_model(model, bc_params):
+def evaluate_bc_model(model, bc_params, verbose=False):
     """
     Creates an AgentPair object containing two instances of BC Agents, whose policies are specified by `model`. Runs
     a rollout using AgentEvaluator class in an environment specified by bc_params
@@ -271,7 +293,8 @@ def evaluate_bc_model(model, bc_params):
                        agent_0_policy=agent_0_policy, 
                        agent_1_policy=agent_1_policy, 
                        agent_0_featurize_fn=featurize_fn, 
-                       agent_1_featurize_fn=featurize_fn)
+                       agent_1_featurize_fn=featurize_fn,
+                       verbose=verbose)
 
     # Compute the average sparse return obtained in each rollout
     reward = np.mean(results['ep_returns'])
@@ -514,7 +537,7 @@ class BehaviorCloningPolicy(RllibPolicy):
 
 
 if __name__ == "__main__":
-    params = get_default_bc_params()
+    params = get_bc_params()
     model = train_bc_model(os.path.join(BC_SAVE_DIR, 'default'), params, verbose=True)
     # Evaluate our model's performance in a rollout
     evaluate_bc_model(model, params)

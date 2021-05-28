@@ -71,8 +71,8 @@ def my_config():
     # LSTM memory cell size (only used if use_lstm=True)
     CELL_SIZE = 256
 
-
-
+    # whether to use D2RL https://arxiv.org/pdf/2010.09163.pdf (concatenation the result of last conv layer to each hidden layer); works only when use_lstm is False
+    D2RL = False
     ### Training Params ###
 
     num_workers = 30 if not LOCAL_TESTING else 2
@@ -168,6 +168,9 @@ def my_config():
     # Whether tensorflow should execute eagerly or not
     eager = False
 
+    # Whether to log training progress and debugging info
+    verbose = True
+
 
     ### BC Params ###
     # path to pickled policy model for behavior cloning
@@ -257,7 +260,8 @@ def my_config():
         "SIZE_HIDDEN_LAYERS" : SIZE_HIDDEN_LAYERS,
         "NUM_FILTERS" : NUM_FILTERS,
         "NUM_CONV_LAYERS" : NUM_CONV_LAYERS,
-        "CELL_SIZE" : CELL_SIZE
+        "CELL_SIZE" : CELL_SIZE,
+        "D2RL": D2RL
     }
 
     # to be passed into the rllib.PPOTrainer class
@@ -280,7 +284,8 @@ def my_config():
         "seed" : seed,
         "evaluation_interval" : evaluation_interval,
         "entropy_coeff_schedule" : entropy_coeff_schedule if entropy_coeff_schedule else [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
-        "eager" : eager
+        "eager" : eager,
+        "log_level" : "WARN" if verbose else "ERROR"
     }
 
     # To be passed into AgentEvaluator constructor and _evaluate function
@@ -342,7 +347,8 @@ def my_config():
         "save_every" : save_freq,
         "seeds" : seeds,
         "results_dir" : results_dir,
-        "ray_params" : ray_params
+        "ray_params" : ray_params,
+        "verbose" : verbose
     }
 
 
@@ -355,16 +361,19 @@ def run(params):
 
     # Training loop
     for i in range(params['num_training_iters']):
-        print("Starting training iteration", i)
+        if params['verbose']:
+            print("Starting training iteration", i)
         result = trainer.train()
 
         if i % params['save_every'] == 0:
             save_path = save_trainer(trainer, params)
-            print("saved trainer at", save_path)
+            if params['verbose']:
+                print("saved trainer at", save_path)
 
     # Save the state of the experiment at end
     save_path = save_trainer(trainer, params)
-    print("saved trainer at", save_path)
+    if params['verbose']:
+        print("saved trainer at", save_path)
 
     return result
 
