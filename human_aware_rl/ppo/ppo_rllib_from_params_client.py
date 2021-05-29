@@ -1,5 +1,5 @@
 # All imports except rllib
-import argparse, os, sys
+import argparse, os, sys, logging
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import numpy as np
 
@@ -195,6 +195,9 @@ def my_config():
     # Whether tensorflow should execute eagerly or not
     eager = False
 
+    # Whether to log training progress and debugging info
+    verbose = True
+
 
     ### BC Params ###
     # path to pickled policy model for behavior cloning
@@ -364,7 +367,8 @@ def my_config():
         "seeds" : seeds,
         "temp_dir" : temp_dir,
         "results_dir" : results_dir,
-        "ray_params" : ray_params
+        "ray_params" : ray_params,
+        "verbose" : verbose
     }
 
 # Dummy wrapper to pass rllib type checks
@@ -381,16 +385,19 @@ def run(params):
 
     # Training loop
     for i in range(params['num_training_iters']):
-        print("Starting training iteration", i)
+        if params['verbose']:
+            print("Starting training iteration", i)
         result = trainer.train()
 
         if i % params['save_every'] == 0:
             save_path = save_trainer(trainer, params)
-            print("saved trainer at", save_path)
+            if params['verbose']:
+                print("saved trainer at", save_path)
 
     # Save the state of the experiment at end
     save_path = save_trainer(trainer, params)
-    print("saved trainer at", save_path)
+    if params['verbose']:
+        print("saved trainer at", save_path)
 
     return result
 
@@ -398,7 +405,14 @@ def run(params):
 @ex_fp.automain
 def main(params):
     # All ray environment set-up
-    ray.init(temp_dir=params['temp_dir'])
+    init_params = {
+            "ignore_reinit_error" : True,
+            "include_webui" : False,
+            "temp_dir" : params['ray_params']['temp_dir'],
+            "log_to_driver" : params['verbose'],
+            "logging_level" : logging.INFO if params['verbose'] else logging.CRITICAL
+    }
+    ray.init(**init_params)
     register_env("overcooked_multi_agent", _env_creater)
     ModelCatalog.register_custom_model("MyPPOModel", RllibLSTMPPOModel if params['model_params']['use_lstm'] else RllibPPOModel)
 

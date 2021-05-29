@@ -3,6 +3,7 @@ import re
 import git
 import shutil
 import random
+import itertools
 import numpy as np
 import tensorflow as tf
 
@@ -86,7 +87,7 @@ def accuracy(action_probs, y):
 def set_global_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
-    tf.random.set_random_seed(seed)
+    tf.random.set_seed(seed)
 
 def prepare_nested_default_dict_for_pickle(nested_defaultdict):
     """Need to make all nested defaultdicts into normal dicts to pickle"""
@@ -119,3 +120,50 @@ class Node(object):
         self.agent_name = agent_name
         self.params = params
         self.parent = parent
+
+def get_flattened_keys(dictionary):
+    if type(dictionary) != dict:
+        return []
+    return list(dictionary.keys()) + list(itertools.chain(*[get_flattened_keys(dictionary[key]) for key in dictionary]))
+
+def recursive_dict_update(map, key, value):
+    if type(map) != dict:
+        return False
+    if key in map:
+        map[key] = value
+        return True
+    return any([recursive_dict_update(child, key, value) for child in map.values()])
+
+def equal_dicts(d1, d2, ignore_keys):
+    ignored = set(ignore_keys)
+    for k1, v1 in d1.items():
+        if k1 not in ignored and (k1 not in d2 or d2[k1] != v1):
+            if k1 not in d2:
+                print("d2 missing", k1)
+            else:
+                if k1 == "objects":
+                    print("object difference")
+                    for o1 in d1[k1]:
+                        print(o1)
+                    print("----")
+                    for o2 in d2[k1]:
+                        print(o2)
+                else:
+                    print("different at ", k1, "one is ", d2[k1], "one is ", v1)
+            return False
+    for k2, v2 in d2.items():
+        if k2 not in ignored and k2 not in d1:
+            print("d1 missing", k2)
+            return False
+    return True
+
+def get_dict_stats(d):
+    new_d = d.copy()
+    for k, v in d.items():
+        new_d[k] = {
+            'mean': np.mean(v),
+            'standard_error': np.std(v) / np.sqrt(len(v)),
+            'max': np.max(v),
+            'n': len(v)
+        }
+    return new_d

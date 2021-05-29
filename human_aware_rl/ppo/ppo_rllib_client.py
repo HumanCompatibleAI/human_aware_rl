@@ -167,6 +167,9 @@ def my_config():
     # Whether tensorflow should execute eagerly or not
     eager = False
 
+    # Whether to log training progress and debugging info
+    verbose = True
+
 
     ### BC Params ###
     # path to pickled policy model for behavior cloning
@@ -252,7 +255,8 @@ def my_config():
         "seed" : seed,
         "evaluation_interval" : evaluation_interval,
         "entropy_coeff_schedule" : [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
-        "eager" : eager
+        "eager" : eager,
+        "log_level" : "WARN" if verbose else "ERROR"
     }
 
     # To be passed into AgentEvaluator constructor and _evaluate function
@@ -312,7 +316,8 @@ def my_config():
         "save_every" : save_freq,
         "seeds" : seeds,
         "results_dir" : results_dir,
-        "ray_params" : ray_params
+        "ray_params" : ray_params,
+        "verbose" : verbose
     }
 
 
@@ -325,16 +330,19 @@ def run(params):
 
     # Training loop
     for i in range(params['num_training_iters']):
-        print("Starting training iteration", i)
+        if params['verbose']:
+            print("Starting training iteration", i)
         result = trainer.train()
 
         if i % params['save_every'] == 0:
             save_path = save_trainer(trainer, params)
-            print("saved trainer at", save_path)
+            if params['verbose']:
+                print("saved trainer at", save_path)
 
     # Save the state of the experiment at end
     save_path = save_trainer(trainer, params)
-    print("saved trainer at", save_path)
+    if params['verbose']:
+        print("saved trainer at", save_path)
 
     return result
 
