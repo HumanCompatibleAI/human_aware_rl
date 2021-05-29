@@ -194,7 +194,7 @@ def main(data_infile, data_outdir, insert_interacts, forward_port, fix_json, ver
         print("Processing Raw Data")
     state_action_pairs = dict()
 
-    for _, datapoint in raw_data.iterrows():
+    for i, datapoint in raw_data.iterrows():
         if verbose:
             print(f"Processing {i}/{N}", end = '\r')
 
