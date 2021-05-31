@@ -4,10 +4,10 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data, get_human_human_trajectories
-from human_aware_rl.static import CLEAN_2019_HUMAN_DATA_TRAIN
+from human_aware_rl.static import CLEAN_2019_HUMAN_DATA_TRAIN, CLEAN_2020_HUMAN_DATA_TRAIN
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
-from human_aware_rl.utils import recursive_dict_update, get_flattened_keys
+from human_aware_rl.utils import recursive_dict_update, get_flattened_keys, create_dir_if_not_exists
 from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.mdp.overcooked_env import DEFAULT_ENV_PARAMS
 from ray.rllib.policy import Policy as RllibPolicy
@@ -115,6 +115,18 @@ class LstmStateResetCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         self.model.reset_states()
 
+class SelfPlayEvalCallback(keras.callbacks.Callback):
+
+    def __init__(self, bc_params, every_nth=10, **kwargs):
+        self.bc_params = bc_params
+        self.every_nth = every_nth
+        super(SelfPlayEvalCallback, self).__init__(**kwargs)
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch % self.every_nth == 0:
+            eval_score = evaluate_bc_model(self.model, self.bc_params)
+            logs['eval_score'] = eval_score
+            print("\nSelf-play reward after {} epochs: {}\n".format(epoch, eval_score))
 
 def _pad(sequences, maxlen=None, default=0):
     if not maxlen:
@@ -198,7 +210,9 @@ def train_bc_model(model_dir, bc_params, verbose=False):
             filepath=os.path.join(model_dir, "checkpoints"),
             monitor="loss",
             save_best_only=True
-        )
+        ),
+        # TODO
+        SelfPlayEvalCallback(bc_params=bc_params)
     ]
 
     ## Actually train our model
@@ -245,6 +259,11 @@ def save_bc_model(model_dir, model, bc_params, verbose=False):
     with open(os.path.join(model_dir, "metadata.pickle"), 'wb') as f:
         pickle.dump(bc_params, f)
 
+def _load_bc_params(model_dir):
+    with open(os.path.join(model_dir, "metadata.pickle"), "rb") as f:
+        bc_params = pickle.load(f)
+    return bc_params
+
 
 def load_bc_model(model_dir, verbose=False):
     """
@@ -254,8 +273,7 @@ def load_bc_model(model_dir, verbose=False):
     if verbose:
         print("Loading bc model from ", model_dir)
     model = keras.models.load_model(model_dir, custom_objects={ 'tf' : tf })
-    with open(os.path.join(model_dir, "metadata.pickle"), "rb") as f:
-        bc_params = pickle.load(f)
+    bc_params = _load_bc_params(model_dir)
     return model, bc_params
 
 def evaluate_bc_model(model, bc_params, verbose=False):
@@ -535,9 +553,44 @@ class BehaviorCloningPolicy(RllibPolicy):
             return NullContextManager()
         return TfContextManager(self._sess)
 
+class BehaviorCloningAgent(RlLibAgent):
+
+    def __init__(self, model_dir, agent_index=0, stochastic=True, **kwargs):
+        self.model_dir = model_dir
+        self.stochastic = stochastic
+        policy = BehaviorCloningPolicy.from_model_dir(model_dir, stochastic)
+        bc_params = _load_bc_params(model_dir)
+        env = _get_base_ae(bc_params).env
+        super(BehaviorCloningAgent, self).__init__(policy, agent_index, env.featurize_state_mdp)
+
+    def __getstate__(self):
+        return { 
+            "model_dir" : self.model_dir,
+            "stochastic" : self.stochastic,
+            "agent_index" : self.agent_index
+        }
+
+    def __setstate__(self, state):
+        self.__init__(**state)
+
+    
+
+
+
+
+
 
 if __name__ == "__main__":
-    params = get_bc_params()
-    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'default'), params, verbose=True)
+    #TODO: Wrap this script in a sacred driver
+    params_to_override = {
+        "layouts" : ["soup_coordination"],
+        "data_path" : CLEAN_2020_HUMAN_DATA_TRAIN,
+        "mdp_params": {'layout_name': "soup_coordination"},
+        "epochs" : 100,
+        "num_games" : 5,
+        "net_arch" : [128, 128]
+    }
+    params = get_bc_params(**params_to_override)
+    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'soup_coord_test_100_epochs'), params, verbose=True)
     # Evaluate our model's performance in a rollout
-    evaluate_bc_model(model, params)
+    evaluate_bc_model(model, params, verbose=True)

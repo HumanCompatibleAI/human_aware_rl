@@ -49,8 +49,8 @@ def get_human_human_trajectories(layouts, dataset_type='train', data_path=None, 
         data_path_to_layouts[curr_data_path].append(layout)
     
     # For each data path, load data once and parse trajectories for all corresponding layouts
-    for data_path in data_path_to_layouts:
-        curr_data = get_trajs_from_data(curr_data_path, layouts=[layout], **kwargs)[0]
+    for data_path, layouts in data_path_to_layouts.items():
+        curr_data = get_trajs_from_data(data_path, layouts=layouts, **kwargs)[0]
         data = append_trajectories(data, curr_data)
 
     # Return all accumulated data for desired layouts
