@@ -1,10 +1,10 @@
-import os, pickle, copy
+import os, pickle, copy, shutil
 from tensorflow import keras
 import tensorflow as tf
 import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data, get_human_human_trajectories
-from human_aware_rl.static import CLEAN_2019_HUMAN_DATA_TRAIN, CLEAN_2020_HUMAN_DATA_TRAIN
+from human_aware_rl.static import *
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.utils import recursive_dict_update, get_flattened_keys, create_dir_if_not_exists
@@ -43,7 +43,8 @@ DEFAULT_TRAINING_PARAMS = {
 DEFAULT_EVALUATION_PARAMS = {
     "ep_length" : 400,
     "num_games" : 1,
-    "display" : False
+    "display" : False,
+    "every_nth" : 10
 }
 
 DEFAULT_BC_PARAMS = {
@@ -117,9 +118,9 @@ class LstmStateResetCallback(keras.callbacks.Callback):
 
 class SelfPlayEvalCallback(keras.callbacks.Callback):
 
-    def __init__(self, bc_params, every_nth=10, **kwargs):
+    def __init__(self, bc_params, **kwargs):
         self.bc_params = bc_params
-        self.every_nth = every_nth
+        self.every_nth = bc_params['evaluation_params']['every_nth']
         super(SelfPlayEvalCallback, self).__init__(**kwargs)
 
     def on_epoch_end(self, epoch, logs=None):
@@ -211,7 +212,7 @@ def train_bc_model(model_dir, bc_params, verbose=False):
             monitor="loss",
             save_best_only=True
         ),
-        # TODO
+        # Compute a BC-BC rollout and record sparse reward performance
         SelfPlayEvalCallback(bc_params=bc_params)
     ]
 
@@ -573,6 +574,34 @@ class BehaviorCloningAgent(RlLibAgent):
     def __setstate__(self, state):
         self.__init__(**state)
 
+
+    def save(self, save_dir):
+        # parse paths
+        new_model_dir = os.path.join(save_dir, 'model')
+        agent_save_path = os.path.join(save_dir, 'agent.pickle')
+
+        # Create all needed directories
+        if not os.path.exists(save_dir):
+            os.path.os.makedirs(save_dir)
+        
+        # Copy over serialized bc model + update path pointer
+        shutil.copytree(self.model_dir, new_model_dir)
+        self.model_dir = new_model_dir
+
+        # Serialize BehaviorCloningAgent wrapper
+        with open(agent_save_path, 'wb') as f:
+            pickle.dump(self, f)
+
+    @classmethod
+    def load(cls, path):
+        if os.path.isdir(path):
+            path = os.path.join(path, 'agent.pickle')
+        with open(path, 'rb') as f:
+            obj = pickle.load(f)
+        return obj
+
+        
+
     
 
 
@@ -584,13 +613,15 @@ if __name__ == "__main__":
     #TODO: Wrap this script in a sacred driver
     params_to_override = {
         "layouts" : ["soup_coordination"],
-        "data_path" : CLEAN_2020_HUMAN_DATA_TRAIN,
+        "data_path" : CLEAN_2020_HUMAN_DATA_ALL,
         "mdp_params": {'layout_name': "soup_coordination"},
         "epochs" : 100,
         "num_games" : 5,
-        "net_arch" : [128, 128]
+        "every_nth" : 25,
+        "net_arch" : [128, 128],
+        "use_class_weights" : True
     }
     params = get_bc_params(**params_to_override)
-    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'soup_coord_test_100_epochs'), params, verbose=True)
+    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'soup_coord_all_100_epochs_weighted'), params, verbose=True)
     # Evaluate our model's performance in a rollout
     evaluate_bc_model(model, params, verbose=True)
