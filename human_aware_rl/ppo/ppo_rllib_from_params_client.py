@@ -31,7 +31,7 @@ from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
 from ray.rllib.agents.ppo.ppo import PPOTrainer
-from human_aware_rl.ppo.ppo_rllib import RllibPPOModel, RllibLSTMPPOModel
+from human_aware_rl.ppo.ppo_rllib import RllibPPOModel
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR
 
@@ -235,7 +235,7 @@ def my_config():
 
 
     # Whether dense reward should come from potential function or not
-    use_phi = True
+    use_potential_shaping = True
 
     # Max episode length
     horizon = 400
@@ -333,7 +333,7 @@ def my_config():
         "multi_agent_params" : {
             "reward_shaping_factor" : reward_shaping_factor,
             "reward_shaping_horizon" : reward_shaping_horizon,
-            "use_phi" : use_phi,
+            "use_potential_shaping" : use_potential_shaping,
             "bc_schedule" : bc_schedule
         }
     }
@@ -349,7 +349,7 @@ def my_config():
 
     ray_params = {
         "custom_model_id" : "MyPPOModel",
-        "custom_model_cls" : RllibLSTMPPOModel if model_params['use_lstm'] else RllibPPOModel,
+        "custom_model_cls" : None if model_params['use_lstm'] else RllibPPOModel,
         "temp_dir" : temp_dir,
         "env_creator" : _env_creator
     }
@@ -407,8 +407,7 @@ def main(params):
     # All ray environment set-up
     init_params = {
             "ignore_reinit_error" : True,
-            "include_webui" : False,
-            "temp_dir" : params['ray_params']['temp_dir'],
+            "_temp_dir" : params['ray_params']['temp_dir'],
             "log_to_driver" : params['verbose'],
             "logging_level" : logging.INFO if params['verbose'] else logging.CRITICAL
     }

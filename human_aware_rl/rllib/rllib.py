@@ -54,7 +54,7 @@ class RlLibAgent(Agent):
         my_obs = obs[self.agent_index]
 
         # Compute non-normalized log probabilities from the underlying model
-        logits = self.policy.compute_actions(np.array([my_obs]), self.rnn_state)[2]['action_dist_inputs']
+        logits = self.policy.compute_actions(np.array([my_obs]), state_batches=self.rnn_state)[2]['action_dist_inputs']
 
         # Softmax in numpy to convert logits to normalized probabilities
         return softmax(logits)
@@ -72,7 +72,7 @@ class RlLibAgent(Agent):
         my_obs = obs[self.agent_index]
 
         # Use Rllib.Policy class to compute action argmax and action probabilities
-        [action_idx], rnn_state, info = self.policy.compute_actions(np.array([my_obs]), self.rnn_state)
+        [action_idx], rnn_state, info = self.policy.compute_actions(np.array([my_obs]), state_batches=self.rnn_state)
         agent_action =  Action.INDEX_TO_ACTION[action_idx]
         
         # Softmax in numpy to convert logits to normalized probabilities
@@ -91,7 +91,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
     """
 
     # List of all agent types currently supported
-    supported_agents = ['ppo', 'bc']
+    supported_agents = ['ppo', 'bc', 'bc_opt']
 
     # Default bc_schedule, includes no bc agent at any time
     bc_schedule = self_play_bc_schedule = zero_schedule = [(0, 0), (float('inf'), 0)]
@@ -109,6 +109,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         },
         # To be passed into OvercookedMultiAgent constructor
         "multi_agent_params" : {
+            "bc_opt" : False,
             "use_reward_shaping" : False,
             "reward_shaping_schedule" : zero_schedule,
             "use_potential_shaping" : False,
@@ -121,14 +122,16 @@ class OvercookedMultiAgent(MultiAgentEnv):
 
     def __init__(self, base_env, use_reward_shaping=False, reward_shaping_schedule=None,
                             use_potential_shaping=False, potential_shaping_schedule=None,
-                            bc_schedule=None, gamma=0.99, potential_constants={}):
+                            bc_schedule=None, gamma=0.99, potential_constants={},
+                            bc_opt=False):
         """
         base_env: OvercookedEnv
         reward_shaping_factor (float): Coefficient multiplied by dense reward before adding to sparse reward to determine shaped reward
         reward_shaping_horizon (int): Timestep by which the reward_shaping_factor reaches zero through linear annealing
         bc_schedule (list[tuple]): List of (t_i, v_i) pairs where v_i represents the value of bc_factor at timestep t_i
             with linear interpolation in between the t_i
-        use_phi (bool): Whether to use 'shaped_r_by_agent' or 'phi_s_prime' - 'phi_s' to determine dense reward
+        use_potential_shaping (bool): Whether to use 'shaped_r_by_agent' or 'phi_s_prime' - 'phi_s' to determine dense reward
+        bc_opt (bool): Whether the BC agent (if present) is pure BC or BC_OPT meta-agent
         """
         if use_reward_shaping and not reward_shaping_schedule:
             raise ValueError("must specify `reward_shaping_schedule` if `use_reward_shaping` is true")
@@ -149,10 +152,12 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.potential_constants = potential_constants
         self.use_potential_shaping = use_potential_shaping
         self.use_reward_shaping = use_reward_shaping
+        self.bc_opt = bc_opt
         # since we are not passing featurize_fn in as an argument, we create it here and check its validity
         self.featurize_fn_map = {
             "ppo": lambda state: self.base_env.lossless_state_encoding_mdp(state),
-            "bc": lambda state: self.base_env.featurize_state_mdp(state)
+            "bc": lambda state: self.base_env.featurize_state_mdp(state),
+            "bc_opt" : lambda state: OvercookedMultiAgent.bc_opt_featurize_fn(self.base_env, state)
         }
         self._validate_featurize_fns(self.featurize_fn_map)
         self._setup_observation_space()
@@ -161,6 +166,15 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.anneal_potential_shaping_factor(0)
         self.anneal_reward_shaping_factor(0)
         self.reset()
+
+    @staticmethod
+    def bc_opt_featurize_fn(base_env, state):
+        on_dist_obs = base_env.featurize_state_mdp(state)
+        off_dist_obs = base_env.lossless_state_encoding_mdp(state)
+        p0_obs = { "on_dist" : on_dist_obs[0], "off_dist" : off_dist_obs[0] }
+        p1_obs = { "on_dist" : on_dist_obs[1], "off_dist" : off_dist_obs[1] }
+
+        return p0_obs, p1_obs
     
     def _validate_featurize_fns(self, mapping):
         assert 'ppo' in mapping, "At least one ppo agent must be specified"
@@ -200,11 +214,16 @@ class OvercookedMultiAgent(MultiAgentEnv):
         low = np.ones(obs_shape) * -100
         self.bc_observation_space = gym.spaces.Box(np.float32(low), np.float32(high), dtype=np.float32)
 
+        # bc_opt observation
+        self.bc_opt_observation_space = gym.spaces.Dict({"on_dist" : self.bc_observation_space, "off_dist" : self.ppo_observation_space})
+
     def _get_featurize_fn(self, agent_id):
         if agent_id.startswith('ppo'):
-            return lambda state: self.base_env.lossless_state_encoding_mdp(state)
+            return self.featurize_fn_map['ppo']
+        if agent_id.startswith('bc_opt'):
+            return self.featurize_fn_map['bc_opt']
         if agent_id.startswith('bc'):
-            return lambda state: self.base_env.featurize_state_mdp(state)
+            return self.featurize_fn_map['bc']
         raise ValueError("Unsupported agent type {0}".format(agent_id))
 
     def _get_obs(self, state):
@@ -217,8 +236,12 @@ class OvercookedMultiAgent(MultiAgentEnv):
         # Always include at least one ppo agent (i.e. bc_sp not supported for simplicity)
         agents = ['ppo']
 
-        # Coin flip to determine whether other agent should be ppo or bc
-        other_agent = 'bc' if np.random.uniform() < self.bc_factor else 'ppo'
+        # Coin flip to determine whether other agent should be ppo or bc/bc_opt
+        include_bc = np.random.uniform() < self.bc_factor
+        if include_bc:
+            other_agent = 'bc_opt' if self.bc_opt else 'bc'
+        else:
+            other_agent = 'ppo'
         agents.append(other_agent)
 
         # Randomize starting indices
@@ -483,15 +506,23 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         agent_0_policy = trainer.get_policy(agent_0_policy)
         agent_1_policy = trainer.get_policy(agent_1_policy)
 
+        # Conditionally assign featuriation fns
+        # TODO: this repeats the logic in the OvercookedMultiAgent constructor, so might want to 
+        # create an instance of that environment instead of a base_env
         agent_0_feat_fn = agent_1_feat_fn = None
-        if 'bc' in policies:
+        if 'bc' in policies or 'bc_opt' in policies:
             base_ae = get_base_ae(eval_mdp_params, env_params)
             base_env = base_ae.env
             bc_featurize_fn = lambda state : base_env.featurize_state_mdp(state)
+            bc_opt_featurize_fn = lambda state : OvercookedMultiAgent.bc_opt_featurize_fn(base_env, state)
             if policies[0] == 'bc':
                 agent_0_feat_fn = bc_featurize_fn
             if policies[1] == 'bc':
                 agent_1_feat_fn = bc_featurize_fn
+            if policies[0] == 'bc_opt':
+                agent_0_feat_fn = bc_opt_featurize_fn
+            if policies[1] == 'bc_opt':
+                agent_1_feat_fn = bc_opt_featurize_fn
 
         # Compute the evauation rollout. Note this doesn't use the rllib passed in evaluation_workers, so this 
         # computation all happens on the CPU. Could change this if evaluation becomes a bottleneck
@@ -554,8 +585,7 @@ def gen_trainer_from_params(params):
     if not ray.is_initialized():
         init_params = {
             "ignore_reinit_error" : True,
-            "include_webui" : False,
-            "temp_dir" : params['ray_params']['temp_dir'],
+            "_temp_dir" : params['ray_params']['temp_dir'],
             "log_to_driver" : params['verbose'],
             "logging_level" : logging.INFO if params['verbose'] else logging.CRITICAL
         }
@@ -569,6 +599,7 @@ def gen_trainer_from_params(params):
     environment_params = params['environment_params']
     evaluation_params = params['evaluation_params']
     bc_params = params['bc_params']
+    bc_opt_params = params['bc_opt_params']
     multi_agent_params = params['environment_params']['multi_agent_params']
 
     env = OvercookedMultiAgent.from_config(environment_params)
@@ -576,12 +607,12 @@ def gen_trainer_from_params(params):
     # Returns a properly formatted policy tuple to be passed into ppotrainer config
     def gen_policy(policy_type="ppo"):
         # supported policy types thus far
-        assert policy_type in ["ppo", "bc"]
+        assert policy_type in ["ppo", "bc", "bc_opt"]
 
         if policy_type == "ppo":
             config = {
                 "model" : {
-                    "custom_options" : model_params,
+                    "custom_model_config" : model_params,
                     
                     "custom_model" : "MyPPOModel"
                 }
@@ -591,6 +622,10 @@ def gen_trainer_from_params(params):
             bc_cls = bc_params['bc_policy_cls']
             bc_config = bc_params['bc_config']
             return (bc_cls, env.bc_observation_space, env.action_space, bc_config)
+        elif policy_type == 'bc_opt':
+            bc_opt_cls = bc_opt_params['bc_opt_policy_cls']
+            bc_opt_config = bc_opt_params['bc_opt_config']
+            return (bc_opt_cls, env.bc_opt_observation_space, env.action_space, bc_opt_config)
 
     # Rllib compatible way of setting the directory we store agent checkpoints in
     logdir_prefix = "{0}_{1}_{2}".format(params["experiment_name"], params['training_params']['seed'], timestr)
@@ -611,18 +646,22 @@ def gen_trainer_from_params(params):
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
-    all_policies = ['ppo']
+    all_policies = set(['ppo'])
+    other_policy = 'ppo'
 
     # Whether both agents should be learned
     self_play = iterable_equal(multi_agent_params['bc_schedule'], OvercookedMultiAgent.self_play_bc_schedule)
     if not self_play:
-        all_policies.append('bc')
+        other_policy = 'bc_opt' if multi_agent_params['bc_opt'] else 'bc' 
+    all_policies.add(other_policy)
 
     multi_agent_config['policies'] = { policy : gen_policy(policy) for policy in all_policies }
 
     def select_policy(agent_id):
         if agent_id.startswith('ppo'):
             return 'ppo'
+        if agent_id.startswith('bc_opt'):
+            return 'bc_opt'
         if agent_id.startswith('bc'):
             return 'bc'
     multi_agent_config['policy_mapping_fn'] = select_policy
@@ -637,10 +676,9 @@ def gen_trainer_from_params(params):
         "multiagent": multi_agent_config,
         "callbacks" : TrainingCallbacks,
         "custom_eval_function" : get_rllib_eval_function(evaluation_params, environment_params['eval_mdp_params'], environment_params['env_params'],
-                                        environment_params["outer_shape"], 'ppo', 'ppo' if self_play else 'bc',
+                                        environment_params["outer_shape"], 'ppo', other_policy,
                                         verbose=params['verbose']),
         "env_config" : environment_params,
-        "eager" : False,
         **training_params
     }, logger_creator=custom_logger_creator)
     return trainer

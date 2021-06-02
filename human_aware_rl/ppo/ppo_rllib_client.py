@@ -31,9 +31,9 @@ from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
 from ray.rllib.agents.ppo.ppo import PPOTrainer
-from human_aware_rl.ppo.ppo_rllib import RllibPPOModel, RllibLSTMPPOModel
+from human_aware_rl.ppo.ppo_rllib import RllibPPOModel
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params
-from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR
+from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR, BernoulliBCSelfPlayOPTPolicy
 
 
 ###################### Temp Documentation #######################
@@ -179,6 +179,12 @@ def my_config():
     # Whether bc agents should return action logit argmax or sample
     bc_stochastic = True
 
+    # Whether bc agent should bc optimal off-distribution
+    bc_opt = False
+
+    # Path to serialized pre-trained OPT agent
+    opt_path = os.path.join(os.path.abspath("~"), 'ray_results', 'my_experiment')
+
 
 
     ### Environment Params ###
@@ -256,6 +262,7 @@ def my_config():
     # To be passed into rl-lib model/custom_options config
     model_params = {
         "use_lstm" : use_lstm,
+        "vf_share_layers" : vf_share_layers,
         "NUM_HIDDEN_LAYERS" : NUM_HIDDEN_LAYERS,
         "SIZE_HIDDEN_LAYERS" : SIZE_HIDDEN_LAYERS,
         "NUM_FILTERS" : NUM_FILTERS,
@@ -276,7 +283,6 @@ def my_config():
         "grad_clip" : grad_clip,
         "gamma" : gamma,
         "lambda" : lmbda,
-        "vf_share_layers" : vf_share_layers,
         "vf_loss_coeff" : vf_loss_coeff,
         "kl_coeff" : kl_coeff,
         "clip_param" : clip_param,
@@ -284,7 +290,7 @@ def my_config():
         "seed" : seed,
         "evaluation_interval" : evaluation_interval,
         "entropy_coeff_schedule" : entropy_coeff_schedule if entropy_coeff_schedule else [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
-        "eager" : eager,
+        "eager_tracing" : eager,
         "log_level" : "WARN" if verbose else "ERROR"
     }
 
@@ -315,7 +321,8 @@ def my_config():
             "use_potential_shaping" : use_potential_shaping,
             "use_reward_shaping" : use_reward_shaping,
             "bc_schedule" : bc_schedule,
-            "potential_constants" : potential_constants
+            "potential_constants" : potential_constants,
+            "bc_opt" : bc_opt
         }
     }
 
@@ -328,9 +335,22 @@ def my_config():
         }
     }
 
+    bc_opt_params = {
+        "bc_opt_policy_cls" : BernoulliBCSelfPlayOPTPolicy,
+        "bc_opt_config" : {
+            "on_dist_config" : {
+                "model_dir" : bc_model_dir,
+                "stochastic" : bc_stochastic
+            },
+            "off_dist_config" : {
+                "opt_path" : opt_path
+            }
+        }
+    }
+
     ray_params = {
         "custom_model_id" : "MyPPOModel",
-        "custom_model_cls" : RllibLSTMPPOModel if model_params['use_lstm'] else RllibPPOModel,
+        "custom_model_cls" : None if model_params['use_lstm'] else RllibPPOModel,
         "temp_dir" : temp_dir,
         "env_creator" : _env_creator
     }
@@ -340,6 +360,7 @@ def my_config():
         "training_params" : training_params,
         "environment_params" : environment_params,
         "bc_params" : bc_params,
+        "bc_opt_params" : bc_opt_params,
         "shared_policy" : shared_policy,
         "num_training_iters" : num_training_iters,
         "evaluation_params" : evaluation_params,

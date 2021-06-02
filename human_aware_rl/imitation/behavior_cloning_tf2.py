@@ -1,16 +1,18 @@
 import os, pickle, copy, shutil
 from tensorflow import keras
 import tensorflow as tf
+import tensorflow_probability as tfp
 import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data, get_human_human_trajectories
 from human_aware_rl.static import *
-from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
+from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae, load_trainer
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.utils import recursive_dict_update, get_flattened_keys, create_dir_if_not_exists
 from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.mdp.overcooked_env import DEFAULT_ENV_PARAMS
 from ray.rllib.policy import Policy as RllibPolicy
+from ray.rllib.models.modelv2 import restore_original_dimensions
 
 #################
 # Configuration #
@@ -413,6 +415,7 @@ class BehaviorCloningPolicy(RllibPolicy):
             - eager (bool)                      Whether the model should run in eager (or graph) mode. Overrides bc_params['eager'] if present
         """
         super(BehaviorCloningPolicy, self).__init__(observation_space, action_space, config)
+        self.model = None
 
         if 'bc_model' in config and config['bc_model']:
             assert 'bc_params' in config, "must specify params in addition to model"
@@ -430,7 +433,7 @@ class BehaviorCloningPolicy(RllibPolicy):
         assert self.observation_shape == bc_params['observation_shape']
         assert self.action_shape == bc_params['action_shape']
 
-        self.model = model
+        self.my_model = model
         self.stochastic = config['stochastic']
         self.use_lstm = bc_params['use_lstm']
         self.cell_size = bc_params['cell_size']
@@ -537,12 +540,12 @@ class BehaviorCloningPolicy(RllibPolicy):
         if self.use_lstm:
             obs_batch = np.expand_dims(obs_batch, 1)
             seq_lens = np.ones(len(obs_batch))
-            model_out = self.model.predict([obs_batch, seq_lens] + state_batches)
+            model_out = self.my_model.predict([obs_batch, seq_lens] + state_batches)
             logits, states = model_out[0], model_out[1:]
             logits = logits.reshape((logits.shape[0], -1))
             return logits, states
         else:
-            return self.model.predict(obs_batch), []
+            return self.my_model.predict(obs_batch), []
 
     def _create_execution_context(self):
         """
@@ -600,13 +603,154 @@ class BehaviorCloningAgent(RlLibAgent):
             obj = pickle.load(f)
         return obj
 
+class AbstractBehaviorCloningOffDistrubutionPolicy(RllibPolicy):
+
+    def __init__(self, observation_space, action_space, config):
+        """
+        RLLib compatible constructor for initializing a behavior cloning model
+
+        observation_space (gym.Space|tuple)     Shape of the featurized observations
+        action_space (gym.space|tuple)          Shape of the action space (len(Action.All_ACTIONS),)
+        config (dict)                           Dictionary of relavant policy params
+            - on_dist_config (dict):                Parameters passed into the "on distribution" policy
+            - off_dist_config (dict):               Parameters passed into the "off distrubtion" policy
+        """
+        super(AbstractBehaviorCloningOffDistrubutionPolicy, self).__init__(observation_space, action_space, config)
+        self.on_distrubtion_policy = self._on_dist_init(config['on_dist_config'])
+        self.on_distrubtion_policy = self._off_dist_init(config['off_dist_config'])
         
+    def _on_dist_init(self, on_dist_config):
+        raise NotImplementedError("Must subclass and override this method")
+
+    def _off_dist_init(self, off_dist_config):
+        raise NotImplementedError("Must subclass and override this method")
+
+
+    def _on_distribution(self, obs_batch):
+        raise NotImplementedError("Must subclass and override this method")
+
+
+    def compute_actions(self, obs_batch, 
+                              state_batches=None, 
+                              prev_action_batch=None, 
+                              prev_reward_batch=None, 
+                              info_batch=None, 
+                              episodes=None, 
+                              **kwargs):
+        on_dist_mask = self._on_distribution(obs_batch)
+
+        # Parse out the on/off-distribution actions
+        restored_batch = restore_original_dimensions(obs_batch, self.observation_space)
+        off_dist_obs, on_dist_obs = restored_batch['off_dist'], restored_batch['on_dist']
+
+        # On distrubion forward
+        on_dist_actions, _, on_dist_logits = self.on_distrubtion_policy.compute_actions(on_dist_obs)
+        on_dist_logits = on_dist_logits['action_dist_inputs']
+
+        # Off distribution forward
+        off_dist_actions, _, off_dist_logits = self.off_distrubtion_policy.compute_actions(off_dist_obs)
+        off_dist_logits = off_dist_logits['action_dist_inputs']
+
+        actions, logits = tf.where(on_dist_mask, on_dist_actions, off_dist_actions), tf.where(on_dist_mask, on_dist_logits, off_dist_logits)
+
+        return actions, None, { "action_dist_inputs" : logits }
+
+    def get_initial_state(self):
+        """
+        Returns the initial hidden and memory states for the model if it is recursive
+
+        Note, this shadows the rllib.Model.get_initial_state function, but had to be added here as
+        keras does not allow mixins in custom model classes
+
+        Also note, either this function or self.model.get_initial_state (if it exists) must be called at 
+        start of an episode
+        """
+        return []
+
+
+    def get_weights(self):
+        """
+        No-op to keep rllib from breaking, won't be necessary in future rllib releases
+        """
+        pass
+
+    def set_weights(self, weights):
+        """
+        No-op to keep rllib from breaking
+        """
+        pass
+
+
+    def learn_on_batch(self, samples):
+        """
+        Static policy requires no learning
+        """
+        return {}
 
     
+class AbstractBCSelfPlayOPTPolicy(AbstractBehaviorCloningOffDistrubutionPolicy):
+
+    def _off_dist_init(self, config):
+        trainer_path = config['save_path']
+        policy_id = config['policy_id']
+        policy = load_trainer(trainer_path).get_policy(policy_id)
+        return policy
+
+    def _on_dist_init(self, config):
+        return BehaviorCloningPolicy.from_model_dir(**config)
+
+class BernoulliBCSelfPlayOPTPolicy(AbstractBCSelfPlayOPTPolicy):
+
+    def __init__(self, observation_space, action_space, config):
+        self.p = config.get('p', 0.5)
+        super(BernoulliBCSelfPlayOPTPolicy, self).__init__(observation_space, action_space, config)
+
+    def _on_distribution(self, obs_batch):
+        N = len(obs_batch)
+        mask = tfp.distributions.Binomial(N, probs=self.p)
+        return mask
+    
+class DummyPolicy(RllibPolicy):
+
+    def __init__(self, observation_space, action_space, config):
+        super(DummyPolicy, self).__init__(observation_space, action_space, config)
+        self.model = None
+
+    def compute_actions(self, obs_batch, state_batches, **kwargs):
+        restored_batch = restore_original_dimensions(obs_batch, self.observation_space)
+        raise Exception("AHHHHH")
+
+    def get_initial_state(self):
+        """
+        Returns the initial hidden and memory states for the model if it is recursive
+
+        Note, this shadows the rllib.Model.get_initial_state function, but had to be added here as
+        keras does not allow mixins in custom model classes
+
+        Also note, either this function or self.model.get_initial_state (if it exists) must be called at 
+        start of an episode
+        """
+        return []
 
 
+    def get_weights(self):
+        """
+        No-op to keep rllib from breaking, won't be necessary in future rllib releases
+        """
+        pass
+
+    def set_weights(self, weights):
+        """
+        No-op to keep rllib from breaking
+        """
+        pass
 
 
+    def learn_on_batch(self, samples):
+        """
+        Static policy requires no learning
+        """
+        return {}
 
 
 if __name__ == "__main__":

@@ -85,7 +85,7 @@ class TestPPORllib(unittest.TestCase):
                 "evaluation_interval": 10,
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
-                "use_phi": False,
+                "use_potential_shaping": False,
                 "evaluation_display": False,
                 "verbose" : False
             },
@@ -96,7 +96,7 @@ class TestPPORllib(unittest.TestCase):
         ray.shutdown()
 
         # Where the agent is stored (this is kind of hardcoded, would like for it to be more easily obtainable)
-        load_path = os.path.join(glob.glob(os.path.join(self.temp_results_dir, "save_load_test*"))[0], 'checkpoint_2', 'checkpoint-2')
+        load_path = os.path.join(glob.glob(os.path.join(self.temp_results_dir, "save_load_test*"))[0], 'checkpoint_000002', 'checkpoint-2')
 
         # Load a dummy state
         mdp = OvercookedGridworld.from_layout_name("cramped_room")
@@ -136,7 +136,7 @@ class TestPPORllib(unittest.TestCase):
                 "evaluation_interval": 10,
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
-                "use_phi": False,
+                "use_potential_shaping": False,
                 "evaluation_display": False,
                 "verbose" : False
             },
@@ -169,7 +169,7 @@ class TestPPORllib(unittest.TestCase):
                 "evaluation_interval": 10,
                 "entropy_coeff_start": 0.0,
                 "entropy_coeff_end": 0.0,
-                "use_phi": True,
+                "use_potential_shaping": True,
                 "evaluation_display": False,
                 "verbose" : False
             },
@@ -198,7 +198,7 @@ class TestPPORllib(unittest.TestCase):
                 "sgd_minibatch_size": 800,
                 "num_training_iters": 30,
                 "evaluation_interval": 10,
-                "use_phi": False,
+                "use_potential_shaping": False,
                 "entropy_coeff_start": 0.0002,
                 "entropy_coeff_end": 0.00005,
                 "lr": 7e-4,
@@ -232,7 +232,7 @@ class TestPPORllib(unittest.TestCase):
                 "sgd_minibatch_size": 800,
                 "num_training_iters": 30,
                 "evaluation_interval": 10,
-                "use_phi": True,
+                "use_potential_shaping": True,
                 "entropy_coeff_start": 0.0002,
                 "entropy_coeff_end": 0.00005,
                 "lr": 7e-4,
@@ -309,10 +309,10 @@ if __name__ == '__main__':
 
     suite = unittest.TestSuite()
     suite.addTest(TestPPORllib('test_save_load', **args))
-    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
     suite.addTest(TestPPORllib('test_ppo_bc', **args))
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)
