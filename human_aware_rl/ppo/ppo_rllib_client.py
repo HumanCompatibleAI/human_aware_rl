@@ -340,10 +340,12 @@ def my_config():
         "bc_opt_config" : {
             "on_dist_config" : {
                 "model_dir" : bc_model_dir,
-                "stochastic" : bc_stochastic
+                "stochastic" : bc_stochastic,
+                "eager" : eager
             },
             "off_dist_config" : {
-                "opt_path" : opt_path
+                "opt_path" : opt_path,
+                "policy_id" : "ppo"
             }
         }
     }
@@ -393,6 +395,8 @@ def run(params):
 
     # Save the state of the experiment at end
     save_path = save_trainer(trainer, params)
+    result['save_path'] = save_path
+
     if params['verbose']:
         print("saved trainer at", save_path)
 
@@ -420,4 +424,5 @@ def main(params):
     # Return value gets sent to our slack observer for notification
     average_sparse_reward = np.mean([res['custom_metrics']['sparse_reward_mean'] for res in results])
     average_episode_reward = np.mean([res['episode_reward_mean'] for res in results])
-    return { "average_sparse_reward" : average_sparse_reward, "average_total_reward" : average_episode_reward }
+    save_paths = [res['save_path'] for res in results]
+    return { "average_sparse_reward" : average_sparse_reward, "average_total_reward" : average_episode_reward, "save_paths" : save_paths }

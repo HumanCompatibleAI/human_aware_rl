@@ -289,6 +289,82 @@ class TestPPORllib(unittest.TestCase):
         if self.strict:
             self.assertDictEqual(results, self.expected['test_ppo_bc'])
 
+    def test_ppo_bc_opt(self):
+        # Train bc model
+        model_dir = self.temp_model_dir
+        params_to_override = { 
+            "layouts" : ['soup_coordination'],
+            "data_path" : None,
+            "epochs" : 10
+        }
+        bc_params = get_bc_params(**params_to_override)
+        train_bc_model(model_dir, bc_params)
+
+        # Train sp "opt" model
+        config_updates={
+            "experiment_name" : "my_sp_opt",
+            "results_dir": self.temp_results_dir,
+            "num_workers": 2,
+            "num_training_iters": 10,
+            "evaluation_interval": 10,
+            "evaluation_display": False,
+            "verbose" : False
+        }
+        results = ex.run(config_updates=config_updates, options={'--loglevel': 'ERROR'}).result
+        opt_path = results['save_paths'][0]
+
+        # Train rllib model
+        config_updates = {
+            "bc_opt" : True,
+            "opt_path" : opt_path,
+            "results_dir" : self.temp_results_dir, 
+            "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], 
+            "num_training_iters" : 20, 
+            "bc_model_dir" : model_dir, 
+            "evaluation_interval" : 5,
+            "verbose" : False
+        }
+        results = ex.run(config_updates=config_updates, options={'--loglevel': 'ERROR'}).result
+
+    def test_ppo_bc_opt_different_arch(self):
+        # Train bc model
+        model_dir = self.temp_model_dir
+        params_to_override = { 
+            "layouts" : ['soup_coordination'],
+            "data_path" : None,
+            "epochs" : 10
+        }
+        bc_params = get_bc_params(**params_to_override)
+        train_bc_model(model_dir, bc_params)
+
+        # Train sp "opt" model
+        config_updates={
+            "experiment_name" : "my_sp_opt",
+            "results_dir": self.temp_results_dir,
+            "num_workers": 2,
+            "num_training_iters": 10,
+            "evaluation_interval": 10,
+            "evaluation_display": False,
+            "verbose" : False
+        }
+        results = ex.run(config_updates=config_updates, options={'--loglevel': 'ERROR'}).result
+        opt_path = results['save_paths'][0]
+
+        # Train rllib model (critically w/ different network architecture to make sure it doesn't break TF graphs)
+        config_updates = {
+            "NUM_HIDDEN_LAYERS" : 2,
+            "SIZE_HIDDEN_LAYERS" : 32,
+            "bc_opt" : True,
+            "opt_path" : opt_path,
+            "results_dir" : self.temp_results_dir, 
+            "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], 
+            "num_training_iters" : 20, 
+            "bc_model_dir" : model_dir, 
+            "evaluation_interval" : 5,
+            "verbose" : False
+        }
+        results = ex.run(config_updates=config_updates, options={'--loglevel': 'ERROR'}).result
+
 def _clear_pickle():
     # Write an empty dictionary to our static "expected" results location
     with open(PPO_EXPECTED_DATA_PATH, 'wb') as f:
@@ -309,11 +385,13 @@ if __name__ == '__main__':
 
     suite = unittest.TestSuite()
     suite.addTest(TestPPORllib('test_save_load', **args))
-    # suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
     # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
     # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
     suite.addTest(TestPPORllib('test_ppo_bc', **args))
+    suite.addTest(TestPPORllib('test_ppo_bc_opt', **args))
+    suite.addTest(TestPPORllib('test_ppo_bc_opt_different_arch', **args))
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)
         
