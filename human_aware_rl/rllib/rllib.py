@@ -548,8 +548,6 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
     agent_0_featurize_fn (func): Used to preprocess states for agent 0, defaults to lossless_state_encoding if 'None'
     agent_1_featurize_fn (func): Used to preprocess states for agent 1, defaults to lossless_state_encoding if 'None'
     """
-    if verbose:
-        print("eval mdp params", mdp_params)
     evaluator = get_base_ae(mdp_params, {"horizon" : eval_params['ep_length'], "num_mdp":1}, outer_shape)
 
     # Override pre-processing functions with defaults if necessary
@@ -665,7 +663,7 @@ def gen_trainer_from_params(params):
         if agent_id.startswith('bc'):
             return 'bc'
     multi_agent_config['policy_mapping_fn'] = select_policy
-    multi_agent_config['policies_to_train'] = 'ppo'
+    multi_agent_config['policies_to_train'] = ['ppo']
 
     if "outer_shape" not in environment_params:
         environment_params["outer_shape"] = None
