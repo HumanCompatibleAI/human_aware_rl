@@ -10,7 +10,8 @@ from overcooked_ai_py.mdp.layout_generator import LayoutGenerator
 
 from overcooked_ai_py.mdp.layout_evaluator import stats_from_analaysis
 
-from human_aware_rl.rllib.rllib import load_agent_pair, load_agent
+# reroute to load augmented trainer based agent
+from human_aware_rl_adaption.rllib.rllib import load_agent_pair, load_agent
 from human_aware_rl.imitation.behavior_cloning_tf2 import load_bc_agent
 
 # Whether or not to display the game during evaluation process
