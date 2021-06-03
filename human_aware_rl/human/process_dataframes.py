@@ -224,34 +224,52 @@ def filter_transitions(trials, filter):
 
     return pd.concat(cleaned_trial_dfs)
 
-def train_test_split(trials, train_size=0.7, print_stats=False):
+def train_test_split(trials, train_size=0.7, silent=False, balanced_rewards=False, max_tries=5, rtol=0.2):
     cleaned_trials_dict = defaultdict(dict)
 
+    def random_split(data):
+        all_ids = np.unique(curr_layout_trials['trial_id'])
+        random.shuffle(all_ids)
+        mid_idx = int(np.ceil(len(all_ids) * train_size))
+        train_trials, test_trials = all_ids[:mid_idx], all_ids[mid_idx:]
+        layout_train = curr_layout_trials[curr_layout_trials['trial_id'].isin(train_trials)]
+        layout_test = curr_layout_trials[curr_layout_trials['trial_id'].isin(test_trials)]
+
+        return layout_train, layout_test
+
+    def done(rew_1, rew_2):
+        if not balanced_rewards:
+            return True
+
+        return np.abs(rew_1 - rew_2) / (rew_1 + rew_2) < rtol
+        
     layouts = np.unique(trials['layout_name'])
     for layout in layouts:
         # Gettings trials for curr layout
         curr_layout_trials = trials[trials['layout_name'] == layout]
 
-        # Get all trial ids for the layout
-        curr_trial_ids = np.unique(curr_layout_trials['trial_id'])
-
         # Split trials into train and test sets
-        random.shuffle(curr_trial_ids)
-        mid_idx = int(np.ceil(len(curr_trial_ids) * train_size))
-        train_trials, test_trials = curr_trial_ids[:mid_idx], curr_trial_ids[mid_idx:]
-        assert len(train_trials) > 0 and len(test_trials) > 0, "Cannot have empty split"
+        layout_train, layout_test = None, None
+        curr_try = train_rew = test_rew = 0
+        while True:
+            layout_train, layout_test = random_split(curr_layout_trials)
+            train_rew = int(np.mean(layout_train['score_total']))
+            test_rew = int(np.mean(layout_test['score_total']))
 
-        # Get corresponding trials
-        layout_train = curr_layout_trials[curr_layout_trials['trial_id'].isin(train_trials)]
-        layout_test = curr_layout_trials[curr_layout_trials['trial_id'].isin(test_trials)]
+            if done(train_rew, test_rew):
+                break
 
-        train_dset_avg_rew = int(np.mean(layout_train['score_total']))
-        test_dset_avg_rew = int(np.mean(layout_test['score_total']))
+            curr_try += 1
+            if curr_try == max_tries:
+                raise RuntimeError("Max tries exceeded before reward balanced train/test split achieved!")
 
-        if print_stats:
+
+        assert len(layout_train) > 0 and len(layout_test) > 0, "Cannot have empty split"
+
+        if not silent:
             print(
-                "Layout: {}\nNum Train Trajs: {}\nTrain Traj Average Rew: {}\nNum Test Trajs: {}\nTest Traj Average Rew: {}".format(
-                    layout, len(train_trials), train_dset_avg_rew, len(test_trials), test_dset_avg_rew,
+                "Layout: {}\nNum Train Points: {}\nTrain Traj Average Rew: {}\nNum Test Points: {}\nTest Traj Average Rew: {}".format(
+                    layout, len(layout_train), train_rew, len(layout_test), test_rew,
                 ))
 
         cleaned_trials_dict[layout]["train"] = layout_train

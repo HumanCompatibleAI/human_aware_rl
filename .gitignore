@@ -138,6 +138,19 @@ transfer_agent.sh
 
 # Data directories
 **/data_dir.py
+**/data
+
+# Scatch space
+**/temp.*
+
+# Run logs
+**/*.out
+
+# Run scripts
+human_aware_rl/ppo/*.sh
 
 # PyCharm
 .idea/
+
+# Additional human data
+**/human_data

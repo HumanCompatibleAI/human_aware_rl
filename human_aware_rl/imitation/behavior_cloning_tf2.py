@@ -28,6 +28,7 @@ DEFAULT_DATA_PARAMS = {
 
 DEFAULT_MLP_PARAMS = {
     # Number of fully connected layers to use in our network
+    # Deprecated: determined dynamically from len(net_arch)
     "num_layers" : 2,
     # Each int represents a layer of that hidden size
     "net_arch" : [64, 64]
@@ -129,7 +130,7 @@ class SelfPlayEvalCallback(keras.callbacks.Callback):
         super(SelfPlayEvalCallback, self).__init__(**kwargs)
 
     def on_epoch_end(self, epoch, logs=None):
-        if epoch % self.every_nth == 0:
+        if self.every_nth and epoch % self.every_nth == 0:
             eval_score = evaluate_bc_model(self.model, self.bc_params)
             logs['eval_score'] = eval_score
             if self.verbose:
@@ -201,7 +202,7 @@ def train_bc_model(model_dir, bc_params, verbose=False):
     callbacks = [
         # Early terminate training if loss doesn't improve for "patience" epochs
         keras.callbacks.EarlyStopping(
-            monitor="loss", patience=20
+            monitor="loss", patience=10
         ),
         # Reduce lr by "factor" after "patience" epochs of no improvement in loss
         keras.callbacks.ReduceLROnPlateau(
@@ -331,9 +332,8 @@ def _build_model(observation_shape, action_shape, mlp_params, **kwargs):
     x = inputs
 
     ## Build fully connected layers
-    assert len(mlp_params["net_arch"]) == mlp_params["num_layers"], "Invalid Fully Connected params"
-
-    for i in range(mlp_params["num_layers"]):
+    num_layers = len(mlp_params['net_arch'])
+    for i in range(num_layers):
         units = mlp_params["net_arch"][i]
         x = keras.layers.Dense(units, activation="relu", name="fc_{0}".format(i))(x)
 
@@ -785,17 +785,20 @@ class BehaviorCloningAgent(RlLibAgent):
 
 if __name__ == "__main__":
     #TODO: Wrap this script in a sacred driver
+    CLEAN_AND_BALANCED_DIR = os.path.join(HUMAN_DATA_DIR, 'cleaned_and_balanced')
     params_to_override = {
         "layouts" : ["soup_coordination"],
-        "data_path" : CLEAN_2020_HUMAN_DATA_ALL,
+        "data_path" : os.path.join(CLEAN_AND_BALANCED_DIR, '2020_hh_trials_balanced_rew_50_50_split_test.pickle'),
         "mdp_params": {'layout_name': "soup_coordination"},
-        "epochs" : 100,
+        "epochs" : 75,
         "num_games" : 5,
-        "every_nth" : 25,
+        "every_nth" : 0,
         "net_arch" : [128, 128],
         "use_class_weights" : True
     }
     params = get_bc_params(**params_to_override)
-    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'soup_coord_all_100_epochs_weighted'), params, verbose=True)
+    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'soup_coord_test_balanced_75_epochs'), params, verbose=True)
     # Evaluate our model's performance in a rollout
     evaluate_bc_model(model, params, verbose=True)
+
+scp -r ~/bair/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_train_balanced_75_epochs nathan@perceptron.bair.berkeley.edu:/home/nathan/harl_data/bc_runs
