@@ -1,4 +1,4 @@
-import os, pickle, copy, shutil
+import os, pickle, copy, shutil, itertools
 from tensorflow import keras
 import tensorflow as tf
 import numpy as np
@@ -610,7 +610,7 @@ class AbstractOffDistrubutionPolicy(RllibPolicy):
         raise NotImplementedError("Must subclass and override this method")
 
 
-    def _on_distribution(self, obs_batch):
+    def _on_distribution(self, obs_batch, *args, **kwargs):
         """
         Determine whether given states are on/off distribution
 
@@ -623,19 +623,7 @@ class AbstractOffDistrubutionPolicy(RllibPolicy):
         """
         raise NotImplementedError("Must subclass and override this method")
 
-
-    def compute_actions(self, obs_batch, 
-                              state_batches=None, 
-                              prev_action_batch=None, 
-                              prev_reward_batch=None, 
-                              info_batch=None, 
-                              episodes=None, 
-                              **kwargs):
-        """
-        Note: Both off- and on-distribution policies are queried for every timestep. There is no lazy computation
-        """
-        on_dist_mask = self._on_distribution(obs_batch)
-
+    def parse_observations(self, obs_batch):
         # Parse out the on/off-distribution actions
         if type(obs_batch) == dict:
             # We received non-batched, non-flattened dictionary observation
@@ -649,19 +637,39 @@ class AbstractOffDistrubutionPolicy(RllibPolicy):
             restored_batch = restore_original_dimensions(obs_batch, self.observation_space, tensorlib=np)
             off_dist_obs, on_dist_obs = restored_batch['off_dist'], restored_batch['on_dist']
 
+        return off_dist_obs, on_dist_obs
+
+    def compute_actions(self, obs_batch, *args, **kwargs):
+        on_dist_mask = self._on_distribution(obs_batch, *args, **kwargs)
+        return self._compute_actions(obs_batch, on_dist_mask)
+
+    def _compute_actions(self, obs_batch, on_dist_mask):
+        """
+        Note: Both off- and on-distribution policies are queried for every timestep. There is no lazy computation
+        """
+        off_dist_obs, on_dist_obs = self.parse_observations(obs_batch)
+
         # On distrubion forward
-        on_dist_actions, _, on_dist_logits = self.on_distrubtion_policy.compute_actions(on_dist_obs)
-        on_dist_logits = on_dist_logits['action_dist_inputs']
+        on_dist_actions, on_dist_logits = self._on_dist_compute_actions(on_dist_obs)
 
         # Off distribution forward
-        off_dist_actions, _, off_dist_logits = self.off_distrubtion_policy.compute_actions(off_dist_obs)
-        off_dist_logits = off_dist_logits['action_dist_inputs']
+        off_dist_actions, off_dist_logits = self._off_dist_compute_actions(off_dist_obs)
 
         # Batched ternary switch based on previously computed masks
         actions, logits = np.where(on_dist_mask, on_dist_actions, off_dist_actions), np.where(on_dist_mask, on_dist_logits, off_dist_logits)
 
         return actions, [], { "action_dist_inputs" : logits }
 
+    def _on_dist_compute_actions(self, on_dist_obs_batch, **kwargs):
+        actions, _, infos = self.on_distrubtion_policy.compute_actions(on_dist_obs_batch)
+        logits = infos['action_dist_inputs']
+        return actions, logits
+
+    def _off_dist_compute_actions(self, off_dist_obs_batch, **kwargs):
+        actions, _, infos = self.off_distrubtion_policy.compute_actions(off_dist_obs_batch)
+        logits = infos['action_dist_inputs']
+        return actions, logits
+    
     def get_initial_state(self):
         """
         Returns the initial hidden and memory states for the model if it is recursive
@@ -726,11 +734,21 @@ class BernoulliBCSelfPlayOPTPolicy(AbstractBCSelfPlayOPTPolicy):
         self.p = config.get('p', 0.5)
         super(BernoulliBCSelfPlayOPTPolicy, self).__init__(observation_space, action_space, config)
 
-    def _on_distribution(self, obs_batch):
+    def _on_distribution(self, obs_batch, *args, **kwargs):
         N = len(obs_batch)
         mask = (np.random.random(N) > self.p).astype(bool)
         return mask
 
+class OffDistCounterBCOPT(AbstractBCSelfPlayOPTPolicy):
+ 
+    def _on_distribution(self, obs_batch, *args, **kwargs):
+        _, obs_batch = self.parse_observations(obs_batch)
+        obs_batch = np.array(obs_batch)
+        if len(obs_batch.shape) == 1:
+            ret = np.array([obs_batch[:-1]])
+        else:
+            ret = obs_batch[:, -1]
+        return ret
 
 
 #####################
@@ -783,20 +801,36 @@ class BehaviorCloningAgent(RlLibAgent):
             obj = pickle.load(f)
         return obj
 
-if __name__ == "__main__":
-    #TODO: Wrap this script in a sacred driver
+
+def main(epochs=75, dataset="train", use_class_weights=True):
+    assert dataset in ['train', 'test']
     CLEAN_AND_BALANCED_DIR = os.path.join(HUMAN_DATA_DIR, 'cleaned_and_balanced')
     params_to_override = {
         "layouts" : ["soup_coordination"],
-        "data_path" : os.path.join(CLEAN_AND_BALANCED_DIR, '2020_hh_trials_balanced_rew_50_50_split_test.pickle'),
+        "data_path" : os.path.join(CLEAN_AND_BALANCED_DIR, '2020_hh_trials_balanced_rew_50_50_split_{}.pickle'.format(dataset)),
         "mdp_params": {'layout_name': "soup_coordination"},
-        "epochs" : 75,
+        "epochs" : epochs,
         "num_games" : 5,
         "every_nth" : 0,
         "net_arch" : [128, 128],
-        "use_class_weights" : True
+        "use_class_weights" : use_class_weights
     }
     params = get_bc_params(**params_to_override)
-    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'soup_coord_test_balanced_75_epochs'), params, verbose=True)
+    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'soup_coord_{}_balanced_{}_epochs_off_dist_weighted_{}'.format(dataset, epochs, use_class_weights)), params, verbose=True)
     # Evaluate our model's performance in a rollout
-    evaluate_bc_model(model, params, verbose=True)
+    return evaluate_bc_model(model, params, verbose=True)
+
+if __name__ == "__main__":
+    epochs = [75, 100]
+    dataset = ['train', 'test']
+    use_class_weights = [True, False]
+
+    params_combos = itertools.product(epochs, dataset, use_class_weights)
+    results = []
+    for params in params_combos:
+        results.append(main(*params))
+    
+    for params, result in zip(params_combos, results):
+        epochs, dataset, weights = params
+        print("Average Return for epochs={}, \tdataset={}, \tweights={}:\t\t{}".format(epochs, dataset, weights, result))
+    

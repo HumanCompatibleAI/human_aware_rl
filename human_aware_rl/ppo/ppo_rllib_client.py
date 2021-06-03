@@ -33,7 +33,7 @@ from ray.rllib.models import ModelCatalog
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from human_aware_rl.ppo.ppo_rllib import RllibPPOModel
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params
-from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR, BernoulliBCSelfPlayOPTPolicy
+from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR, BernoulliBCSelfPlayOPTPolicy, OffDistCounterBCOPT
 
 
 ###################### Temp Documentation #######################
@@ -54,6 +54,11 @@ def _env_creator(env_config):
     # Re-import required here to work with serialization
     from human_aware_rl.rllib.rllib import OvercookedMultiAgent 
     return OvercookedMultiAgent.from_config(env_config)
+
+BC_OPT_CLS_MAP = {
+    'bernoulli' : BernoulliBCSelfPlayOPTPolicy,
+    'counters' : OffDistCounterBCOPT
+}
 
 @ex.config
 def my_config():
@@ -181,6 +186,9 @@ def my_config():
 
     # Whether bc agent should bc optimal off-distribution
     bc_opt = False
+
+    # Rllib.Policy subclass to wrap BC_OPT policy in
+    bc_opt_cls_key = 'counters'
 
     # Path to serialized pre-trained OPT agent
     opt_path = os.path.join(os.path.abspath("~"), 'ray_results', 'my_experiment')
@@ -336,7 +344,7 @@ def my_config():
     }
 
     bc_opt_params = {
-        "bc_opt_policy_cls" : BernoulliBCSelfPlayOPTPolicy,
+        "bc_opt_policy_cls" : BC_OPT_CLS_MAP[bc_opt_cls_key],
         "bc_opt_config" : {
             "on_dist_config" : {
                 "model_dir" : bc_model_dir,
