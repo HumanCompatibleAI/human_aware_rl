@@ -800,5 +800,3 @@ if __name__ == "__main__":
     model = train_bc_model(os.path.join(BC_SAVE_DIR, 'soup_coord_test_balanced_75_epochs'), params, verbose=True)
     # Evaluate our model's performance in a rollout
     evaluate_bc_model(model, params, verbose=True)
-
-scp -r ~/bair/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_train_balanced_75_epochs nathan@perceptron.bair.berkeley.edu:/home/nathan/harl_data/bc_runs
