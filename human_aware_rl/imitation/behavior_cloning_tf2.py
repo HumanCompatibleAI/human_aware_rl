@@ -795,9 +795,9 @@ class BehaviorCloningAgent(RlLibAgent):
         return cls(policy, agent_index, featurize_fn, stochastic)
 
     @classmethod
-    def from_model(cls, model, bc_params, agent_index=0):
+    def from_model(cls, model, bc_params, agent_index=0, stochastic=True):
         # Serialize model for later
-        policy = BehaviorCloningPolicy.from_model(model, bc_params)
+        policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic)
         return cls.from_policy(policy, agent_index)
 
     @classmethod
@@ -805,7 +805,7 @@ class BehaviorCloningAgent(RlLibAgent):
         dummy_env = get_base_env(policy.bc_params['mdp_params'], policy.bc_params['env_params'])
         def featurize_fn(state):
             return dummy_env.featurize_state_mdp(state)
-        return cls(policy, agent_index, featurize_fn)
+        return cls(policy, agent_index, featurize_fn, policy.stochastic)
 
     def __getstate__(self):
         return {
@@ -834,7 +834,7 @@ class BehaviorCloningAgent(RlLibAgent):
         save_bc_model(new_model_dir, self.policy.my_model, self.policy.bc_params)
 
         # Dump instance variables in pickle file
-        super().save(save_dir)
+        return super().save(save_dir)
 
     @classmethod
     def load(cls, path):

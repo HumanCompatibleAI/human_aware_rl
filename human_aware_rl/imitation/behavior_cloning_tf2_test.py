@@ -4,7 +4,7 @@ import tensorflow as tf
 from human_aware_rl.utils import set_global_seed
 from human_aware_rl.rllib.utils import get_base_env
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, RlLibAgent
-from human_aware_rl.imitation.behavior_cloning_tf2 import BC_SAVE_DIR, get_bc_params, train_bc_model, build_bc_model, save_bc_model, load_bc_model, evaluate_bc_model, DummyOffDistCounterBCOPT
+from human_aware_rl.imitation.behavior_cloning_tf2 import BC_SAVE_DIR, get_bc_params, train_bc_model, build_bc_model, save_bc_model, load_bc_model, evaluate_bc_model, DummyOffDistCounterBCOPT, BehaviorCloningAgent
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
 from human_aware_rl.static import BC_EXPECTED_DATA_PATH, DUMMY_2019_CLEAN_HUMAN_DATA_PATH, DUMMY_2020_CLEAN_HUMAN_DATA_PATH
 
@@ -198,6 +198,60 @@ class TestBCOpt(unittest.TestCase):
             if_off_dist_agent = action_info['off_dist_mask'][0]
             self.assertEqual(is_off_dist_env, if_off_dist_agent)
 
+class TestBCAgent(unittest.TestCase):
+
+    def __init__(self, test_name, **kwargs):
+        super(TestBCAgent, self).__init__(test_name)
+
+    def setUp(self):
+        params_to_override = {
+            "epochs" : 1,
+            "layouts" : ["inverse_marshmallow_experiment"],
+            "mdp_params" : { "layout_name" : "inverse_marshmallow_experiment" },
+            "data_path" : DUMMY_2020_CLEAN_HUMAN_DATA_PATH
+        }
+        self.model_temp_dir = os.path.join(BC_SAVE_DIR, 'my_temp_model')
+        self.agent_temp_dir = os.path.join(os.path.abspath('.'), 'my_temp_agent')
+        self.bc_params = get_bc_params(**params_to_override)
+        self.base_env = get_base_env(self.bc_params['mdp_params'], self.bc_params['env_params'])
+
+    def tearDown(self):
+        if os.path.exists(self.model_temp_dir):
+            shutil.rmtree(self.model_temp_dir)
+        if os.path.exists(self.agent_temp_dir):
+            shutil.rmtree(self.agent_temp_dir)
+
+    
+    def test_from_model_save_load(self):
+        model = train_bc_model(self.model_temp_dir, self.bc_params)
+        agent = BehaviorCloningAgent.from_model(model, self.bc_params, stochastic=False).reset()
+        restored_agent = BehaviorCloningAgent.load(agent.save(self.agent_temp_dir)).reset()
+
+        state = self.base_env.reset()
+        done = False
+        while not done:
+            self.assertFalse(agent.stochastic)
+            self.assertFalse(restored_agent.stochastic)
+            self.assertEqual(0, agent.agent_index)
+            self.assertEqual(0, restored_agent.agent_index)
+            action, _ = agent.action(state)
+            restored_action, _ = restored_agent.action(state)
+            state, _, done, _ = self.base_env.step((action, restored_action))
+            self.assertEqual(action, restored_action)
+
+    def test_from_model_dir_save_load(self):
+        train_bc_model(self.model_temp_dir, self.bc_params)
+        agent = BehaviorCloningAgent.from_model_dir(self.model_temp_dir, stochastic=False).reset()
+        restored_agent = BehaviorCloningAgent.load(agent.save(self.agent_temp_dir)).reset()
+
+        state = self.base_env.reset()
+        done = False
+        while not done:
+            action, _ = agent.action(state)
+            restored_action, _ = restored_agent.action(state)
+            state, _, done, _ = self.base_env.step((action, restored_action))
+            self.assertEqual(action, restored_action)
+
 def _clear_pickle():
     with open(BC_EXPECTED_DATA_PATH, 'wb') as f:
         pickle.dump({}, f)
@@ -219,12 +273,19 @@ if __name__ == '__main__':
         _clear_pickle()
 
     suite = unittest.TestSuite()
+
+    # BC Model tests
     suite.addTest(TestBCTraining('test_model_construction', **args))
     suite.addTest(TestBCTraining('test_save_and_load', **args))
     suite.addTest(TestBCTraining('test_training', **args))
     suite.addTest(TestBCTraining('test_agent_evaluation', **args))
 
+    # BC_OPT Tests
     suite.addTest(TestBCOpt('test_off_dist_mask', **args))
+
+    # BC Agent tests
+    suite.addTest(TestBCAgent('test_from_model_save_load', **args))
+    suite.addTest(TestBCAgent('test_from_model_dir_save_load', **args))
 
     # LSTM tests break on older versions of tensorflow so be careful with this
     if args['run_lstm_tests']:
