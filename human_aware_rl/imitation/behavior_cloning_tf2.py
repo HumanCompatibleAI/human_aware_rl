@@ -779,6 +779,8 @@ class DummyOffDistCounterBCOPT(OffDistCounterBCOPT):
 
 class BehaviorCloningAgent(RlLibAgent):
 
+    model_dir_name = 'model'
+
     def __init__(self, policy, agent_index, featurize_fn, stochastic=True, **kwargs):
         super(BehaviorCloningAgent, self).__init__(policy, agent_index, featurize_fn)
         self.stochastic = stochastic
@@ -796,7 +798,6 @@ class BehaviorCloningAgent(RlLibAgent):
 
     @classmethod
     def from_model(cls, model, bc_params, agent_index=0, stochastic=True):
-        # Serialize model for later
         policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic)
         return cls.from_policy(policy, agent_index)
 
@@ -824,7 +825,7 @@ class BehaviorCloningAgent(RlLibAgent):
         if os.path.isfile(save_dir):
             raise IOError("Must specify a path to directory! Got: {}".format(save_dir))
         # parse paths
-        new_model_dir = os.path.join(save_dir, 'model')
+        new_model_dir = os.path.join(save_dir, self.model_dir_name)
 
         # Create all needed directories
         if not os.path.exists(save_dir):
@@ -838,12 +839,16 @@ class BehaviorCloningAgent(RlLibAgent):
 
     @classmethod
     def load(cls, path):
+        # Super class loader, un-pickles all keys returns by __get_state__
         obj = RlLibAgent.load(path)
-        agent_dir = path if os.path.isdir(path) else os.path.dirname(path)
-        model_dir = os.path.join(agent_dir, 'model')
-        if not os.path.exists(model_dir):
-            raise IOError("BC Model dir {} not found!")
-        obj.__update_model_from_dir__(model_dir)
+
+        # BehaviorCloningAgents specifically require a little extra work
+        if isinstance(obj, BehaviorCloningAgent):
+            agent_dir = path if os.path.isdir(path) else os.path.dirname(path)
+            model_dir = os.path.join(agent_dir, cls.model_dir_name)
+            if not os.path.exists(model_dir):
+                raise IOError("BC Model dir {} not found!")
+            obj.__update_model_from_dir__(model_dir)
         return obj
         
 

@@ -1,8 +1,21 @@
-from human_aware_rl.rllib.rllib import OvercookedMultiAgent
-from human_aware_rl.rllib.utils import softmax, get_required_arguments, iterable_equal
+from human_aware_rl.rllib.rllib import OvercookedMultiAgent, RlLibAgent
+from human_aware_rl.rllib.utils import softmax, get_required_arguments, iterable_equal, get_base_env
+from numpy.lib.stride_tricks import DummyArray
+from overcooked_ai_py.mdp.actions import Action
 from math import isclose
 import unittest, copy
 import numpy as np
+
+class DummyRllibPolicy():
+
+    def __init__(self, logits):
+        self.logits = logits
+
+    def compute_actions(self, obs_batch, *args, **kwargs):
+        infos = { "action_dist_inputs" : self.logits }
+        actions =  [np.argmax(self.logits)]
+        states = []
+        return actions, states, infos
 
 class RllibEnvTest(unittest.TestCase):
 
@@ -142,7 +155,43 @@ class RllibUtilsTest(unittest.TestCase):
         for fn, expected in zip(fns, expected):
             self.assertEqual(expected, len(get_required_arguments(fn)))
 
+class RllibAgentTest(unittest.TestCase):
 
+    def setUp(self):
+        logits = np.log(np.arange(len(Action.ALL_ACTIONS)) + 1)
+        self.dummy_policy = DummyRllibPolicy(logits)
+        self.env = get_base_env({'layout_name' : 'cramped_room'}, {"horizon" : 400})
+
+    def assertArrayAlmostEqual(self, arr_1, arr_2, **kwargs):
+        arr_1 = np.array(arr_1)
+        arr_2 = np.array(arr_2)
+        return np.allclose(arr_1, arr_2, **kwargs)
+
+    def test_stochastic(self):
+        dummy_feat_fn = lambda state : (state, state)
+        rnd_agent = RlLibAgent(self.dummy_policy, 0, dummy_feat_fn, stochastic=True).reset()
+        deterministic_agent_1 = RlLibAgent(self.dummy_policy, 1, dummy_feat_fn, stochastic=False).reset()
+        deterministic_agent_2 = RlLibAgent(self.dummy_policy, 1, dummy_feat_fn, stochastic=False).reset()
+
+        rnd_actions = []
+
+        state = dummy_state = self.env.reset()
+        done = False
+        while not done:
+            rnd_action, _ = rnd_agent.action(state)
+            det_action_1, _ = deterministic_agent_1.action(state)
+            det_action_2, _ = deterministic_agent_2.action(state)
+            rnd_actions.append(Action.ACTION_TO_INDEX[rnd_action])
+            self.assertEqual(det_action_1, det_action_2)
+
+            state, _, done, _ = self.env.step((rnd_action, det_action_1))
+
+        empi_action_probs = np.unique(rnd_actions, return_counts=True)[1] / len(rnd_actions)
+        actual_action_probs = softmax(self.dummy_policy.logits)
+        calculated_action_probs = rnd_agent.action_probabilities(dummy_state)
+
+        self.assertArrayAlmostEqual(empi_action_probs, actual_action_probs)
+        self.assertArrayAlmostEqual(actual_action_probs, calculated_action_probs)
 
 if __name__ == '__main__':
     unittest.main()

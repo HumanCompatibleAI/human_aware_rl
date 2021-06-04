@@ -28,10 +28,19 @@ class RlLibAgent(Agent):
     """ 
     Class for wrapping a trained RLLib Policy object into an Overcooked compatible Agent
     """
-    def __init__(self, policy, agent_index, featurize_fn):
+    def __init__(self, policy, agent_index, featurize_fn, stochastic=True):
+        """
+        Arguments:
+            policy (rllib.Policy): Rllib policy we wish to wrap in the 'agent' API
+            agent_index (int): {0, 1}, determines whether to parse the 0th or first players observation
+            featurize_fn (f OvercookedState -> (np.array, np.array)): Converts OvercookedState objects to encoded
+                numpy arrays that will be passed to forward pass of agent's `policy`. 
+            stochastic (bool): Whether the `action` method should argmx (if False) or sample from logits (if True)
+        """
         self.policy = policy
         self.agent_index = agent_index
         self.featurize = featurize_fn
+        self.stochastic = stochastic
 
     def reset(self):
         # Get initial rnn states and add batch dimension to each
@@ -51,7 +60,7 @@ class RlLibAgent(Agent):
             - Normalized action probabilities determined by self.policy
         """
         # Preprocess the environment state
-        obs = self.featurize(state, debug=False)
+        obs = self.featurize(state)
         my_obs = obs[self.agent_index]
 
         # Compute non-normalized log probabilities from the underlying model
@@ -72,16 +81,23 @@ class RlLibAgent(Agent):
         obs = self.featurize(state)
         my_obs = obs[self.agent_index]
 
-        # Use Rllib.Policy class to compute action argmax and action probabilities
-        [action_idx], rnn_state, info = self.policy.compute_actions(np.array([my_obs]), state_batches=self.rnn_state)
-        agent_action =  Action.INDEX_TO_ACTION[action_idx]
+        # Use Rllib.Policy class to compute action argmax and action logits
+        [argmax_action_idx], rnn_state, info = self.policy.compute_actions(np.array([my_obs]), state_batches=self.rnn_state)
+        argmax_action =  Action.INDEX_TO_ACTION[argmax_action_idx]
         
         # Softmax in numpy to convert logits to normalized probabilities
-        logits = info['action_dist_inputs']
+        logits = np.squeeze(info['action_dist_inputs'])
         action_probabilities = softmax(logits)
+
+        # Sample action space according to logits
+        sampled_action_idx = np.random.choice(len(action_probabilities), p=action_probabilities)
+        sampled_action = Action.INDEX_TO_ACTION[sampled_action_idx]
 
         agent_action_info = {'action_probs' : action_probabilities, **info}
         self.rnn_state = rnn_state
+
+        # To argmax or not to argmax; that is the question
+        agent_action = sampled_action if self.stochastic else argmax_action
 
         return agent_action, agent_action_info
 
