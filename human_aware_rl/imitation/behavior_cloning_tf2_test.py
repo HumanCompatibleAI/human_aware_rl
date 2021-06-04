@@ -274,14 +274,14 @@ if __name__ == '__main__':
 
     suite = unittest.TestSuite()
 
-    # BC Model tests
-    suite.addTest(TestBCTraining('test_model_construction', **args))
-    suite.addTest(TestBCTraining('test_save_and_load', **args))
-    suite.addTest(TestBCTraining('test_training', **args))
-    suite.addTest(TestBCTraining('test_agent_evaluation', **args))
+    # # BC Model tests
+    # suite.addTest(TestBCTraining('test_model_construction', **args))
+    # suite.addTest(TestBCTraining('test_save_and_load', **args))
+    # suite.addTest(TestBCTraining('test_training', **args))
+    # suite.addTest(TestBCTraining('test_agent_evaluation', **args))
 
-    # BC_OPT Tests
-    suite.addTest(TestBCOpt('test_off_dist_mask', **args))
+    # # BC_OPT Tests
+    # suite.addTest(TestBCOpt('test_off_dist_mask', **args))
 
     # BC Agent tests
     suite.addTest(TestBCAgent('test_from_model_save_load', **args))
