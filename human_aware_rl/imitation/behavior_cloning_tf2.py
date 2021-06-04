@@ -6,6 +6,7 @@ from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data, get_human_human_trajectories
 from human_aware_rl.static import *
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae, load_trainer
+from human_aware_rl.rllib.utils import get_base_env
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.utils import recursive_dict_update, get_flattened_keys, create_dir_if_not_exists
 from overcooked_ai_py.mdp.actions import Action
@@ -413,7 +414,7 @@ class BehaviorCloningPolicy(RllibPolicy):
         action_space (gym.space|tuple)          Shape of the action space (len(Action.All_ACTIONS),)
         config (dict)                           Dictionary of relavant bc params
             - model_dir (str)                   Path to pickled keras.Model used to map observations to action logits
-            - stochastic (bool)                 Whether action should return logit argmax or sample over distribution
+            - stochastic (bool)                 Whether action should return logit argmax or sample over distribution. Default True
             - bc_model (keras.Model)            Pointer to loaded policy model. Overrides model_dir
             - bc_params (dict)                  Dictionary of parameters used to train model. Required if "model" is present
             - eager (bool)                      Whether the model should run in eager (or graph) mode. Overrides bc_params['eager'] if present
@@ -436,10 +437,12 @@ class BehaviorCloningPolicy(RllibPolicy):
         assert self.observation_shape == bc_params['observation_shape']
         assert self.action_shape == bc_params['action_shape']
 
+        # 'my_model' instead of 'model' to avoid really subtle bugs with rllib
         self.my_model = model
-        self.stochastic = config['stochastic']
+        self.stochastic = config.get('stochastic', True)
         self.use_lstm = bc_params['use_lstm']
         self.cell_size = bc_params['cell_size']
+        self.bc_params = bc_params
         self.eager = config['eager'] if 'eager' in config else bc_params['eager']
         self.context = self._create_execution_context()
 
@@ -776,49 +779,73 @@ class DummyOffDistCounterBCOPT(OffDistCounterBCOPT):
 
 class BehaviorCloningAgent(RlLibAgent):
 
-    def __init__(self, model_dir, agent_index=0, stochastic=True, **kwargs):
-        self.model_dir = model_dir
+    def __init__(self, policy, agent_index, featurize_fn, stochastic=True, **kwargs):
+        super(BehaviorCloningAgent, self).__init__(policy, agent_index, featurize_fn)
         self.stochastic = stochastic
-        policy = BehaviorCloningPolicy.from_model_dir(model_dir, stochastic)
-        bc_params = _load_bc_params(model_dir)
-        env = _get_base_ae(bc_params).env
-        super(BehaviorCloningAgent, self).__init__(policy, agent_index, env.featurize_state_mdp)
+
+    def __update_model_from_dir__(self, model_dir):
+        self.policy = BehaviorCloningPolicy.from_model_dir(model_dir, self.stochastic)
+
+    @classmethod
+    def from_model_dir(cls, model_dir, agent_index=0, stochastic=True, **kwargs):
+        policy = BehaviorCloningPolicy.from_model_dir(model_dir, stochastic, **kwargs)
+        dummy_env = get_base_env(policy.bc_params['mdp_params'], policy.bc_params['env_params'])
+        def featurize_fn(state):
+            return dummy_env.featurize_state_mdp(state)
+        return cls(policy, agent_index, featurize_fn, stochastic)
+
+    @classmethod
+    def from_model(cls, model, bc_params, agent_index=0):
+        # Serialize model for later
+        policy = BehaviorCloningPolicy.from_model(model, bc_params)
+        return cls.from_policy(policy, agent_index)
+
+    @classmethod
+    def from_policy(cls, policy, agent_index=0):
+        dummy_env = get_base_env(policy.bc_params['mdp_params'], policy.bc_params['env_params'])
+        def featurize_fn(state):
+            return dummy_env.featurize_state_mdp(state)
+        return cls(policy, agent_index, featurize_fn)
 
     def __getstate__(self):
-        return { 
-            "model_dir" : self.model_dir,
+        return {
             "stochastic" : self.stochastic,
-            "agent_index" : self.agent_index
+            "agent_index" : self.agent_index,
+            "featurize" : self.featurize
         }
 
     def __setstate__(self, state):
-        self.__init__(**state)
+        for key, value in state.items():
+            setattr(self, key, value)
 
 
     def save(self, save_dir):
+        # Basic type check
+        if os.path.isfile(save_dir):
+            raise IOError("Must specify a path to directory! Got: {}".format(save_dir))
         # parse paths
         new_model_dir = os.path.join(save_dir, 'model')
-        agent_save_path = os.path.join(save_dir, 'agent.pickle')
 
         # Create all needed directories
         if not os.path.exists(save_dir):
             os.path.os.makedirs(save_dir)
         
         # Copy over serialized bc model + update path pointer
-        shutil.copytree(self.model_dir, new_model_dir)
-        self.model_dir = new_model_dir
+        save_bc_model(new_model_dir, self.policy.my_model, self.policy.bc_params)
 
-        # Serialize BehaviorCloningAgent wrapper
-        with open(agent_save_path, 'wb') as f:
-            pickle.dump(self, f)
+        # Dump instance variables in pickle file
+        super().save(save_dir)
 
     @classmethod
     def load(cls, path):
-        if os.path.isdir(path):
-            path = os.path.join(path, 'agent.pickle')
-        with open(path, 'rb') as f:
-            obj = pickle.load(f)
+        obj = RlLibAgent.load(path)
+        agent_dir = path if os.path.isdir(path) else os.path.dirname(path)
+        model_dir = os.path.join(agent_dir, 'model')
+        if not os.path.exists(model_dir):
+            raise IOError("BC Model dir {} not found!")
+        obj.__update_model_from_dir__(model_dir)
         return obj
+        
 
 
 def main(epochs=75, dataset="train", use_class_weights=True):

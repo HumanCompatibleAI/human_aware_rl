@@ -85,6 +85,24 @@ class RlLibAgent(Agent):
 
         return agent_action, agent_action_info
 
+    def save(self, path):
+        if os.path.isfile(path):
+            raise IOError("Must specify a path to directory! Got: {}".format(path))
+        if not os.path.exists(path):
+            os.makedirs(path)
+        pickle_path = os.path.join(path, 'agent.pickle')
+        with open(pickle_path, 'wb') as f:
+            dill.dump(self, f)
+        return path
+
+    @classmethod
+    def load(cls, path):
+        if os.path.isdir(path):
+            path = os.path.join(path, 'agent.pickle')
+        with open(path, 'rb') as f:
+            obj = dill.load(f)
+        return obj
+
 
 class OvercookedMultiAgent(MultiAgentEnv):
     """
