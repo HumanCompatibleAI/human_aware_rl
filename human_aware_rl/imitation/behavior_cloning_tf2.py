@@ -782,7 +782,7 @@ class BehaviorCloningAgent(RlLibAgent):
     model_dir_name = 'model'
 
     def __init__(self, policy, agent_index, featurize_fn, stochastic=True, **kwargs):
-        super(BehaviorCloningAgent, self).__init__(policy, agent_index, featurize_fn)
+        super(BehaviorCloningAgent, self).__init__(policy, agent_index, featurize_fn, stochastic)
         self.stochastic = stochastic
 
     def __update_model_from_dir__(self, model_dir):
