@@ -41,6 +41,7 @@ class RlLibAgent(Agent):
             self.rnn_state = [np.expand_dims(state, axis=0) for state in self.policy.get_initial_state()]
         else:
             self.rnn_state = []
+        return self
 
     def action_probabilities(self, state):
         """
@@ -79,7 +80,7 @@ class RlLibAgent(Agent):
         logits = info['action_dist_inputs']
         action_probabilities = softmax(logits)
 
-        agent_action_info = {'action_probs' : action_probabilities}
+        agent_action_info = {'action_probs' : action_probabilities, **info}
         self.rnn_state = rnn_state
 
         return agent_action, agent_action_info

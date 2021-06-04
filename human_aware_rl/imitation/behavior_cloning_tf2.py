@@ -574,7 +574,7 @@ class AbstractOffDistrubutionPolicy(RllibPolicy):
     Abstract Methods
         _on_distribution_init:      Used to initialize on distribution policy. Must return a RllibPolicy type
         _off_distribution_init:     Used to initialize off distribution policy. Must return a RllibPolicy type
-        _on_distribution:           Invoked to determine whether state is on/off distribution. Returns boolean mask
+        _off_distribution:           Invoked to determine whether state is on/off distribution. Returns boolean mask
 
     Instances:
         observation_space (gym.spaces.Dict):    Information about observation space. Contains keys "off_dist" and "on_dist"
@@ -610,7 +610,7 @@ class AbstractOffDistrubutionPolicy(RllibPolicy):
         raise NotImplementedError("Must subclass and override this method")
 
 
-    def _on_distribution(self, obs_batch, *args, **kwargs):
+    def _off_distribution(self, obs_batch, *args, **kwargs):
         """
         Determine whether given states are on/off distribution
 
@@ -619,7 +619,7 @@ class AbstractOffDistrubutionPolicy(RllibPolicy):
                     Must also be able to handle single, non-batched observation
 
         Returns
-            - mask (np.array) (N,): Array of booleans, True if on distribution, false otherwise
+            - mask (np.array) (N,): Array of booleans, True if off distribution, false otherwise
         """
         raise NotImplementedError("Must subclass and override this method")
 
@@ -640,10 +640,10 @@ class AbstractOffDistrubutionPolicy(RllibPolicy):
         return off_dist_obs, on_dist_obs
 
     def compute_actions(self, obs_batch, *args, **kwargs):
-        on_dist_mask = self._on_distribution(obs_batch, *args, **kwargs)
-        return self._compute_actions(obs_batch, on_dist_mask)
+        off_dist_mask = self._off_distribution(obs_batch, *args, **kwargs)
+        return self._compute_actions(obs_batch, off_dist_mask)
 
-    def _compute_actions(self, obs_batch, on_dist_mask):
+    def _compute_actions(self, obs_batch, off_dist_mask):
         """
         Note: Both off- and on-distribution policies are queried for every timestep. There is no lazy computation
         """
@@ -656,9 +656,9 @@ class AbstractOffDistrubutionPolicy(RllibPolicy):
         off_dist_actions, off_dist_logits = self._off_dist_compute_actions(off_dist_obs)
 
         # Batched ternary switch based on previously computed masks
-        actions, logits = np.where(on_dist_mask, on_dist_actions, off_dist_actions), np.where(on_dist_mask, on_dist_logits, off_dist_logits)
+        actions, logits = np.where(off_dist_mask, off_dist_actions, on_dist_actions), np.where(off_dist_mask, off_dist_logits, on_dist_logits)
 
-        return actions, [], { "action_dist_inputs" : logits }
+        return actions, [], { "action_dist_inputs" : logits, "off_dist_mask" : off_dist_mask }
 
     def _on_dist_compute_actions(self, on_dist_obs_batch, **kwargs):
         actions, _, infos = self.on_distrubtion_policy.compute_actions(on_dist_obs_batch)
@@ -708,7 +708,7 @@ class AbstractBCSelfPlayOPTPolicy(AbstractOffDistrubutionPolicy):
     trained PPO_SP agent, on-distributoin policy is a previously trained BehaviorCloningPolicy
 
     Abstract Methods:
-        _on_distribution
+        _off_distribution
     """
 
     def _off_dist_init(self, config):
@@ -734,14 +734,14 @@ class BernoulliBCSelfPlayOPTPolicy(AbstractBCSelfPlayOPTPolicy):
         self.p = config.get('p', 0.5)
         super(BernoulliBCSelfPlayOPTPolicy, self).__init__(observation_space, action_space, config)
 
-    def _on_distribution(self, obs_batch, *args, **kwargs):
+    def _off_distribution(self, obs_batch, *args, **kwargs):
         N = len(obs_batch)
-        mask = (np.random.random(N) > self.p).astype(bool)
+        mask = (np.random.random(N) < self.p).astype(bool)
         return mask
 
 class OffDistCounterBCOPT(AbstractBCSelfPlayOPTPolicy):
  
-    def _on_distribution(self, obs_batch, *args, **kwargs):
+    def _off_distribution(self, obs_batch, *args, **kwargs):
         _, obs_batch = self.parse_observations(obs_batch)
         obs_batch = np.array(obs_batch)
         if len(obs_batch.shape) == 1:
@@ -749,6 +749,25 @@ class OffDistCounterBCOPT(AbstractBCSelfPlayOPTPolicy):
         else:
             ret = obs_batch[:, -1]
         return ret
+
+class DummyOptPolicy(RllibPolicy):
+
+    """
+    For testing purposes
+    """
+
+    def compute_actions(self, obs_batch, *args, **kwargs):
+        N = len(obs_batch)
+        n = self.action_space.n
+        actions = [self.action_space.sample() for _ in range(N)]
+        infos = { "action_dist_inputs" : np.ones(n) * (1/n) }
+        return actions, [], infos
+
+class DummyOffDistCounterBCOPT(OffDistCounterBCOPT):
+
+    def _off_dist_init(self, config):
+        return DummyOptPolicy(self.observation_space, self.action_space, config)
+
 
 
 #####################
