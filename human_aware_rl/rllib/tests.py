@@ -169,9 +169,9 @@ class RllibAgentTest(unittest.TestCase):
 
     def test_stochastic(self):
         dummy_feat_fn = lambda state : (state, state)
-        rnd_agent = RlLibAgent(self.dummy_policy, 0, dummy_feat_fn, stochastic=True).reset()
-        deterministic_agent_1 = RlLibAgent(self.dummy_policy, 1, dummy_feat_fn, stochastic=False).reset()
-        deterministic_agent_2 = RlLibAgent(self.dummy_policy, 1, dummy_feat_fn, stochastic=False).reset()
+        rnd_agent = RlLibAgent(self.dummy_policy, agent_index=0, featurize_fn=dummy_feat_fn, stochastic=True).reset()
+        deterministic_agent_1 = RlLibAgent(self.dummy_policy, agent_index=1, featurize_fn=dummy_feat_fn, stochastic=False).reset()
+        deterministic_agent_2 = RlLibAgent(self.dummy_policy, agent_index=1, featurize_fn=dummy_feat_fn, stochastic=False).reset()
 
         rnd_actions = []
 

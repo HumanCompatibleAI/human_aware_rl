@@ -11,6 +11,7 @@ from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
 from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal
+from human_aware_rl.utils import recursive_dict_update
 from datetime import datetime
 import tempfile
 import gym
@@ -726,7 +727,7 @@ def save_trainer(trainer, params, path=None):
         dill.dump(config, f)
     return save_path
 
-def load_trainer(save_path):
+def load_trainer(save_path, **params_to_override):
     """
     Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
     Note that `save_path` is the full path to the checkpoint FILE, not the checkpoint directory
@@ -744,6 +745,11 @@ def load_trainer(save_path):
     # Override this param to lower overhead in trainer creation
     config['training_params']['num_workers'] = 0
 
+    for param, val in params_to_override.items():
+        updated = recursive_dict_update(config, param, val)
+        if not updated:
+            print("WARNING, no value for specified bc argument {} found in schema. Adding as top level parameter".format(param))
+
     # Get un-trained trainer object with proper config
     trainer = gen_trainer_from_params(config)
 
@@ -751,28 +757,28 @@ def load_trainer(save_path):
     trainer.restore(save_path)
     return trainer
 
-def get_agent_from_trainer(trainer, policy_id="ppo", agent_index=0):
+def get_agent_from_trainer(trainer, policy_id="ppo", agent_kwargs={"agent_index" : 0}):
     policy = trainer.get_policy(policy_id)
     dummy_env = trainer.env_creator(trainer.config['env_config'])
     featurize_fn = dummy_env.featurize_fn_map[policy_id]
-    agent = RlLibAgent(policy, agent_index, featurize_fn=featurize_fn)
+    agent = RlLibAgent(policy, featurize_fn=featurize_fn, **agent_kwargs)
     return agent
 
-def get_agent_pair_from_trainer(trainer, policy_id_0='ppo', policy_id_1='ppo'):
-    agent0 = get_agent_from_trainer(trainer, policy_id=policy_id_0)
-    agent1 = get_agent_from_trainer(trainer, policy_id=policy_id_1)
+def get_agent_pair_from_trainer(trainer, policy_id_0='ppo', policy_id_1='ppo', agent_1_kwargs={}, agent_2_kwargs={}):
+    agent0 = get_agent_from_trainer(trainer, policy_id=policy_id_0, agent_kwargs=agent_1_kwargs)
+    agent1 = get_agent_from_trainer(trainer, policy_id=policy_id_1, agent_kwargs=agent_2_kwargs)
     return AgentPair(agent0, agent1)
 
 
-def load_agent_pair(save_path, policy_id_0='ppo', policy_id_1='ppo'):
+def load_agent_pair(save_path, policy_id_0='ppo', policy_id_1='ppo', agent_1_kwargs={"agent_index" : 0}, agent_2_kwargs={"agent_index" : 1}, trainer_params_to_override={}):
     """
     Returns an Overcooked AgentPair object that has as player 0 and player 1 policies with 
     ID policy_id_0 and policy_id_1, respectively
     """
-    trainer = load_trainer(save_path)
-    return get_agent_pair_from_trainer(trainer, policy_id_0, policy_id_1)
+    trainer = load_trainer(save_path, **trainer_params_to_override)
+    return get_agent_pair_from_trainer(trainer, policy_id_0, policy_id_1, agent_1_kwargs, agent_2_kwargs)
 
-def load_agent(save_path, policy_id='ppo', agent_index=0):
+def load_agent(save_path, policy_id='ppo', agent_kwargs={"agent_index" : 0}, trainer_params_to_override={}):
     """
     Returns an RllibAgent (compatible with the Overcooked Agent API) from the `save_path` to a previously
     serialized trainer object created with `save_trainer`
@@ -783,7 +789,7 @@ def load_agent(save_path, policy_id='ppo', agent_index=0):
     Agent index indicates whether the agent is player zero or player one (or player n in the general case)
     as the featurization is not symmetric for both players
     """
-    trainer = load_trainer(save_path)
-    return get_agent_from_trainer(trainer, policy_id=policy_id, agent_index=agent_index)
+    trainer = load_trainer(save_path, **trainer_params_to_override)
+    return get_agent_from_trainer(trainer, policy_id=policy_id, agent_kwargs=agent_kwargs)
 
 
