@@ -659,7 +659,7 @@ class AbstractOffDistrubutionPolicy(RllibPolicy):
         off_dist_actions, off_dist_logits = self._off_dist_compute_actions(off_dist_obs)
 
         # Batched ternary switch based on previously computed masks
-        actions, logits = np.where(off_dist_mask, off_dist_actions, on_dist_actions), np.where(off_dist_mask, off_dist_logits, on_dist_logits)
+        actions, logits = np.where(off_dist_mask, off_dist_actions, on_dist_actions), np.where(off_dist_mask, off_dist_logits.T, on_dist_logits.T).T
 
         return actions, [], { "action_dist_inputs" : logits, "off_dist_mask" : off_dist_mask }
 
@@ -751,7 +751,7 @@ class OffDistCounterBCOPT(AbstractBCSelfPlayOPTPolicy):
             ret = np.array([obs_batch[:-1]])
         else:
             ret = obs_batch[:, -1]
-        return ret
+        return ret.astype(bool)
 
 class DummyOptPolicy(RllibPolicy):
 

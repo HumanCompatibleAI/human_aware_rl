@@ -187,7 +187,7 @@ class TestBCOpt(unittest.TestCase):
         }
         bc_opt_featurize_fn = lambda state : OvercookedMultiAgent.bc_opt_featurize_fn(self.base_env, state)
         bc_opt_policy = DummyOffDistCounterBCOPT(self.env.bc_opt_observation_space, self.env.action_space, bc_opt_config)
-        bc_opt_agent = RlLibAgent(bc_opt_policy, 0, bc_opt_featurize_fn).reset()
+        bc_opt_agent = RlLibAgent(bc_opt_policy, featurize_fn=bc_opt_featurize_fn, agent_index=0).reset()
 
         state = self.base_env.reset()
         done = False
