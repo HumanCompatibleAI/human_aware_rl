@@ -1,6 +1,6 @@
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import numpy as np
-import inspect
+import inspect, os, shutil, glob
 
 def softmax(logits):
     e_x = np.exp(logits.T - np.max(logits))
@@ -61,3 +61,40 @@ def iterable_equal(a, b):
             return False
 
     return True
+
+def move_ppo_agent(old_dir, new_dir):
+    """
+    ### Summary
+    Move a serialized PPO trainer, preserving our default directory schema
+
+    Arguments:
+        - old_dir (str): Path to previously trained PPO trainer
+        - new_dir (str): Where to copy files into our new schema. This directory will be created
+            if it doesn't exist
+
+    Before executing, the directory structure should be of the following form:
+
+    /old_dir
+        checkpoint*
+        checkpoint*.tune-metadata
+        config.pickle
+
+    After executing, the following directory structure will exit
+
+    /new_dir
+        /agent
+            agent
+            agent.tune-metadata
+            config.pickle
+
+    TODO: Make this function idepotent
+    """
+    if not os.path.exists(new_dir):
+        os.makedirs(new_dir)
+    agent_dir = os.path.join(new_dir, 'agent')
+    shutil.copytree(old_dir, agent_dir)
+    checkpoint_files = glob.glob(os.path.join(agent_dir, 'checkpoint*'))
+    for checkpoint_file in checkpoint_files:
+        path, extension = os.path.splitext(checkpoint_file)
+        new_file_name = os.path.join(os.path.dirname(path), 'agent' + extension)
+        os.rename(checkpoint_file, new_file_name)
