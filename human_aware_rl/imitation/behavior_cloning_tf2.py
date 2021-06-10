@@ -6,6 +6,8 @@ from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data, get_human_human_trajectories
 from human_aware_rl.static import *
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae, load_trainer
+from human_aware_rl.rllib.policies import StaticPolicy
+from human_aware_rl.rllib.policies import RandomPolicy as DummyOptPolicy
 from human_aware_rl.rllib.utils import get_base_env
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.utils import recursive_dict_update, get_flattened_keys, create_dir_if_not_exists
@@ -404,7 +406,7 @@ class TfContextManager:
     def __exit__(self, *args):
         self.ctx.__exit__(*args)
 
-class BehaviorCloningPolicy(RllibPolicy):
+class BehaviorCloningPolicy(StaticPolicy):
 
     def __init__(self, observation_space, action_space, config):
         """
@@ -523,26 +525,6 @@ class BehaviorCloningPolicy(RllibPolicy):
             return [np.zeros(self.cell_size,), np.zeros(self.cell_size,)]
         return []
 
-
-    def get_weights(self):
-        """
-        No-op to keep rllib from breaking, won't be necessary in future rllib releases
-        """
-        pass
-
-    def set_weights(self, weights):
-        """
-        No-op to keep rllib from breaking
-        """
-        pass
-
-
-    def learn_on_batch(self, samples):
-        """
-        Static policy requires no learning
-        """
-        return {}
-
     def _forward(self, obs_batch, state_batches):
         if self.use_lstm:
             obs_batch = np.expand_dims(obs_batch, 1)
@@ -564,7 +546,7 @@ class BehaviorCloningPolicy(RllibPolicy):
             return NullContextManager()
         return TfContextManager(self._sess)
 
-class AbstractOffDistrubutionPolicy(RllibPolicy):
+class AbstractOffDistrubutionPolicy(StaticPolicy):
 
     """
     Abstract class for a OOD policy. At a high level, this can be viewed as a meta agent that
@@ -673,37 +655,6 @@ class AbstractOffDistrubutionPolicy(RllibPolicy):
         logits = infos['action_dist_inputs']
         return actions, logits
     
-    def get_initial_state(self):
-        """
-        Returns the initial hidden and memory states for the model if it is recursive
-
-        Note, this shadows the rllib.Model.get_initial_state function
-
-        Also note, either this function or self.model.get_initial_state (if it exists) must be called at 
-        start of an episode
-        """
-        return []
-
-
-    def get_weights(self):
-        """
-        No-op to keep rllib from breaking, won't be necessary in future rllib releases
-        """
-        pass
-
-    def set_weights(self, weights):
-        """
-        No-op to keep rllib from breaking
-        """
-        pass
-
-
-    def learn_on_batch(self, samples):
-        """
-        Static policy requires no learning
-        """
-        return {}
-    
 class AbstractBCSelfPlayOPTPolicy(AbstractOffDistrubutionPolicy):
 
     """
@@ -739,7 +690,7 @@ class BernoulliBCSelfPlayOPTPolicy(AbstractBCSelfPlayOPTPolicy):
 
     def _off_distribution(self, obs_batch, *args, **kwargs):
         N = len(obs_batch)
-        mask = (np.random.random(N) < self.p).astype(bool)
+        mask = (np.random.random_sample(N) < self.p).astype(bool)
         return mask
 
 class OffDistCounterBCOPT(AbstractBCSelfPlayOPTPolicy):
@@ -752,19 +703,6 @@ class OffDistCounterBCOPT(AbstractBCSelfPlayOPTPolicy):
         else:
             ret = obs_batch[:, -1]
         return ret.astype(bool)
-
-class DummyOptPolicy(RllibPolicy):
-
-    """
-    For testing purposes
-    """
-
-    def compute_actions(self, obs_batch, *args, **kwargs):
-        N = len(obs_batch)
-        n = self.action_space.n
-        actions = [self.action_space.sample() for _ in range(N)]
-        infos = { "action_dist_inputs" : np.ones(n) * (1/n) }
-        return actions, [], infos
 
 class DummyOffDistCounterBCOPT(OffDistCounterBCOPT):
 

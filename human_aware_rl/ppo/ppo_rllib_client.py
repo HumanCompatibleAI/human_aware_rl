@@ -3,6 +3,8 @@ import argparse, os, sys
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import numpy as np
 
+from human_aware_rl.rllib.policies import EnsemblePolicy
+
 # environment variable that tells us whether this code is running on the server or not
 LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
 
@@ -176,6 +178,13 @@ def my_config():
     # Whether to log training progress and debugging info
     verbose = True
 
+    # Whether (if True) PPO agent should train against ensemble of past copies of itself
+    ficticious_self_play = False
+
+    # Number of environment timesteps after which we save a PPO checkpoint for the ensemble
+    # Note: only applicable if ficticious_self_play=True
+    timesteps_per_ensemble_checkpoint = 5e5
+
 
     ### BC Params ###
     # path to pickled policy model for behavior cloning
@@ -299,7 +308,7 @@ def my_config():
         "evaluation_interval" : evaluation_interval,
         "entropy_coeff_schedule" : entropy_coeff_schedule if entropy_coeff_schedule else [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
         "eager_tracing" : eager,
-        "log_level" : "WARN" if verbose else "ERROR"
+        "log_level" : "WARN" if verbose else "ERROR",
     }
 
     # To be passed into AgentEvaluator constructor and _evaluate function
@@ -330,13 +339,21 @@ def my_config():
             "use_reward_shaping" : use_reward_shaping,
             "bc_schedule" : bc_schedule,
             "potential_constants" : potential_constants,
-            "bc_opt" : bc_opt
+            "bc_opt" : bc_opt,
+            "ficticious_self_play" : ficticious_self_play
         }
     }
 
+    ray_params = {
+        "custom_model_id" : "MyPPOModel",
+        "custom_model_cls" : None if model_params['use_lstm'] else RllibPPOModel,
+        "temp_dir" : temp_dir,
+        "env_creator" : _env_creator
+    }
+
     bc_params = {
-        "bc_policy_cls" : BehaviorCloningPolicy,
-        "bc_config" : {
+        "cls" : BehaviorCloningPolicy,
+        "config" : {
             "model_dir" : bc_model_dir,
             "stochastic" : bc_stochastic,
             "eager" : eager
@@ -344,8 +361,8 @@ def my_config():
     }
 
     bc_opt_params = {
-        "bc_opt_policy_cls" : BC_OPT_CLS_MAP[bc_opt_cls_key],
-        "bc_opt_config" : {
+        "cls" : BC_OPT_CLS_MAP[bc_opt_cls_key],
+        "config" : {
             "on_dist_config" : {
                 "model_dir" : bc_model_dir,
                 "stochastic" : bc_stochastic,
@@ -358,19 +375,44 @@ def my_config():
         }
     }
 
-    ray_params = {
-        "custom_model_id" : "MyPPOModel",
-        "custom_model_cls" : None if model_params['use_lstm'] else RllibPPOModel,
-        "temp_dir" : temp_dir,
-        "env_creator" : _env_creator
+    ppo_params = {
+        "cls" : None,
+        "config" : {
+            "model" : {
+                "custom_model_config" : model_params,
+                
+                "custom_model" : ray_params['custom_model_id']
+            }
+        }
     }
+
+    ensemble_ppo_params = {
+        "cls" : EnsemblePolicy,
+        "config" : {
+            "max_policies_in_memory" : 5
+        }
+    }
+
+    policy_params = {
+        "ppo" : ppo_params,
+        "bc" : bc_params,
+        "bc_opt" : bc_opt_params,
+        "ensemble_ppo" : ensemble_ppo_params
+    }
+
+
+    # Whether to return pointer to trainer in memory in results dict. Useful for debugging
+    return_trainer = False
 
     params = {
         "model_params" : model_params,
         "training_params" : training_params,
         "environment_params" : environment_params,
-        "bc_params" : bc_params,
-        "bc_opt_params" : bc_opt_params,
+        # "bc_params" : bc_params,
+        # "bc_opt_params" : bc_opt_params,
+        # "ppo_params" : ppo_params,
+        # "ensemble_ppo_params" : ensemble_ppo_params,
+        "policy_params" : policy_params,
         "shared_policy" : shared_policy,
         "num_training_iters" : num_training_iters,
         "evaluation_params" : evaluation_params,
@@ -379,6 +421,8 @@ def my_config():
         "seeds" : seeds,
         "results_dir" : results_dir,
         "ray_params" : ray_params,
+        "return_trainer" : return_trainer,
+        "timesteps_per_ensemble_checkpoint" : timesteps_per_ensemble_checkpoint,
         "verbose" : verbose
     }
 
@@ -404,6 +448,9 @@ def run(params):
     # Save the state of the experiment at end
     save_path = save_trainer(trainer, params)
     result['save_path'] = save_path
+
+    # Store pointer to trainer in memeory if requested (useful for testing)
+    result['trainer'] = trainer if params['return_trainer'] else None
 
     if params['verbose']:
         print("saved trainer at", save_path)
@@ -433,4 +480,6 @@ def main(params):
     average_sparse_reward = np.mean([res['custom_metrics']['sparse_reward_mean'] for res in results])
     average_episode_reward = np.mean([res['episode_reward_mean'] for res in results])
     save_paths = [res['save_path'] for res in results]
-    return { "average_sparse_reward" : average_sparse_reward, "average_total_reward" : average_episode_reward, "save_paths" : save_paths }
+    trainers = [res['trainer'] for res in results]
+    results =  { "average_sparse_reward" : average_sparse_reward, "average_total_reward" : average_episode_reward, "save_paths" : save_paths, "trainers" : trainers }
+    return results

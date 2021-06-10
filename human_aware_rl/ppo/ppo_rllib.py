@@ -10,7 +10,6 @@ class RllibPPOModel(TFModelV2):
     Model that will map environment states to action probabilities. Will be shared across agents
     """
     def __init__(self, obs_space, action_space, num_outputs, model_config, name, **kwargs):
-
         super(RllibPPOModel, self).__init__(obs_space, action_space, num_outputs, model_config, name)
 
         # params we got to pass in from the call to "run"

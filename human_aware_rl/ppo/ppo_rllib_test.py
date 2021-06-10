@@ -404,6 +404,50 @@ class TestPPORllib(unittest.TestCase):
         }
         results = ex.run(config_updates=config_updates, options={'--loglevel': 'ERROR'}).result
 
+    def test_ficticious_self_play(self):
+        # Train a ficticious-self-play agent for 20 iterations
+        results = ex.run(
+            config_updates={
+                # Please feel free to modify the parameters below
+                "ficticious_self_play" : True,
+                "timesteps_per_ensemble_checkpoint" : 1.5e4,
+                "results_dir": self.temp_results_dir,
+                "num_workers": 2,
+                "train_batch_size": 1600,
+                "sgd_minibatch_size": 800,
+                "num_training_iters": 20,
+                "evaluation_interval": 10,
+                "entropy_coeff_start": 0.0,
+                "entropy_coeff_end": 0.0,
+                "evaluation_display": False,
+                "return_trainer" : True,
+                "verbose" : False
+            },
+            options={'--loglevel': 'ERROR'}
+        ).result
+
+        trainer = results['trainers'][0]
+        ensemble_ppo_policy = trainer.get_policy('ensemble_ppo')
+        base_policies = ensemble_ppo_policy.base_policies
+
+        # Ensure correct number of checkpoints added
+        self.assertEqual(len(base_policies), 4)
+
+        # Ensure we're not adding the same pointer to the same object
+        self.assertIsNot(base_policies[1], base_policies[2])
+        self.assertIsNot(base_policies[2], base_policies[3])
+
+        # Ensure we aren't overriding the weights in our TF graph after storing checkpoints
+        dummy_obs = trainer.env_creator(trainer.config['env_config']).reset()['ensemble_ppo']
+        logits_1 = base_policies[1].compute_actions[1]['action_dist_inputs']
+        logits_2 = base_policies[2].compute_actions[1]['action_dist_inputs']
+        logits_3 = base_policies[3].compute_actions[1]['action_dist_inputs']
+        
+        self.assertFalse(np.allclose(logits_1, logits_2))
+        self.assertFalse(np.allclose(logits_2, logits_3))
+        self.assertFalse(np.allclose(logits_1, logits_3))
+
+
 def _clear_pickle():
     # Write an empty dictionary to our static "expected" results location
     with open(PPO_EXPECTED_DATA_PATH, 'wb') as f:
@@ -423,15 +467,25 @@ if __name__ == '__main__':
         _clear_pickle()
 
     suite = unittest.TestSuite()
-    suite.addTest(TestPPORllib('test_save_load', **args))
-    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+
+    # PPO SP
+    # suite.addTest(TestPPORllib('test_save_load', **args))
+    # suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
     # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
     # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_bc', **args))
-    suite.addTest(TestPPORllib('test_ppo_bc_opt_bernoulli', **args))
-    suite.addTest(TestPPORllib('test_ppo_bc_opt_counters', **args))
-    suite.addTest(TestPPORllib('test_ppo_bc_opt_different_arch', **args))
+
+    # PPO BC
+    # suite.addTest(TestPPORllib('test_ppo_bc', **args))
+
+    # PPO BC OPT
+    # suite.addTest(TestPPORllib('test_ppo_bc_opt_bernoulli', **args))
+    # suite.addTest(TestPPORllib('test_ppo_bc_opt_counters', **args))
+    # suite.addTest(TestPPORllib('test_ppo_bc_opt_different_arch', **args))
+
+    # Ficticious Self-play
+    suite.addTest(TestPPORllib('test_ficticious_self_play', **args))
+
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)
         

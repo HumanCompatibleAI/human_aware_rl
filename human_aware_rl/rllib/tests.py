@@ -1,21 +1,12 @@
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, RlLibAgent
 from human_aware_rl.rllib.utils import softmax, get_required_arguments, iterable_equal, get_base_env
+from human_aware_rl.rllib.policies import ConstantPolicy, EnsemblePolicy
 from numpy.lib.stride_tricks import DummyArray
 from overcooked_ai_py.mdp.actions import Action
-from math import isclose
 import unittest, copy
 import numpy as np
 
-class DummyRllibPolicy():
-
-    def __init__(self, logits):
-        self.logits = logits
-
-    def compute_actions(self, obs_batch, *args, **kwargs):
-        infos = { "action_dist_inputs" : self.logits }
-        actions =  [np.argmax(self.logits)]
-        states = []
-        return actions, states, infos
+from human_aware_rl.utils import set_global_seed
 
 class RllibEnvTest(unittest.TestCase):
 
@@ -159,13 +150,14 @@ class RllibAgentTest(unittest.TestCase):
 
     def setUp(self):
         logits = np.log(np.arange(len(Action.ALL_ACTIONS)) + 1)
-        self.dummy_policy = DummyRllibPolicy(logits)
-        self.env = get_base_env({'layout_name' : 'cramped_room'}, {"horizon" : 400})
+        self.base_env = get_base_env({'layout_name' : 'cramped_room'}, {"horizon" : 400})
+        rllib_env = OvercookedMultiAgent(self.base_env)
+        self.dummy_policy = ConstantPolicy(rllib_env.ppo_observation_space, rllib_env.action_space, { "logits" : logits })
 
     def assertArrayAlmostEqual(self, arr_1, arr_2, **kwargs):
         arr_1 = np.array(arr_1)
         arr_2 = np.array(arr_2)
-        return np.allclose(arr_1, arr_2, **kwargs)
+        self.assertTrue(np.allclose(arr_1, arr_2, **kwargs))
 
     def test_stochastic(self):
         dummy_feat_fn = lambda state : (state, state)
@@ -175,7 +167,7 @@ class RllibAgentTest(unittest.TestCase):
 
         rnd_actions = []
 
-        state = dummy_state = self.env.reset()
+        state = dummy_state = self.base_env.reset()
         done = False
         while not done:
             rnd_action, _ = rnd_agent.action(state)
@@ -184,7 +176,7 @@ class RllibAgentTest(unittest.TestCase):
             rnd_actions.append(Action.ACTION_TO_INDEX[rnd_action])
             self.assertEqual(det_action_1, det_action_2)
 
-            state, _, done, _ = self.env.step((rnd_action, det_action_1))
+            state, _, done, _ = self.base_env.step((rnd_action, det_action_1))
 
         empi_action_probs = np.unique(rnd_actions, return_counts=True)[1] / len(rnd_actions)
         actual_action_probs = softmax(self.dummy_policy.logits)
@@ -192,6 +184,94 @@ class RllibAgentTest(unittest.TestCase):
 
         self.assertArrayAlmostEqual(empi_action_probs, actual_action_probs)
         self.assertArrayAlmostEqual(actual_action_probs, calculated_action_probs)
+
+class RllibPoliciesTest(unittest.TestCase):
+
+    def setUp(self):
+        set_global_seed(0)
+        self.base_env = get_base_env({'layout_name' : 'cramped_room'}, {"horizon" : 4e3})
+        self.rllib_env = OvercookedMultiAgent(self.base_env, ficticious_self_play=True)
+        self.default_policy_kwargs = {
+            "observation_space" : self.rllib_env.ppo_observation_space,
+            "action_space" : self.rllib_env.action_space,
+            "config" : {}
+        }
+
+    def assertArrayAlmostEqual(self, arr_1, arr_2, **kwargs):
+        arr_1 = np.array(arr_1)
+        arr_2 = np.array(arr_2)
+        self.assertTrue(np.allclose(arr_1, arr_2, **kwargs), "Expected: {}\nActual: {}".format(arr_2, arr_1))
+
+    def _run_policy(self, policy):
+        obs = self.rllib_env.reset()
+        done = False
+        ensemble_key = [key for key in obs.keys() if key.startswith('ensemble_ppo')][0]
+        rnd_actions = []
+        while not done:
+            [action], _, _ = policy.compute_actions([obs[ensemble_key]])
+            rnd_actions.append(action)
+            obs, _, done, _ = self.rllib_env.step({ key : action for key in obs.keys()})
+            done = done['__all__']
+
+        empi_action_probs = np.unique(rnd_actions, return_counts=True)[1] / len(rnd_actions)
+        return empi_action_probs
+
+    def test_ensemble_policy(self):
+        ensemble_policy = EnsemblePolicy(**self.default_policy_kwargs)
+
+        # Ensure we have rnd agent before any additional agents are provided
+        actual_action_probs = self._run_policy(ensemble_policy)
+        expected_action_probs = np.ones(self.rllib_env.action_space.n) / self.rllib_env.action_space.n
+        self.assertArrayAlmostEqual(actual_action_probs, expected_action_probs, atol=0.02)
+
+        # Add some new additional base policies and ensure that they can be cycled through
+        dummy_base_policies = [ensemble_policy.get_rnd_policy()]
+        for i in range(1, 6):
+            kwargs = self.default_policy_kwargs.copy()
+            logits = np.random.random(self.rllib_env.action_space.n)
+            logits = logits / np.sum(logits)
+            kwargs['config']['logits'] = logits
+            dummy_base_policies.append(ConstantPolicy(**kwargs))
+            ensemble_policy.add_base_policy(loader_fn=lambda i : dummy_base_policies[i], loader_kwargs={"i" : i})
+
+        # Run the policy again and ensure RND policy still 'active'
+        actual_action_probs = self._run_policy(ensemble_policy)
+        expected_action_probs = np.ones(self.rllib_env.action_space.n) / self.rllib_env.action_space.n
+        self.assertArrayAlmostEqual(actual_action_probs, expected_action_probs, atol=0.02)
+
+        # Ensure all loaders work properly
+        for expected_policy, loaded_policy in zip(dummy_base_policies, ensemble_policy.base_policies):
+            self.assertIs(expected_policy, loaded_policy)
+
+        # Re-sample a couple of times and ensure we are running the right policy
+        for _ in range(5):
+            ensemble_policy.sample_policy()
+            self.assertIs(dummy_base_policies[ensemble_policy.curr_policy_idx], ensemble_policy.curr_policy)
+            actual_action_probs = self._run_policy(ensemble_policy)
+            expected_action_probs = softmax(dummy_base_policies[ensemble_policy.curr_policy_idx].logits)
+            self.assertArrayAlmostEqual(actual_action_probs, expected_action_probs, atol=0.02)
+
+        # Add some more dummy policies and repeat the above experiment
+        for i in range(6, 12):
+            kwargs = self.default_policy_kwargs.copy()
+            logits = np.random.random(self.rllib_env.action_space.n)
+            logits = logits / np.sum(logits)
+            kwargs['config']['logits'] = logits
+            dummy_base_policies.append(ConstantPolicy(**kwargs))
+            ensemble_policy.add_base_policy(loader_fn=lambda i : dummy_base_policies[i], loader_kwargs={"i" : i})
+
+        # Ensure all loaders work properly
+        for expected_policy, loaded_policy in zip(dummy_base_policies, ensemble_policy.base_policies):
+            self.assertIs(expected_policy, loaded_policy)
+        
+        # Ensure we're still using the correct policy
+        for _ in range(5):
+            ensemble_policy.sample_policy()
+            actual_action_probs = self._run_policy(ensemble_policy)
+            expected_action_probs = softmax(dummy_base_policies[ensemble_policy.curr_policy_idx].logits)
+            self.assertArrayAlmostEqual(actual_action_probs, expected_action_probs, atol=0.02)
+        
+        
 
 if __name__ == '__main__':
     unittest.main()
