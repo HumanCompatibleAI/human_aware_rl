@@ -98,7 +98,7 @@ class EnsemblePolicy(StaticPolicy):
         return [self.get_policy(i) for i in range(self.num_base_policies)]
 
     @staticmethod
-    def default_load_fn(self, trainer_path, policy_id):
+    def default_load_fn(trainer_path, policy_id):
         return load_trainer(trainer_path).get_policy(policy_id)
 
     def get_rnd_policy(self):

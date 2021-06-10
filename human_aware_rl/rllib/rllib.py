@@ -507,23 +507,6 @@ class TrainingCallbacks(DefaultCallbacks):
             lambda ev: ev.foreach_env(
                 lambda env: env.anneal_all_factors(timestep)))
 
-        # TODO: figure out how to add a snapshot of current PPO policy to ensemble ppo policy, if necessary
-        trainer_path = save_trainer(trainer, self.params)
-        ensemble_idx = -1
-        def add_to_ensemble(policy, pid):
-            nonlocal ensemble_idx
-            if pid != 'ensemble_ppo':
-                return False
-            curr_ensemble_idx = int(np.floor(timestep / self.params['timesteps_per_ensemble_checkpoint']))
-            if curr_ensemble_idx > ensemble_idx:
-                ensemble_idx = curr_ensemble_idx
-                policy.add_base_policy(trainer_path)
-                return True
-
-        trainer.workers.foreach_policy(
-            add_to_ensemble
-        )
-
     def on_postprocess_trajectory(self, worker, episode, agent_id, policy_id, policies, postprocessed_batch, original_batches, **kwargs):
         pass
 

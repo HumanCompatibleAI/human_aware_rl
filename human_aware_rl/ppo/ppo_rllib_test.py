@@ -410,7 +410,9 @@ class TestPPORllib(unittest.TestCase):
             config_updates={
                 # Please feel free to modify the parameters below
                 "ficticious_self_play" : True,
-                "timesteps_per_ensemble_checkpoint" : 1.5e4,
+                "training_iters_per_ensemble_checkpoint" : 7,
+                "training_iters_per_ensemble_sample" : 1,
+                "training_iters_per_ensemble_checkpoint" : 7,
                 "results_dir": self.temp_results_dir,
                 "num_workers": 2,
                 "train_batch_size": 1600,
@@ -438,14 +440,16 @@ class TestPPORllib(unittest.TestCase):
         self.assertIsNot(base_policies[2], base_policies[3])
 
         # Ensure we aren't overriding the weights in our TF graph after storing checkpoints
-        dummy_obs = trainer.env_creator(trainer.config['env_config']).reset()['ensemble_ppo']
-        logits_1 = base_policies[1].compute_actions[1]['action_dist_inputs']
-        logits_2 = base_policies[2].compute_actions[1]['action_dist_inputs']
-        logits_3 = base_policies[3].compute_actions[1]['action_dist_inputs']
+        dummy_obs = trainer.env_creator(trainer.config['env_config']).reset()
+        ensemble_ppo_key = [key for key in dummy_obs.keys() if key.startswith('ensemble_ppo')][0]
+        dummy_obs = dummy_obs[ensemble_ppo_key]
+        logits_1 = base_policies[1].compute_actions([dummy_obs])[2]['action_dist_inputs']
+        logits_2 = base_policies[2].compute_actions([dummy_obs])[2]['action_dist_inputs']
+        logits_3 = base_policies[3].compute_actions([dummy_obs])[2]['action_dist_inputs']
         
-        self.assertFalse(np.allclose(logits_1, logits_2))
-        self.assertFalse(np.allclose(logits_2, logits_3))
-        self.assertFalse(np.allclose(logits_1, logits_3))
+        self.assertFalse(np.allclose(logits_1, logits_2, atol=0.001))
+        self.assertFalse(np.allclose(logits_2, logits_3, atol=0.001))
+        self.assertFalse(np.allclose(logits_1, logits_3, atol=0.001))
 
 
 def _clear_pickle():
@@ -469,19 +473,19 @@ if __name__ == '__main__':
     suite = unittest.TestSuite()
 
     # PPO SP
-    # suite.addTest(TestPPORllib('test_save_load', **args))
-    # suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_save_load', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
 
     # PPO BC
-    # suite.addTest(TestPPORllib('test_ppo_bc', **args))
+    suite.addTest(TestPPORllib('test_ppo_bc', **args))
 
     # PPO BC OPT
-    # suite.addTest(TestPPORllib('test_ppo_bc_opt_bernoulli', **args))
-    # suite.addTest(TestPPORllib('test_ppo_bc_opt_counters', **args))
-    # suite.addTest(TestPPORllib('test_ppo_bc_opt_different_arch', **args))
+    suite.addTest(TestPPORllib('test_ppo_bc_opt_bernoulli', **args))
+    suite.addTest(TestPPORllib('test_ppo_bc_opt_counters', **args))
+    suite.addTest(TestPPORllib('test_ppo_bc_opt_different_arch', **args))
 
     # Ficticious Self-play
     suite.addTest(TestPPORllib('test_ficticious_self_play', **args))

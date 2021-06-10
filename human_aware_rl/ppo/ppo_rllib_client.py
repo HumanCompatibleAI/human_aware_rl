@@ -178,12 +178,17 @@ def my_config():
     # Whether to log training progress and debugging info
     verbose = True
 
+
+    ### Self-Play Params ###
+
     # Whether (if True) PPO agent should train against ensemble of past copies of itself
     ficticious_self_play = False
 
     # Number of environment timesteps after which we save a PPO checkpoint for the ensemble
     # Note: only applicable if ficticious_self_play=True
-    timesteps_per_ensemble_checkpoint = 5e5
+    training_iters_per_ensemble_checkpoint = 25
+
+    training_iters_per_ensemble_sample = 5
 
 
     ### BC Params ###
@@ -351,6 +356,13 @@ def my_config():
         "env_creator" : _env_creator
     }
 
+    self_play_params = {
+        "ficticious_self_play" : ficticious_self_play,
+        "training_iters_per_ensemble_checkpoint" : training_iters_per_ensemble_checkpoint,
+        "training_iters_per_ensemble_sample" : training_iters_per_ensemble_sample
+
+    }
+
     bc_params = {
         "cls" : BehaviorCloningPolicy,
         "config" : {
@@ -408,21 +420,17 @@ def my_config():
         "model_params" : model_params,
         "training_params" : training_params,
         "environment_params" : environment_params,
-        # "bc_params" : bc_params,
-        # "bc_opt_params" : bc_opt_params,
-        # "ppo_params" : ppo_params,
-        # "ensemble_ppo_params" : ensemble_ppo_params,
         "policy_params" : policy_params,
         "shared_policy" : shared_policy,
         "num_training_iters" : num_training_iters,
         "evaluation_params" : evaluation_params,
+        "self_play_params" : self_play_params,
         "experiment_name" : experiment_name,
         "save_every" : save_freq,
         "seeds" : seeds,
         "results_dir" : results_dir,
         "ray_params" : ray_params,
         "return_trainer" : return_trainer,
-        "timesteps_per_ensemble_checkpoint" : timesteps_per_ensemble_checkpoint,
         "verbose" : verbose
     }
 
@@ -434,16 +442,49 @@ def run(params):
     # Object to store training results in
     result = {}
 
+    # Params that dictate how we organize self-play
+    self_play_params = params['self_play_params']
+
     # Training loop
     for i in range(params['num_training_iters']):
         if params['verbose']:
             print("Starting training iteration", i)
         result = trainer.train()
 
+        save_path = None
         if i % params['save_every'] == 0:
             save_path = save_trainer(trainer, params)
             if params['verbose']:
                 print("saved trainer at", save_path)
+
+        if self_play_params['ficticious_self_play'] and i % self_play_params['training_iters_per_ensemble_checkpoint'] == 0:
+            if params['verbose']:
+                print("Adding checkpoint to ficticious self-play buffer")
+            if not save_path:
+                save_path = save_trainer(trainer, params)
+                if params['verbose']:
+                    print("saved trainer at", save_path)
+            
+            def add_to_ensemble(policy, pid):
+                if pid != 'ensemble_ppo':
+                    return False
+                policy.add_base_policy(save_path)
+                return True
+            trainer.workers.foreach_policy(
+                add_to_ensemble
+            )
+
+        if self_play_params['ficticious_self_play'] and i % self_play_params['training_iters_per_ensemble_sample'] == 0:
+            if params['verbose']:
+                print("Resampling from ficticious self-play buffer")
+            def sample_from_buffer(policy, pid):
+                if pid != 'ensemble_ppo':
+                    return False
+                policy.sample_policy()
+                return True
+            trainer.workers.foreach_policy(
+                sample_from_buffer
+            )
 
     # Save the state of the experiment at end
     save_path = save_trainer(trainer, params)

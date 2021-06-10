@@ -7,7 +7,7 @@ from human_aware_rl.human.process_dataframes import get_trajs_from_data, get_hum
 from human_aware_rl.static import *
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae, load_trainer
 from human_aware_rl.rllib.policies import StaticPolicy
-from human_aware_rl.rllib.policies import RandomPolicy as DummyOptPolicy
+from human_aware_rl.rllib.policies import UniformPolicy as DummyOptPolicy
 from human_aware_rl.rllib.utils import get_base_env
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.utils import recursive_dict_update, get_flattened_keys, create_dir_if_not_exists
