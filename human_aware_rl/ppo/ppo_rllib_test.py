@@ -476,8 +476,8 @@ if __name__ == '__main__':
     suite.addTest(TestPPORllib('test_save_load', **args))
     suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
     suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args)) # Deprecated for now
+    # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args)) # Deprecated for now
 
     # PPO BC
     suite.addTest(TestPPORllib('test_ppo_bc', **args))

@@ -149,10 +149,11 @@ class RllibUtilsTest(unittest.TestCase):
 class RllibAgentTest(unittest.TestCase):
 
     def setUp(self):
+        set_global_seed(0)
         logits = np.log(np.arange(len(Action.ALL_ACTIONS)) + 1)
-        self.base_env = get_base_env({'layout_name' : 'cramped_room'}, {"horizon" : 400})
+        self.base_env = get_base_env({'layout_name' : 'cramped_room'}, {"horizon" : 4e3})
         rllib_env = OvercookedMultiAgent(self.base_env)
-        self.dummy_policy = ConstantPolicy(rllib_env.ppo_observation_space, rllib_env.action_space, { "logits" : logits })
+        self.dummy_policy = ConstantPolicy(rllib_env.ppo_observation_space, rllib_env.action_space, { "logits" : logits, "stochastic" : False })
 
     def assertArrayAlmostEqual(self, arr_1, arr_2, **kwargs):
         arr_1 = np.array(arr_1)
@@ -182,8 +183,8 @@ class RllibAgentTest(unittest.TestCase):
         actual_action_probs = softmax(self.dummy_policy.logits)
         calculated_action_probs = rnd_agent.action_probabilities(dummy_state)
 
-        self.assertArrayAlmostEqual(empi_action_probs, actual_action_probs)
-        self.assertArrayAlmostEqual(actual_action_probs, calculated_action_probs)
+        self.assertArrayAlmostEqual(empi_action_probs, actual_action_probs, atol=0.02)
+        self.assertArrayAlmostEqual(actual_action_probs, calculated_action_probs, atol=0.02)
 
 class RllibPoliciesTest(unittest.TestCase):
 

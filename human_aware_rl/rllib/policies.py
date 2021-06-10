@@ -54,8 +54,9 @@ class UniformPolicy(StaticPolicy):
 
     def compute_actions(self, obs_batch, *args, **kwargs):
         N = len(obs_batch)
-        actions = [self.action_space.sample() for _ in range(N)]
-        infos = { "action_dist_inputs" : self.logits }
+        actions = np.array([self.action_space.sample() for _ in range(N)])
+        logits = np.array([self.logits for _ in range(N)])
+        infos = { "action_dist_inputs" : logits }
         return actions, [], infos
 
 class ConstantPolicy(StaticPolicy):
@@ -63,10 +64,15 @@ class ConstantPolicy(StaticPolicy):
     def __init__(self, observation_space, action_space, config):
         super(ConstantPolicy, self).__init__(observation_space, action_space, config)
         self.logits = config.get('logits', np.ones(self.action_space.n) / self.action_space.n)
+        self.stochastic = config.get('stochastic', True)
 
     def compute_actions(self, obs_batch, *args, **kwargs):
+        N = len(obs_batch)
         infos = { "action_dist_inputs" : self.logits }
-        actions =  [np.random.choice(self.action_space.n, p=softmax(self.logits))]
+        if self.stochastic:
+            actions =  np.array([np.random.choice(self.action_space.n, p=softmax(self.logits)) for _ in range(N)])
+        else:
+            actions = np.array([np.argmax(self.logits) for _ in range(N)])
         states = []
         return actions, states, infos
 
