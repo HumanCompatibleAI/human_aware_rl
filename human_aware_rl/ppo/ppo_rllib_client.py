@@ -1,9 +1,6 @@
 # All imports except rllib
-import argparse, os, sys
-from overcooked_ai_py.agents.benchmarking import AgentEvaluator
+import os
 import numpy as np
-
-from human_aware_rl.rllib.policies import EnsemblePolicy
 
 # environment variable that tells us whether this code is running on the server or not
 LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
@@ -35,6 +32,7 @@ from ray.rllib.models import ModelCatalog
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from human_aware_rl.ppo.ppo_rllib import RllibPPOModel
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params
+from human_aware_rl.rllib.meta_policies import EnsemblePolicy
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR, BernoulliBCSelfPlayOPTPolicy, OffDistCounterBCOPT
 
 

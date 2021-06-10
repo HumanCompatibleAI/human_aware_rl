@@ -473,22 +473,22 @@ if __name__ == '__main__':
     suite = unittest.TestSuite()
 
     # PPO SP
-    suite.addTest(TestPPORllib('test_save_load', **args))
+    # suite.addTest(TestPPORllib('test_save_load', **args))
     suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
     # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args)) # Deprecated for now
     # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args)) # Deprecated for now
 
-    # PPO BC
-    suite.addTest(TestPPORllib('test_ppo_bc', **args))
+    # # PPO BC
+    # suite.addTest(TestPPORllib('test_ppo_bc', **args))
 
-    # PPO BC OPT
-    suite.addTest(TestPPORllib('test_ppo_bc_opt_bernoulli', **args))
-    suite.addTest(TestPPORllib('test_ppo_bc_opt_counters', **args))
-    suite.addTest(TestPPORllib('test_ppo_bc_opt_different_arch', **args))
+    # # PPO BC OPT
+    # suite.addTest(TestPPORllib('test_ppo_bc_opt_bernoulli', **args))
+    # suite.addTest(TestPPORllib('test_ppo_bc_opt_counters', **args))
+    # suite.addTest(TestPPORllib('test_ppo_bc_opt_different_arch', **args))
 
-    # Ficticious Self-play
-    suite.addTest(TestPPORllib('test_ficticious_self_play', **args))
+    # # Ficticious Self-play
+    # suite.addTest(TestPPORllib('test_ficticious_self_play', **args))
 
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)

@@ -1,6 +1,7 @@
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, RlLibAgent
 from human_aware_rl.rllib.utils import softmax, get_required_arguments, iterable_equal, get_base_env
-from human_aware_rl.rllib.policies import ConstantPolicy, EnsemblePolicy
+from human_aware_rl.rllib.policies import ConstantPolicy
+from human_aware_rl.rllib.meta_policies import EnsemblePolicy
 from numpy.lib.stride_tricks import DummyArray
 from overcooked_ai_py.mdp.actions import Action
 import unittest, copy

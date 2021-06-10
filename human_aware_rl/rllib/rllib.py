@@ -11,7 +11,8 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
-from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal
+from human_aware_rl.rllib.policies import UniformPolicy
+from human_aware_rl.rllib.utils import get_base_env, softmax, get_base_ae, get_required_arguments, iterable_equal
 from human_aware_rl.utils import recursive_dict_update
 from datetime import datetime
 import tempfile
@@ -190,6 +191,11 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.anneal_potential_shaping_factor(0)
         self.anneal_reward_shaping_factor(0)
         self.reset()
+
+    @classmethod
+    def from_base_env_params(cls, mdp_params, env_params={"horizon" : 400}, multi_agent_params={}):
+        base_env = get_base_env(mdp_params, env_params)
+        return cls(base_env, **multi_agent_params)
 
     @staticmethod
     def bc_opt_featurize_fn(base_env, state):
@@ -519,9 +525,8 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
     mdp_params (dict): Used to create underlying OvercookedMDP (see that class for configuration)
     env_params (dict): Used to create underlying OvercookedEnv (see that class for configuration)
     outer_shape (list): a list of 2 item specifying the outer shape of the evaluation layout
-    agent_0_policy_str (str): Key associated with the rllib policy object used to select actions (must be either 'ppo' or 'bc')
-    agent_1_policy_str (str): Key associated with the rllib policy object used to select actions (must be either 'ppo' or 'bc')
-    Note: Agent policies are shuffled each time, so agent_0_policy_str and agent_1_policy_str are symmetric
+    agent_0_policy_str (str): Key associated with the rllib policy object used to select actions (must be either 'ppo', 'bc', 'bc_opt', or 'ensemble_ppo')
+    agent_1_policy_str (str): Key associated with the rllib policy object used to select actions (must be either 'ppo', 'bc', 'bc_opt', or 'ensemble_ppo')
     Returns:
         _evaluate (func): Runs an evaluation specified by the curried params, ignores the rllib parameter 'evaluation_workers'
     """
@@ -530,40 +535,32 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         if verbose:
             print("Computing rollout of current trained policy")
 
-        # Randomize starting indices
-        policies = [agent_0_policy_str, agent_1_policy_str]
-        np.random.shuffle(policies)
-        agent_0_policy, agent_1_policy = policies
-
         # Get the corresponding rllib policy objects for each policy string name
-        agent_0_policy = trainer.get_policy(agent_0_policy)
-        agent_1_policy = trainer.get_policy(agent_1_policy)
+        agent_0_policy = trainer.get_policy(agent_0_policy_str)
+        agent_1_policy = trainer.get_policy(agent_1_policy_str)
+
+        # Random policy where actions are sampled uniformly at random
+        rnd_policy = UniformPolicy(agent_0_policy.observation_space, agent_0_policy.action_space, {})
+        rnd_feat_fn = lambda state : (state, state)
 
         # Conditionally assign featuriation fns
-        # TODO: this repeats the logic in the OvercookedMultiAgent constructor, so might want to 
-        # create an instance of that environment instead of a base_env
-        agent_0_feat_fn = agent_1_feat_fn = None
-        if 'bc' in policies or 'bc_opt' in policies:
-            base_ae = get_base_ae(eval_mdp_params, env_params)
-            base_env = base_ae.env
-            bc_featurize_fn = lambda state : base_env.featurize_state_mdp(state)
-            bc_opt_featurize_fn = lambda state : OvercookedMultiAgent.bc_opt_featurize_fn(base_env, state)
-            if policies[0] == 'bc':
-                agent_0_feat_fn = bc_featurize_fn
-            if policies[1] == 'bc':
-                agent_1_feat_fn = bc_featurize_fn
-            if policies[0] == 'bc_opt':
-                agent_0_feat_fn = bc_opt_featurize_fn
-            if policies[1] == 'bc_opt':
-                agent_1_feat_fn = bc_opt_featurize_fn
+        rllib_env = OvercookedMultiAgent.from_base_env_params(eval_mdp_params, env_params)
+        agent_0_feat_fn = rllib_env.featurize_fn_map[agent_0_policy_str]
+        agent_1_feat_fn = rllib_env.featurize_fn_map[agent_1_policy_str]
 
         # Compute the evauation rollout. Note this doesn't use the rllib passed in evaluation_workers, so this 
         # computation all happens on the CPU. Could change this if evaluation becomes a bottleneck
-        results = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_feat_fn, agent_1_feat_fn, verbose=verbose)
+        sp_results_0 = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_feat_fn, agent_1_feat_fn, verbose=verbose)
+        sp_results_1 = evaluate(eval_params, eval_mdp_params, outer_shape, agent_1_policy, agent_0_policy, agent_1_feat_fn, agent_0_feat_fn, verbose=verbose)
+        rnd_results_0 = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, rnd_policy, agent_0_feat_fn, rnd_feat_fn, verbose=verbose)
+        rnd_results_1 = evaluate(eval_params, eval_mdp_params, outer_shape, rnd_policy, agent_0_policy, rnd_feat_fn, agent_0_feat_fn, verbose=verbose)
 
         # Log any metrics we care about for rllib tensorboard visualization
         metrics = {}
-        metrics['average_sparse_reward'] = np.mean(results['ep_returns'])
+        metrics['average_sparse_reward_{}_{}'.format(agent_0_policy_str, agent_1_policy_str)] = np.mean(sp_results_0['ep_returns'])
+        metrics['average_sparse_reward_{}_{}'.format(agent_1_policy_str, agent_0_policy_str)] = np.mean(sp_results_1['ep_returns'])
+        metrics['average_sparse_reward_{}_rnd'.format(agent_0_policy_str)] = np.mean(rnd_results_0['ep_returns'])
+        metrics['average_sparse_reward_rnd_{}'.format(agent_0_policy_str)] = np.mean(rnd_results_1['ep_returns'])
         return metrics
 
     return _evaluate
@@ -578,14 +575,14 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
     outer_shape (list): a list of 2 item specifying the outer shape of the evaluation layout
     agent_0_policy (rllib.Policy): Policy instance used to map states to action logits for agent 0
     agent_1_policy (rllib.Policy): Policy instance used to map states to action logits for agent 1
-    agent_0_featurize_fn (func): Used to preprocess states for agent 0, defaults to lossless_state_encoding if 'None'
-    agent_1_featurize_fn (func): Used to preprocess states for agent 1, defaults to lossless_state_encoding if 'None'
+    agent_0_featurize_fn (func): Used to preprocess states for agent 0, defaults to identity if 'None'
+    agent_1_featurize_fn (func): Used to preprocess states for agent 1, defaults to identity if 'None'
     """
     evaluator = get_base_ae(mdp_params, {"horizon" : eval_params['ep_length'], "num_mdp":1}, outer_shape)
 
     # Override pre-processing functions with defaults if necessary
-    agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else evaluator.env.lossless_state_encoding_mdp
-    agent_1_featurize_fn = agent_1_featurize_fn if agent_1_featurize_fn else evaluator.env.lossless_state_encoding_mdp
+    agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else lambda state : (state, state)
+    agent_1_featurize_fn = agent_1_featurize_fn if agent_1_featurize_fn else lambda state : (state, state)
 
     # Wrap rllib policies in overcooked agents to be compatible with Evaluator code
     agent0 = RlLibAgent(agent_0_policy, agent_index=0, featurize_fn=agent_0_featurize_fn)
