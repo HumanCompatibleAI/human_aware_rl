@@ -28,8 +28,10 @@ DUMMY_2019_RAW_HUMAN_DATA_PATH = os.path.join(DUMMY_HUMAN_DATA_DIR, "dummy_2019_
 
 
 # Expected values for reproducibility unit tests
-BC_EXPECTED_DATA_PATH = os.path.join(_curr_directory, "testing_data", "bc", "expected.pickle")
-PPO_EXPECTED_DATA_PATH = os.path.join(_curr_directory, "testing_data", "ppo", "expected.pickle")
+TESTING_DATA_DIR = os.path.join(_curr_directory, "testing_data")
+BC_EXPECTED_DATA_PATH = os.path.join(TESTING_DATA_DIR, "bc", "expected.pickle")
+PPO_EXPECTED_DATA_PATH = os.path.join(TESTING_DATA_DIR, "ppo", "expected.pickle")
+RLLIB_TRAINER_PATH = os.path.join(TESTING_DATA_DIR, 'serialization_forward_compat', 'checkpoint_000005', 'checkpoint-5')
 
 
 # Human data constants

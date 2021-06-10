@@ -1,10 +1,12 @@
-from human_aware_rl.rllib.rllib import OvercookedMultiAgent, RlLibAgent
-from human_aware_rl.rllib.utils import softmax, get_required_arguments, iterable_equal, get_base_env
+from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
+from human_aware_rl.rllib.rllib import OvercookedMultiAgent, RlLibAgent, load_agent, load_agent_pair
+from human_aware_rl.rllib.utils import get_base_ae, softmax, get_required_arguments, iterable_equal, get_base_env
+from human_aware_rl.static import RLLIB_TRAINER_PATH, TESTING_DATA_DIR
 from human_aware_rl.rllib.policies import ConstantPolicy
 from human_aware_rl.rllib.meta_policies import EnsemblePolicy
 from numpy.lib.stride_tricks import DummyArray
 from overcooked_ai_py.mdp.actions import Action
-import unittest, copy
+import unittest, copy, pickle, os, ray, logging
 import numpy as np
 
 from human_aware_rl.utils import set_global_seed
@@ -272,7 +274,45 @@ class RllibPoliciesTest(unittest.TestCase):
             actual_action_probs = self._run_policy(ensemble_policy)
             expected_action_probs = softmax(dummy_base_policies[ensemble_policy.curr_policy_idx].logits)
             self.assertArrayAlmostEqual(actual_action_probs, expected_action_probs, atol=0.02)
+
+class RllibSerializationTest(unittest.TestCase):
+
+    def setUp(self):
+        set_global_seed(0)
+        ray.init(log_to_driver=False, logging_level=logging.CRITICAL)
+        mdp = OvercookedGridworld.from_layout_name("cramped_room")
+        self.dummy_state = mdp.get_standard_start_state()
+        self.mdp_params = {"layout_name" : "cramped_room"}
+        self.env_params = {"horizon" : 400}
+        self.expected_path = os.path.join(TESTING_DATA_DIR, 'rllib', 'expected.pickle')
+
+    def tearDown(self):
+        ray.shutdown()
+
+    def test_serialization_backwards_compat(self):
+        # Load agents from fixed pre-trained rllib trainer to ensure backwards compatibility
+        agent_0 = load_agent(RLLIB_TRAINER_PATH, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
+        agent_0.reset()
+
+        agent_1 = load_agent(RLLIB_TRAINER_PATH, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
+        agent_1.reset()
+
+        # Ensure forward pass of policy network still works
+        _, _ = agent_0.action(self.dummy_state)
+        _, _ = agent_1.action(self.dummy_state)
+
+        # Load agent pair for full rollout
+        pair = load_agent_pair(RLLIB_TRAINER_PATH, trainer_params_to_override={"log_level" : 'ERROR'})
+        ae = get_base_ae(self.mdp_params, self.env_params)
+        actual_trajectory = ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
         
+        # Ensure trajectory matches expected trajecotry
+        with open(self.expected_path, 'rb') as f:
+            expected = pickle.load(f)
+        
+        expected_trajectory = expected['test_serialization_backwards_compat']
+        self.assertTrue(np.array_equal(expected_trajectory, actual_trajectory))
+
         
 
 if __name__ == '__main__':

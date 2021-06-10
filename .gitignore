@@ -154,3 +154,9 @@ human_aware_rl/ppo/*.sh
 
 # Additional human data
 **/human_data
+
+# Pickle metadata for rllib checkoints
+human_aware_rl/static/testing_data/serialization_forward_compat/*
+
+# Tensorboard logging
+**/events.out.tfevents.*

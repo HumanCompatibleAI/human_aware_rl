@@ -653,21 +653,22 @@ def gen_trainer_from_params(params):
         return (policy_cls, policy_observation_space, env.action_space, policy_config)
 
     # Rllib compatible way of setting the directory we store agent checkpoints in
-    logdir_prefix = "{0}_{1}_{2}".format(params["experiment_name"], params['training_params']['seed'], timestr)
+    logdir_prefix = params['logdir_prefix'] if 'logdir_prefix' in params else "{0}_{1}_{2}".format(params["experiment_name"], params['training_params']['seed'], timestr)
     def custom_logger_creator(config):
-                """Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
-                """
-                results_dir = params['results_dir']
-                if not os.path.exists(results_dir):
-                    try:
-                        os.makedirs(results_dir)
-                    except Exception as e:
-                        print("error creating custom logging dir: {}. Falling back to default logdir {}".format(str(e), DEFAULT_RESULTS_DIR))
-                        results_dir = DEFAULT_RESULTS_DIR
-                logdir = tempfile.mkdtemp(
-                    prefix=logdir_prefix, dir=results_dir)
-                logger = UnifiedLogger(config, logdir, loggers=None)
-                return logger
+        """
+        Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
+        """
+        results_dir = params['results_dir']
+        if not os.path.exists(results_dir):
+            try:
+                os.makedirs(results_dir)
+            except Exception as e:
+                print("error creating custom logging dir: {}. Falling back to default logdir {}".format(str(e), DEFAULT_RESULTS_DIR))
+                results_dir = DEFAULT_RESULTS_DIR
+        logdir = params['logdir'] if 'logdir' in params else tempfile.mkdtemp(
+            prefix=logdir_prefix, dir=results_dir)
+        logger = UnifiedLogger(config, logdir, loggers=None)
+        return logger
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
@@ -740,13 +741,16 @@ def load_trainer(save_path, **params_to_override):
     if tf.executing_eagerly():
         tf.compat.v1.disable_eager_execution()
     # Read in params used to create trainer
-    config_path = os.path.join(os.path.dirname(save_path), "config.pkl")
+    checkpoint_dir = os.path.dirname(save_path)
+    experiment_dir = os.path.dirname(checkpoint_dir)
+    config_path = os.path.join(checkpoint_dir, "config.pkl")
     with open(config_path, "rb") as f:
         # We use dill (instead of pickle) here because we must deserialize functions
         config = dill.load(f)
     
     # Override this param to lower overhead in trainer creation
     config['training_params']['num_workers'] = 0
+    config['logdir'] = experiment_dir
 
     for param, val in params_to_override.items():
         updated = recursive_dict_update(config, param, val)
