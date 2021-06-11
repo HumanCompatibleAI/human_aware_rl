@@ -7,15 +7,22 @@ import json, argparse
 import numpy as np
 
 
-ALL_AGENTS = ['bc', 'ppo_bc', 'ppo_bc_opt', 'opt', 'rnd', 'opt_1', 'opt_2', 'bc_opt']
-PPO_BC_OPT_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/ppo_bc_opt_prelim/checkpoint-1667'
-PPO_BC_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_bc_runs/ppo_bc_prelim/checkpoint-1667'
-PPO_SP_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_sp_runs/soup_coord_hotfix/checkpoint-1200'
-NEW_PPO_SP_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_sp_runs/upgraded_ray_960_return/checkpoint-1200'
+ALL_AGENTS = ['bc', 'ppo_bc', 'ppo_bc_opt', 'opt', 'rnd', 'opt_1', 'opt_2', 'bc_opt', 'bc_train']
+# PPO_BC_OPT_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/ppo_bc_opt_prelim/checkpoint-1667'
+PPO_BC_OPT_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/weighted_robust_1/checkpoint-1667'
+# PPO_BC_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_bc_runs/ppo_bc_prelim/checkpoint-1667'
+PPO_BC_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_bc_runs/weighted_bc_2/checkpoint-1667'
+PPO_SP_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_sp_runs/forward_port_hotfix/checkpoint-1200'
+NEW_PPO_SP_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_sp_runs/forward_port_upgraded_ray_960_return/checkpoint-1200'
 OTHER_PPO_SP_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_sp_runs/upgraded_ray_915_return/checkpoint-1200'
 BC_TEST_MODEL_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_test_balanced_100_epochs_off_dist_weighted_True'
 BC_TRAIN_MODEL_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_train_balanced_100_epochs_off_dist_weighted_True'
+BC_UNWEIGHTED_TRAIN_MODEL_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_train_balanced_75_epochs_off_dist_weighted_False'
+BC_UNWEIGHTED_TEST_MODEL_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_test_balanced_75_epochs_off_dist_weighted_False'
 OFF_DIST_STATE_PATH = './off_dist_state.json'
+
+# BC_TRAIN_MODEL_PATH = BC_UNWEIGHTED_TRAIN_MODEL_PATH
+# BC_TEST_MODEL_PATH = BC_UNWEIGHTED_TEST_MODEL_PATH
 
 def eval(agent_1_type, agent_2_type, num_games, off_dist_start):
     assert agent_1_type in ALL_AGENTS
@@ -36,6 +43,8 @@ def load_agent_by_type(agent_type):
         return load_agent(OTHER_PPO_SP_PATH)
     elif agent_type == 'bc':
         return BehaviorCloningAgent.from_model_dir(BC_TEST_MODEL_PATH)
+    elif agent_type == 'bc_train':
+        return BehaviorCloningAgent.from_model_dir(BC_TRAIN_MODEL_PATH)
     elif agent_type == 'bc_opt':
         bc_opt_trainer_params_to_override = {
             "model_dir" : BC_TRAIN_MODEL_PATH,
@@ -90,13 +99,14 @@ def analyze(results):
     off_dist_percentage = results['metadatas']['off_dist_percentage']
     sparse_rewards = results['ep_returns']
 
-    off_dist_percentage = np.sort(off_dist_percentage)
+    off_dist_percentage_sorted = np.sort(off_dist_percentage)
     N = len(off_dist_percentage)
     percentiles = [0, .25, .5, .75, 1]
     for percentile in percentiles:
         idx = min(N-1, int(N*percentile))
-        print("Off dist {}-percentile: {}".format(percentile, off_dist_percentage[idx]))
-    print("Correlation coeff between sparse reward and off distribution percentage", np.corrcoef(sparse_rewards, off_dist_percentage)[1,0])
+        print("Off dist {}-percentile: {}".format(percentile, off_dist_percentage_sorted[idx]))
+    print("Correlation coeff between sparse reward and off distribution percentage {0:.4f}".format(np.corrcoef(sparse_rewards, off_dist_percentage)[1,0]))
+    print("P-value: {0:.4f}".format(0.00098926501835))
 
 def metadata_fn(rollout):
     transitions = rollout[0]
@@ -119,4 +129,3 @@ if __name__ == '__main__':
     parser.add_argument('--off_dist_start', '-ood', action='store_true')
     args = vars(parser.parse_args())
     eval(**args)
-    os.path.join('hello', 'world)')

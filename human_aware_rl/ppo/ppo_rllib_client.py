@@ -176,6 +176,9 @@ def my_config():
     # Whether to log training progress and debugging info
     verbose = True
 
+    # Whether to log by-agent timestep level events to tensorboard
+    log_timestep_events = False
+
 
     ### Self-Play Params ###
 
@@ -429,7 +432,8 @@ def my_config():
         "results_dir" : results_dir,
         "ray_params" : ray_params,
         "return_trainer" : return_trainer,
-        "verbose" : verbose
+        "verbose" : verbose,
+        "log_timestep_events" : log_timestep_events
     }
 
 

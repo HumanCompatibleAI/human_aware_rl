@@ -491,10 +491,11 @@ class TrainingCallbacks(DefaultCallbacks):
         episode.custom_metrics["off_dist_shaped_reward"] = tot_off_dist_shaped_reward
 
         # Store per-agent game stats to rllib info dicts
-        for stat in stats_to_collect:
-            stats = game_stats[stat]
-            episode.custom_metrics[stat + "_agent_0"] = len(stats[0])
-            episode.custom_metrics[stat + "_agent_1"] = len(stats[1])
+        if self.params.get('log_timestep_events', False):
+            for stat in stats_to_collect:
+                stats = game_stats[stat]
+                episode.custom_metrics[stat + "_agent_0"] = len(stats[0])
+                episode.custom_metrics[stat + "_agent_1"] = len(stats[1])
 
         # Log environment coefficients
         episode.custom_metrics["reward_shaping_factor"] = env.reward_shaping_factor
