@@ -161,6 +161,9 @@ def my_config():
     # Number of games to simulation each evaluation
     evaluation_num_games = 1
 
+    # Whether we should perform an evaluation rollout with a random agent
+    evaluation_rnd_eval = False
+
     # Whether to display rollouts in evaluation
     evaluation_display = False
 
@@ -319,6 +322,7 @@ def my_config():
 
     # To be passed into AgentEvaluator constructor and _evaluate function
     evaluation_params = {
+        "rnd_eval" : evaluation_rnd_eval,
         "ep_length" : evaluation_ep_length,
         "num_games" : evaluation_num_games,
         "display" : evaluation_display
