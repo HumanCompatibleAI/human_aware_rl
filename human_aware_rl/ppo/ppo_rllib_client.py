@@ -192,7 +192,11 @@ def my_config():
     # Note: only applicable if ficticious_self_play=True
     training_iters_per_ensemble_checkpoint = 25
 
+    # Number of training iterations after which we resample from our self-play buffer
     training_iters_per_ensemble_sample = 5
+
+    # Maximum number of policy checkpoints we keep loaded in memory
+    max_policies_in_memory = 5
 
 
     ### BC Params ###
@@ -406,7 +410,7 @@ def my_config():
     ensemble_ppo_params = {
         "cls" : EnsemblePolicy,
         "config" : {
-            "max_policies_in_memory" : 5
+            "max_policies_in_memory" : max_policies_in_memory
         }
     }
 
