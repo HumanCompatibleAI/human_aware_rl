@@ -1,7 +1,5 @@
 from overcooked_ai_py.mdp.actions import Action
-from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
-from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, EVENT_TYPES
-from overcooked_ai_py.agents.benchmarking import AgentEvaluator
+from overcooked_ai_py.mdp.overcooked_mdp import EVENT_TYPES
 from overcooked_ai_py.agents.agent import Agent, AgentPair
 from ray.rllib import policy
 from ray.tune.registry import register_env
@@ -553,7 +551,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         # computation all happens on the CPU. Could change this if evaluation becomes a bottleneck
         sp_results_0 = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_feat_fn, agent_1_feat_fn, verbose=verbose)
         sp_results_1 = evaluate(eval_params, eval_mdp_params, outer_shape, agent_1_policy, agent_0_policy, agent_1_feat_fn, agent_0_feat_fn, verbose=verbose)
-        if eval_params['evaluation_rnd_eval']:
+        if eval_params['rnd_eval']:
             rnd_results_0 = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, rnd_policy, agent_0_feat_fn, rnd_feat_fn, verbose=verbose)
             rnd_results_1 = evaluate(eval_params, eval_mdp_params, outer_shape, rnd_policy, agent_0_policy, rnd_feat_fn, agent_0_feat_fn, verbose=verbose)
 
@@ -561,7 +559,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         metrics = {}
         metrics['average_sparse_reward_{}_{}'.format(agent_0_policy_str, agent_1_policy_str)] = np.mean(sp_results_0['ep_returns'])
         metrics['average_sparse_reward_{}_{}'.format(agent_1_policy_str, agent_0_policy_str)] = np.mean(sp_results_1['ep_returns'])
-        if eval_params['evaluation_rnd_eval']:
+        if eval_params['rnd_eval']:
             metrics['average_sparse_reward_{}_rnd'.format(agent_0_policy_str)] = np.mean(rnd_results_0['ep_returns'])
             metrics['average_sparse_reward_rnd_{}'.format(agent_0_policy_str)] = np.mean(rnd_results_1['ep_returns'])
         return metrics
