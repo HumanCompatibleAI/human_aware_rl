@@ -114,6 +114,9 @@ class OvercookedMultiAgent(MultiAgentEnv):
     # Default bc_schedule, includes no bc agent at any time
     bc_schedule = self_play_bc_schedule = zero_schedule = [(0, 0), (float('inf'), 0)]
 
+    # Pure BC schedule. Included as an alias here for convenience
+    pure_bc_schedule = one_schedule = [(0, 1), (float('inf'), 1)]
+
     # Default environment params used for creation
     DEFAULT_CONFIG = {
         # To be passed into OvercookedGridWorld constructor
@@ -135,14 +138,15 @@ class OvercookedMultiAgent(MultiAgentEnv):
             "bc_schedule" : self_play_bc_schedule,
             "gamma" : 0.99,
             "potential_constants" : {},
-            "ficticious_self_play" : False
+            "ficticious_self_play" : False,
+            "ppo_idx" : -1
         }
     }
 
     def __init__(self, base_env, use_reward_shaping=False, reward_shaping_schedule=None,
                             use_potential_shaping=False, potential_shaping_schedule=None,
                             bc_schedule=None, gamma=0.99, potential_constants={},
-                            bc_opt=False, ficticious_self_play=False, **kwargs):
+                            bc_opt=False, ficticious_self_play=False, ppo_idx=-1, **kwargs):
         """
         base_env: OvercookedEnv
         reward_shaping_factor (float): Coefficient multiplied by dense reward before adding to sparse reward to determine shaped reward
@@ -152,6 +156,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         use_potential_shaping (bool): Whether to use 'shaped_r_by_agent' or 'phi_s_prime' - 'phi_s' to determine dense reward
         bc_opt (bool): Whether the BC agent (if present) is pure BC or BC_OPT meta-agent
         ficticious_self_play (bool): If True, other agent obs key titled 'ensemble_ppo'
+        ppo_idx (int): Whether the ppo agent should be agent index 0 or 1. -1 indicates it should be shuffled each episode
         """
         if use_reward_shaping and not reward_shaping_schedule:
             raise ValueError("must specify `reward_shaping_schedule` if `use_reward_shaping` is true")
@@ -174,6 +179,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.use_reward_shaping = use_reward_shaping
         self.bc_opt = bc_opt
         self.ficticious_self_play = ficticious_self_play
+        self.ppo_idx = ppo_idx
 
         # since we are not passing featurize_fn in as an argument, we create it here and check its validity
         self.featurize_fn_map = {
@@ -258,8 +264,12 @@ class OvercookedMultiAgent(MultiAgentEnv):
         return ob_p0, ob_p1
 
     def _populate_agents(self):
-        # Always include at least one ppo agent (i.e. bc_sp not supported for simplicity)
-        agents = ['ppo']
+        # Assign indices for ppo and non-ppo (ie bc, bc_opt, etc) agent
+        # Note: we always include at least one ppo agent (i.e. bc_sp not supported for simplicity)
+        # Note: We assume num players = 2
+        agents = [None] * 2
+        ppo_idx = self.ppo_idx if self.ppo_idx >= 0 else np.random.randint(2)
+        other_idx = 1 - ppo_idx
 
         # Coin flip to determine whether other agent should be ppo or bc/bc_opt
         include_bc = np.random.uniform() < self.bc_factor
@@ -267,10 +277,9 @@ class OvercookedMultiAgent(MultiAgentEnv):
             other_agent = 'bc_opt' if self.bc_opt else 'bc'
         else:
             other_agent = 'ensemble_ppo' if self.ficticious_self_play else 'ppo'
-        agents.append(other_agent)
-
-        # Randomize starting indices
-        np.random.shuffle(agents)
+        
+        agents[ppo_idx] = 'ppo'
+        agents[other_idx] = other_agent
 
         # Ensure agent names are unique
         agents[0] = agents[0] + '_0'

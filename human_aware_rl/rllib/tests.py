@@ -6,6 +6,7 @@ from human_aware_rl.rllib.policies import ConstantPolicy
 from human_aware_rl.rllib.meta_policies import EnsemblePolicy
 from numpy.lib.stride_tricks import DummyArray
 from overcooked_ai_py.mdp.actions import Action
+from scipy.stats import norm
 import unittest, copy, pickle, os, ray, logging
 import numpy as np
 
@@ -95,6 +96,53 @@ class RllibEnvTest(unittest.TestCase):
         bc_factors = [0.0, 0.1, 0.5, 0.9, 1.0]
         for factor in bc_factors:
             self._test_bc_creation_proportion(env, factor)
+
+    def test_ppo_idx(self):
+        # Create default PPO_BC environment
+        params = copy.deepcopy(self.params)
+        params['multi_agent_params']['bc_schedule'] = OvercookedMultiAgent.pure_bc_schedule
+        env = OvercookedMultiAgent.from_config(params)
+
+        # Run 'trials' resets, ensuring we get ~50% agent 0 ~50% agent 1
+        confidence = 0.999 # % of the time this test will pass according to CLT
+        cnt_0 = 0
+        trials = 1000
+        std = np.sqrt(0.25 / trials)
+        expected_bound = std * norm.ppf(confidence)
+        for _ in range(trials):
+            obs = env.reset()
+
+            # Ensure we have one of the two possible sets of correct keys
+            self.assertTrue('ppo_0' in obs.keys() or 'ppo_1' in obs.keys())
+            self.assertTrue('bc_0' in obs.keys() or 'bc_1' in obs.keys())
+
+            # Keep track of how many times ppo was agent 0
+            if 'ppo_0' in obs.keys():
+                cnt_0 += 1
+
+        # Ensure we followed a 50/50 bernouilli coin flip on agent idx assignment
+        self.assertLess(abs(cnt_0/trials - 0.5), expected_bound)
+
+        # Now create env with ppo idx 0
+        params['multi_agent_params']['ppo_idx'] = 0
+        env = OvercookedMultiAgent.from_config(params)
+        for _ in range(trials):
+            obs = env.reset()
+
+            # There is only one option for keys
+            expected_keys = set(['ppo_0', 'bc_1'])
+            actual_keys = set(obs.keys())
+            self.assertEqual(expected_keys, actual_keys)
+
+        params['multi_agent_params']['ppo_idx'] = 1
+        env = OvercookedMultiAgent.from_config(params)
+
+        for _ in range(trials):
+            obs = env.reset()
+
+            expected_keys = set(['ppo_1', 'bc_0'])
+            actual_keys = set(obs.keys())
+            self.assertEqual(expected_keys, actual_keys)
 
 
 class RllibUtilsTest(unittest.TestCase):

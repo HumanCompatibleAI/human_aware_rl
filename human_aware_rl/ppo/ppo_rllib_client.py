@@ -276,6 +276,9 @@ def my_config():
     # The default listed below represents bc_factor=0 for all timesteps
     bc_schedule = OvercookedMultiAgent.self_play_bc_schedule
 
+    # What index (0 or 1) the PPO agent should occupy for all episodes. -1 implies uniform sampling over possible indices
+    ppo_idx = -1
+
     # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
 
     params_str = str(use_potential_shaping) + "_nw=%d_vf=%f_es=%f_en=%f_kl=%f" % (
@@ -354,7 +357,8 @@ def my_config():
             "bc_schedule" : bc_schedule,
             "potential_constants" : potential_constants,
             "bc_opt" : bc_opt,
-            "ficticious_self_play" : ficticious_self_play
+            "ficticious_self_play" : ficticious_self_play,
+            "ppo_idx" : ppo_idx
         }
     }
 

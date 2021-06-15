@@ -21,6 +21,7 @@ setup(name='human_aware_rl',
         'numpy==1.19.5',
         'seaborn==0.9.0',
         'pygame==1.9.5',
-        'ray[rllib]==1.3.0'
+        'ray[rllib]==1.3.0',
+        "scipy"
       ],
     )
