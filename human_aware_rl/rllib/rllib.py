@@ -496,6 +496,7 @@ class TrainingCallbacks(DefaultCallbacks):
         episode.custom_metrics["shaped_reward"] = tot_shaped_reward
         episode.custom_metrics["off_dist_sparse_reward"] = tot_off_dist_sparse_reward
         episode.custom_metrics["off_dist_shaped_reward"] = tot_off_dist_shaped_reward
+        episode.custom_metrics["off_distribution_timesteps"] = len(game_stats['is_off_distribution'][0])
 
         # Store per-agent game stats to rllib info dicts
         if self.params.get('log_timestep_events', False):
