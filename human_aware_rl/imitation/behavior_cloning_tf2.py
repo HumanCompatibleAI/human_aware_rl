@@ -49,7 +49,7 @@ DEFAULT_EVALUATION_PARAMS = {
     "num_games" : 1,
     "display" : False,
     "every_nth" : 10,
-    "use_predict" : False
+    "use_predict" : True
 }
 
 DEFAULT_BC_PARAMS = {
@@ -129,13 +129,12 @@ class SelfPlayEvalCallback(keras.callbacks.Callback):
     def __init__(self, bc_params, verbose=False, **kwargs):
         self.bc_params = bc_params
         self.every_nth = bc_params['evaluation_params']['every_nth']
-        self.use_predict = bc_params['evaluation_params']['use_predict']
         self.verbose = verbose
         super(SelfPlayEvalCallback, self).__init__(**kwargs)
 
     def on_epoch_end(self, epoch, logs=None):
         if self.every_nth and epoch % self.every_nth == 0:
-            eval_score = evaluate_bc_model(self.model, self.bc_params, use_predict=self.use_predict)
+            eval_score = evaluate_bc_model(self.model, self.bc_params)
             logs['eval_score'] = eval_score
             if self.verbose:
                 print("\nSelf-play reward after {} epochs: {}\n".format(epoch, eval_score))
@@ -288,7 +287,7 @@ def load_bc_model(model_dir, verbose=False):
     bc_params = _load_bc_params(model_dir)
     return model, bc_params
 
-def evaluate_bc_model(model, bc_params, verbose=False, use_predict=True):
+def evaluate_bc_model(model, bc_params, verbose=False):
     """
     Creates an AgentPair object containing two instances of BC Agents, whose policies are specified by `model`. Runs
     a rollout using AgentEvaluator class in an environment specified by bc_params
@@ -298,7 +297,6 @@ def evaluate_bc_model(model, bc_params, verbose=False, use_predict=True):
         - model (tf.keras.Model)        A function that maps featurized overcooked states to action logits
         - bc_params (dict)              Specifies the environemnt in which to evaluate the agent (i.e. layout, reward_shaping_param)
                                             as well as the configuration for the rollout (rollout_length)
-        - use_predict (bool)            Whether BCPolicy should use keras.Predict. See BehaviorCloningPolicy class for more details
 
     Returns
 
@@ -314,8 +312,8 @@ def evaluate_bc_model(model, bc_params, verbose=False, use_predict=True):
         return base_env.featurize_state_mdp(state)
 
     # Wrap Keras models in rllib policies
-    agent_0_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True, use_predict=use_predict)
-    agent_1_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True, use_predict=use_predict)
+    agent_0_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True, use_predict=evaluation_params['use_predict'])
+    agent_1_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True, use_predict=evaluation_params['use_predict'])
 
     # Compute the results of the rollout(s)
     results = evaluate(eval_params=evaluation_params, 
@@ -707,7 +705,8 @@ def main(epochs=75, dataset="train", layout='soup_coordination', hidden_size=64)
         "num_games" : 25,
         "every_nth" : 0,
         "net_arch" : [hidden_size, hidden_size],
-        "use_class_weights" : False
+        "use_class_weights" : False, 
+        "use_predict" : False
     }
     model_dir = os.path.join(BC_SAVE_DIR, layout, '{}_balanced_{}_epochs_{}_hidden_size'.format(dataset, epochs, hidden_size))
     params = get_bc_params(**params_to_override)
@@ -715,7 +714,7 @@ def main(epochs=75, dataset="train", layout='soup_coordination', hidden_size=64)
 
     # Evaluate our model's performance in a rollout
     model, bc_params = load_bc_model(model_dir)
-    return evaluate_bc_model(model, bc_params, verbose=True, use_predict=False)
+    return evaluate_bc_model(model, bc_params, verbose=True)
 
 if __name__ == "__main__":
     epochs = [50]
