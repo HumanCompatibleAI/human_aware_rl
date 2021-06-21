@@ -7,79 +7,69 @@ import json, argparse
 import numpy as np
 
 
-ALL_AGENTS = ['bc', 'ppo_bc', 'ppo_bc_opt', 'opt', 'rnd', 'opt_1', 'opt_2', 'bc_opt', 'bc_train']
-# PPO_BC_OPT_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/ppo_bc_opt_prelim/checkpoint-1667'
-PPO_BC_OPT_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/weighted_robust_1/checkpoint-1667'
-# PPO_BC_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_bc_runs/ppo_bc_prelim/checkpoint-1667'
-PPO_BC_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_bc_runs/weighted_bc_2/checkpoint-1667'
-PPO_SP_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_sp_runs/forward_port_hotfix/checkpoint-1200'
-NEW_PPO_SP_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_sp_runs/forward_port_upgraded_ray_960_return/checkpoint-1200'
-OTHER_PPO_SP_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/ppo_sp_runs/upgraded_ray_915_return/checkpoint-1200'
-BC_TEST_MODEL_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_test_balanced_100_epochs_off_dist_weighted_True'
-BC_TRAIN_MODEL_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_train_balanced_100_epochs_off_dist_weighted_True'
-BC_UNWEIGHTED_TRAIN_MODEL_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_train_balanced_75_epochs_off_dist_weighted_False'
-BC_UNWEIGHTED_TEST_MODEL_PATH = '/Users/nathan/bair/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_test_balanced_75_epochs_off_dist_weighted_False'
-OFF_DIST_STATE_PATH = './off_dist_state.json'
+ALL_AGENTS = ['bc_test', 'ppo_bc', 'ppo_bc_opt', 'opt_fsp', 'rnd', 'opt_robust', 'opt_overfit', 'opt_overfit_1', 'bc_opt', 'bc_train']
+ALL_LAYOUTS = ['soup_coordination', 'asymmetric_advantages_tomato']
 
-# BC_TRAIN_MODEL_PATH = BC_UNWEIGHTED_TRAIN_MODEL_PATH
-# BC_TEST_MODEL_PATH = BC_UNWEIGHTED_TEST_MODEL_PATH
+PATH_MAP = { layout : { agent_type : None for agent_type in ALL_AGENTS } for layout in ALL_LAYOUTS }
 
-def eval(agent_1_type, agent_2_type, num_games, off_dist_start):
+PATH_MAP['soup_coordination']['bc_train'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_train_balanced_75_epochs_off_dist_weighted_False'
+PATH_MAP['soup_coordination']['bc_test'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_test_balanced_75_epochs_off_dist_weighted_False'
+PATH_MAP['soup_coordination']['ppo_bc'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_runs/weighted_bc_2/checkpoint-1667'
+PATH_MAP['soup_coordination']['ppo_bc_opt'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/soup_coordination/bc_opt_unweighted_robost_1/checkpoint-1667'
+PATH_MAP['soup_coordination']['opt_fsp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_fsp_runs/fsp_50_N_1_K_prelim/checkpoint-1200'
+PATH_MAP['soup_coordination']['opt_robust'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/forward_port_hotfix/checkpoint-1200'
+PATH_MAP['soup_coordination']['opt_overfit'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/forward_port_upgraded_ray_960_return/checkpoint-1200'
+PATH_MAP['soup_coordination']['opt_overfit_1'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/upgraded_ray_915_return/checkpoint-1200'
+PATH_MAP['soup_coordination']['bc_opt'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/soup_coordination/bc_opt_unweighted_robost_1/checkpoint-1667'
+
+PATH_MAP['asymmetric_advantages_tomato']['bc_train'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/asymmetric_advantages_tomato/train_balanced_50_epochs_128_hidden_size'
+PATH_MAP['asymmetric_advantages_tomato']['bc_test'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/asymmetric_advantages_tomato/test_balanced_50_epochs_128_hidden_size'
+
+OFF_DIST_STATE_PATHS = {
+    'soup_coordination' : './off_dist_state.json',
+    'asymmetric_advantages_tomato' : None
+}
+
+def eval(agent_0_type, agent_1_type, layout, num_games, off_dist_start):
+    assert agent_0_type in ALL_AGENTS
     assert agent_1_type in ALL_AGENTS
-    assert agent_2_type in ALL_AGENTS
+    assert layout in ALL_LAYOUTS
 
-    print("Evaluating {} + {}".format(agent_1_type, agent_2_type))
-    pair = load_pair_by_type(agent_1_type, agent_2_type)
-    results = rollout(pair, num_games, off_dist_start)
+    print("Evaluating {} + {} on {}".format(agent_0_type, agent_1_type, layout))
+    pair = load_pair_by_type(agent_0_type, agent_1_type, layout)
+    results = rollout(pair, layout, num_games, off_dist_start)
     analyze(results)
 
-def load_agent_by_type(agent_type):
+def load_agent_by_type(agent_type, layout):
     print("Loading {} agent".format(agent_type))
-    if agent_type == 'opt':
-        return load_agent(PPO_SP_PATH)
-    elif agent_type == 'opt_1':
-        return load_agent(NEW_PPO_SP_PATH)
-    elif agent_type == 'opt_2':
-        return load_agent(OTHER_PPO_SP_PATH)
-    elif agent_type == 'bc':
-        return BehaviorCloningAgent.from_model_dir(BC_TEST_MODEL_PATH)
-    elif agent_type == 'bc_train':
-        return BehaviorCloningAgent.from_model_dir(BC_TRAIN_MODEL_PATH)
-    elif agent_type == 'bc_opt':
-        bc_opt_trainer_params_to_override = {
-            "model_dir" : BC_TRAIN_MODEL_PATH,
-            "opt_path" : PPO_SP_PATH
-        }
-        return load_agent(PPO_BC_OPT_PATH, policy_id='bc_opt', trainer_params_to_override=bc_opt_trainer_params_to_override)
-    elif agent_type == 'ppo_bc':
-        bc_trainer_params_to_override = {
-            "model_dir" : BC_TRAIN_MODEL_PATH
-        }
-        return load_agent(PPO_BC_PATH, policy_id='ppo', trainer_params_to_override=bc_trainer_params_to_override)
-    elif agent_type == 'ppo_bc_opt':
-        bc_opt_trainer_params_to_override = {
-            "model_dir" : BC_TRAIN_MODEL_PATH,
-            "opt_path" : PPO_SP_PATH
-        }
-        return load_agent(PPO_BC_OPT_PATH, policy_id='ppo', trainer_params_to_override=bc_opt_trainer_params_to_override)
-    elif agent_type == 'rnd':
+    if agent_type == 'rnd':
         return RandomAgent(all_actions=True)
+    elif agent_type.startswith('opt'):
+        return load_agent(PATH_MAP[layout][agent_type])
+    elif agent_type == 'bc_train' or agent_type == 'bc_test':
+        return BehaviorCloningAgent.from_model_dir(PATH_MAP[layout][agent_type], use_predict=False)
+    elif agent_type == 'bc_opt' or agent_type == 'ppo_bc' or agent_type == 'ppo_bc_opt':
+        bc_opt_trainer_params_to_override = {
+            "model_dir" : PATH_MAP[layout]['bc_train'],
+            "opt_path" : PATH_MAP[layout]['opt_fsp']
+        }
+        return load_agent(PATH_MAP[layout][agent_type], policy_id=agent_type, trainer_params_to_override=bc_opt_trainer_params_to_override)
 
-def load_pair_by_type(type_1, type_2):
+def load_pair_by_type(type_0, type_1, layout):
     # BC must load second to avoid having graph overriden by rllib loading routine
-    if type_1 == 'bc':
-        agent_2 = load_agent_by_type(type_2)
-        agent_1 = load_agent_by_type(type_1)
+    if type_0.startswith('bc'):
+        agent_1 = load_agent_by_type(type_1, layout)
+        agent_0 = load_agent_by_type(type_0, layout)
     else:
-        agent_1 = load_agent_by_type(type_1)
-        agent_2 = load_agent_by_type(type_2)
-    pair = AgentPair(agent_1, agent_2)
+        agent_0 = load_agent_by_type(type_0, layout)
+        agent_1 = load_agent_by_type(type_1, layout)
+    pair = AgentPair(agent_0, agent_1)
     pair.reset()
     return pair
 
-def rollout(pair, num_games, off_dist_start):
+def rollout(pair, layout, num_games, off_dist_start):
     mdp_params = {
-        "layout_name" : 'soup_coordination'
+        "layout_name" : layout
     }
     env_params = {
         "horizon" : 400
@@ -88,7 +78,7 @@ def rollout(pair, num_games, off_dist_start):
     eval_params = {
         "num_games" : num_games,
         "metadata_fn" : metadata_fn,
-        "start_state_fn" : off_dist_start_state_fn if off_dist_start else None
+        "start_state_fn" : get_off_dist_start_state_fn(layout) if off_dist_start else None
     }
     ae = get_base_ae(mdp_params, env_params)
     results = ae.evaluate_agent_pair(pair,**eval_params)
@@ -106,7 +96,6 @@ def analyze(results):
         idx = min(N-1, int(N*percentile))
         print("Off dist {}-percentile: {}".format(percentile, off_dist_percentage_sorted[idx]))
     print("Correlation coeff between sparse reward and off distribution percentage {0:.4f}".format(np.corrcoef(sparse_rewards, off_dist_percentage)[1,0]))
-    print("P-value: {0:.4f}".format(0.00098926501835))
 
 def metadata_fn(rollout):
     transitions = rollout[0]
@@ -116,15 +105,21 @@ def metadata_fn(rollout):
     off_dist_percentage = np.sum(off_dist) / len(off_dist)
     return { "off_dist_reward" : off_dist_reward, "off_dist_percentage" : off_dist_percentage}
 
-def off_dist_start_state_fn():
-    with open(OFF_DIST_STATE_PATH, 'r') as f:
-        state = OvercookedState.from_dict(json.load(f))
-    return state
+def get_off_dist_start_state_fn(layout):
+    def off_dist_start_state_fn():
+        state_path = OFF_DIST_STATE_PATHS[layout]
+        if not state_path:
+            raise ValueError("Off distribution starts for {} not supported!".format(layout))
+        with open(state_path, 'r') as f:
+            state = OvercookedState.from_dict(json.load(f))
+        return state
+    return off_dist_start_state_fn
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--agent_1_type', '-a1', default='bc', type=str, choices=ALL_AGENTS)
-    parser.add_argument('--agent_2_type', '-a2', default='bc', type=str, choices=ALL_AGENTS)
+    parser.add_argument('--agent_0_type', '-a0', default='bc_test', type=str, choices=ALL_AGENTS)
+    parser.add_argument('--agent_1_type', '-a1', default='bc_test', type=str, choices=ALL_AGENTS)
+    parser.add_argument('--layout', '-l', default='soup_coordination', type=str, choices=ALL_LAYOUTS)
     parser.add_argument('--num_games', '-n', default=50, type=int)
     parser.add_argument('--off_dist_start', '-ood', action='store_true')
     args = vars(parser.parse_args())

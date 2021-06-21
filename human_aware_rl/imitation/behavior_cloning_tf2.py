@@ -48,7 +48,8 @@ DEFAULT_EVALUATION_PARAMS = {
     "ep_length" : 400,
     "num_games" : 1,
     "display" : False,
-    "every_nth" : 10
+    "every_nth" : 10,
+    "use_predict" : False
 }
 
 DEFAULT_BC_PARAMS = {
@@ -128,12 +129,13 @@ class SelfPlayEvalCallback(keras.callbacks.Callback):
     def __init__(self, bc_params, verbose=False, **kwargs):
         self.bc_params = bc_params
         self.every_nth = bc_params['evaluation_params']['every_nth']
+        self.use_predict = bc_params['evaluation_params']['use_predict']
         self.verbose = verbose
         super(SelfPlayEvalCallback, self).__init__(**kwargs)
 
     def on_epoch_end(self, epoch, logs=None):
         if self.every_nth and epoch % self.every_nth == 0:
-            eval_score = evaluate_bc_model(self.model, self.bc_params)
+            eval_score = evaluate_bc_model(self.model, self.bc_params, use_predict=self.use_predict)
             logs['eval_score'] = eval_score
             if self.verbose:
                 print("\nSelf-play reward after {} epochs: {}\n".format(epoch, eval_score))
@@ -286,7 +288,7 @@ def load_bc_model(model_dir, verbose=False):
     bc_params = _load_bc_params(model_dir)
     return model, bc_params
 
-def evaluate_bc_model(model, bc_params, verbose=False):
+def evaluate_bc_model(model, bc_params, verbose=False, use_predict=True):
     """
     Creates an AgentPair object containing two instances of BC Agents, whose policies are specified by `model`. Runs
     a rollout using AgentEvaluator class in an environment specified by bc_params
@@ -296,6 +298,7 @@ def evaluate_bc_model(model, bc_params, verbose=False):
         - model (tf.keras.Model)        A function that maps featurized overcooked states to action logits
         - bc_params (dict)              Specifies the environemnt in which to evaluate the agent (i.e. layout, reward_shaping_param)
                                             as well as the configuration for the rollout (rollout_length)
+        - use_predict (bool)            Whether BCPolicy should use keras.Predict. See BehaviorCloningPolicy class for more details
 
     Returns
 
@@ -311,8 +314,8 @@ def evaluate_bc_model(model, bc_params, verbose=False):
         return base_env.featurize_state_mdp(state)
 
     # Wrap Keras models in rllib policies
-    agent_0_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)
-    agent_1_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)
+    agent_0_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True, use_predict=use_predict)
+    agent_1_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True, use_predict=use_predict)
 
     # Compute the results of the rollout(s)
     results = evaluate(eval_params=evaluation_params, 
@@ -419,6 +422,8 @@ class BehaviorCloningPolicy(StaticPolicy):
             - bc_model (keras.Model)            Pointer to loaded policy model. Overrides model_dir
             - bc_params (dict)                  Dictionary of parameters used to train model. Required if "model" is present
             - eager (bool)                      Whether the model should run in eager (or graph) mode. Overrides bc_params['eager'] if present
+            - use_predict (bool)                Whether to use keras.Model.predict wrapper or not. If using w/ rllib, predict is necessary. Otherwise, 
+                                                setting use_predict=False will greatly speed up evaluation inference
         """
         super(BehaviorCloningPolicy, self).__init__(observation_space, action_space, config)
 
@@ -441,6 +446,7 @@ class BehaviorCloningPolicy(StaticPolicy):
         # 'my_model' instead of 'model' to avoid really subtle bugs with rllib
         self.my_model = model
         self.stochastic = config.get('stochastic', True)
+        self.use_predict = config.get('use_predict', True)
         self.use_lstm = bc_params['use_lstm']
         self.cell_size = bc_params['cell_size']
         self.bc_params = bc_params
@@ -456,22 +462,24 @@ class BehaviorCloningPolicy(StaticPolicy):
         
 
     @classmethod
-    def from_model_dir(cls, model_dir, stochastic=True, eager=True):
+    def from_model_dir(cls, model_dir, stochastic=True, eager=True, use_predict=True):
         model, bc_params = load_bc_model(model_dir)
         config = {
             "bc_model" : model,
             "bc_params" : bc_params,
             "stochastic" : stochastic,
+            "use_predict" : use_predict,
             "eager" : eager
         }
         return cls(bc_params['observation_shape'], bc_params['action_shape'], config)
 
     @classmethod
-    def from_model(cls, model, bc_params, stochastic=True):
+    def from_model(cls, model, bc_params, stochastic=True, use_predict=True):
         config = {
             "bc_model" : model,
             "bc_params" : bc_params,
-            "stochastic" : stochastic
+            "stochastic" : stochastic,
+            "use_predict" : use_predict
         }
         return cls(bc_params["observation_shape"], bc_params["action_shape"], config)
 
@@ -528,12 +536,19 @@ class BehaviorCloningPolicy(StaticPolicy):
         if self.use_lstm:
             obs_batch = np.expand_dims(obs_batch, 1)
             seq_lens = np.ones(len(obs_batch))
-            model_out = self.my_model.predict([obs_batch, seq_lens] + state_batches)
+
+            if self.use_predict:
+                model_out = self.my_model.predict([obs_batch, seq_lens] + state_batches)
+            else:
+                model_out = self.my_model([obs_batch, seq_lens] + state_batches, training=False).numpy()
             logits, states = model_out[0], model_out[1:]
             logits = logits.reshape((logits.shape[0], -1))
             return logits, states
         else:
-            return self.my_model.predict(obs_batch), []
+            if self.use_predict:
+                return self.my_model.predict(obs_batch), []
+            else:
+                return self.my_model(obs_batch, training=False).numpy(), []
 
     def _create_execution_context(self):
         """
@@ -681,35 +696,39 @@ class BehaviorCloningAgent(RlLibAgent):
         
 
 
-def main(epochs=75, dataset="train", use_class_weights=True):
+def main(epochs=75, dataset="train", layout='soup_coordination', hidden_size=64):
     assert dataset in ['train', 'test']
     CLEAN_AND_BALANCED_DIR = os.path.join(HUMAN_DATA_DIR, 'cleaned_and_balanced')
     params_to_override = {
-        "layouts" : ["soup_coordination"],
+        "layouts" : [layout],
         "data_path" : os.path.join(CLEAN_AND_BALANCED_DIR, '2020_hh_trials_balanced_rew_50_50_split_{}.pickle'.format(dataset)),
-        "mdp_params": {'layout_name': "soup_coordination"},
+        "mdp_params": {'layout_name': layout},
         "epochs" : epochs,
-        "num_games" : 5,
+        "num_games" : 25,
         "every_nth" : 0,
-        "net_arch" : [128, 128],
-        "use_class_weights" : use_class_weights
+        "net_arch" : [hidden_size, hidden_size],
+        "use_class_weights" : False
     }
+    model_dir = os.path.join(BC_SAVE_DIR, layout, '{}_balanced_{}_epochs_{}_hidden_size'.format(dataset, epochs, hidden_size))
     params = get_bc_params(**params_to_override)
-    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'soup_coord_{}_balanced_{}_epochs_off_dist_weighted_{}'.format(dataset, epochs, use_class_weights)), params, verbose=True)
+    train_bc_model(model_dir, params, verbose=True)
+
     # Evaluate our model's performance in a rollout
-    return evaluate_bc_model(model, params, verbose=True)
+    model, bc_params = load_bc_model(model_dir)
+    return evaluate_bc_model(model, bc_params, verbose=True, use_predict=False)
 
 if __name__ == "__main__":
-    epochs = [75, 100]
-    dataset = ['train', 'test']
-    use_class_weights = [True, False]
+    epochs = [50]
+    datasets = ['train', 'test']
+    hidden_sizes = [128]
+    layouts = ['asymmetric_advantages_tomato']
 
-    params_combos = itertools.product(epochs, dataset, use_class_weights)
+    params_combos = itertools.product(epochs, datasets, layouts, hidden_sizes)
     results = []
     for params in params_combos:
         results.append(main(*params))
     
     for params, result in zip(params_combos, results):
-        epochs, dataset, weights = params
-        print("Average Return for epochs={}, \tdataset={}, \tweights={}:\t\t{}".format(epochs, dataset, weights, result))
+        epochs, dataset, layout, hidden_size = params
+        print("Average Return for epochs={}, \tdataset={}, \tweights={}:\t\t{}".format(epochs, dataset, layout, result))
     
