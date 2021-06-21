@@ -124,7 +124,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
     }
 
     def __init__(self, base_env, reward_shaping_factor=0.0, reward_shaping_horizon=0,
-                            bc_schedule=None, tom_schedule=None, use_phi=True):
+                            bc_schedule=None, tom_schedule=None, use_phi=True, featurization_type='lossless'):
         """
         base_env: OvercookedEnv
         reward_shaping_factor (float): Coefficient multiplied by dense reward before adding to sparse reward to determine shaped reward
@@ -132,6 +132,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         bc_schedule (list[tuple]): List of (t_i, v_i) pairs where v_i represents the value of bc_factor at timestep t_i
             with linear interpolation in between the t_i
         use_phi (bool): Whether to use 'shaped_r_by_agent' or 'phi_s_prime' - 'phi_s' to determine dense reward
+        featurization_type (str): the type of featurization used by the ppo agent
         """
         self.bc_schedule = bc_schedule if bc_schedule else OvercookedMultiAgent.self_play_bc_schedule
         self._validate_schedule(self.bc_schedule)
@@ -141,8 +142,11 @@ class OvercookedMultiAgent(MultiAgentEnv):
 
         self.base_env = base_env
         # since we are not passing featurize_fn in as an argument, we create it here and check its validity
+        assert featurization_type in ["lossless", "handcrafted"]
+        self.featurization_type = featurization_type
+        ppo_featurize_fn = lambda state: self.base_env.lossless_state_encoding_mdp(state) if featurization_type == "lossless" else lambda state: self.base_env.featurize_state_mdp(state)
         self.featurize_fn_map = {
-            "ppo": lambda state: self.base_env.lossless_state_encoding_mdp(state),
+            "ppo": ppo_featurize_fn,
             "bc": lambda state: self.base_env.featurize_state_mdp(state),
             "tom": lambda state: self.base_env.lossless_state_encoding_mdp(state),
         }
@@ -198,12 +202,16 @@ class OvercookedMultiAgent(MultiAgentEnv):
 
     def _get_featurize_fn(self, agent_id):
         if agent_id.startswith('ppo'):
-            return lambda state: self.base_env.lossless_state_encoding_mdp(state)
-        if agent_id.startswith('bc'):
-            return lambda state: self.base_env.featurize_state_mdp(state)
-        if agent_id.startswith('tom'):
-            return lambda state: self.base_env.lossless_state_encoding_mdp(state)
-        raise ValueError("Unsupported agent type {0}".format(agent_id))
+            if self.featurization_type == "lossless":
+                return lambda state: self.base_env.lossless_state_encoding_mdp(state)
+            else:
+                return lambda state: self.base_env.featurize_state_mdp(state)
+        elif agent_id.startswith('bc'):
+            return self.featurize_fn_map['bc']
+        elif agent_id.startswith('tom'):
+            return self.featurize_fn_map['tom']
+        else:
+            raise ValueError("Unsupported agent type {0}".format(agent_id))
 
     def _get_obs(self, state):
         ob_p0 = self._get_featurize_fn(self.curr_agents[0])(state)[0]
