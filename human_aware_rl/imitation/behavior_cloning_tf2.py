@@ -655,7 +655,7 @@ class BehaviorCloningAgent(RlLibAgent):
         return {
             "stochastic" : self.stochastic,
             "agent_index" : self.agent_index,
-            "featurize" : self.featurize
+            "featurize_fn" : self.featurize_fn
         }
 
     def __setstate__(self, state):

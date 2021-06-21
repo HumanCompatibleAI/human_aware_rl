@@ -44,7 +44,7 @@ from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy,
 #                                                               #
 #   In order to view the results of training, run the following #
 #   command                                                     #
-#                                                               #
+#                                                               #x
 #   tensorboard --log-dir ~/ray_results/                        #
 #                                                               #
 #################################################################
@@ -234,13 +234,10 @@ def my_config():
     }
 
     potential_constants = {
-        'min_coeff' : 0.7,
         'max_delivery_steps' : 10,
         'max_pickup_steps' : 20,
         'pot_onion_steps' : 10,
-        'pot_tomato_steps' : 10,
-        'useful_counter_coeff' : 2,
-        'non_useful_counter_coeff' : 0
+        'pot_tomato_steps' : 10
     }
 
     # Whether dense reward should include potential function or not
@@ -350,6 +347,7 @@ def my_config():
 
         # To be passed into OvercookedMultiAgent constructor
         "multi_agent_params" : {
+            "gamma" : gamma,
             "reward_shaping_schedule" : reward_shaping_schedule if reward_shaping_schedule else [(0, reward_shaping_factor), (reward_shaping_horizon, 0)],
             "potential_shaping_schedule" : potential_shaping_schedule if potential_shaping_schedule else [(0, potential_shaping_factor), (potential_shaping_horizon, 0)],
             "use_potential_shaping" : use_potential_shaping,

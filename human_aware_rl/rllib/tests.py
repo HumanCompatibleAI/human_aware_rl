@@ -1,5 +1,6 @@
+from overcooked_ai_py.agents.agent import AgentPair
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
-from human_aware_rl.rllib.rllib import OvercookedMultiAgent, RlLibAgent, load_agent, load_agent_pair
+from human_aware_rl.rllib.rllib import OvercookedMultiAgent, RlLibAgent, PPOAgent
 from human_aware_rl.rllib.utils import get_base_ae, softmax, get_required_arguments, iterable_equal, get_base_env
 from human_aware_rl.static import RLLIB_TRAINER_PATH, TESTING_DATA_DIR
 from human_aware_rl.rllib.policies import ConstantPolicy
@@ -339,18 +340,20 @@ class RllibSerializationTest(unittest.TestCase):
 
     def test_serialization_backwards_compat(self):
         # Load agents from fixed pre-trained rllib trainer to ensure backwards compatibility
-        agent_0 = load_agent(RLLIB_TRAINER_PATH, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
+        agent_0 = PPOAgent.from_trainer_path(RLLIB_TRAINER_PATH, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
         agent_0.reset()
 
-        agent_1 = load_agent(RLLIB_TRAINER_PATH, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
+        agent_1 = PPOAgent.from_trainer_path(RLLIB_TRAINER_PATH, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
         agent_1.reset()
+
 
         # Ensure forward pass of policy network still works
         _, _ = agent_0.action(self.dummy_state)
         _, _ = agent_1.action(self.dummy_state)
 
-        # Load agent pair for full rollout
-        pair = load_agent_pair(RLLIB_TRAINER_PATH, trainer_params_to_override={"log_level" : 'ERROR'})
+        # Load SP agent pair for full rollout
+        agent = PPOAgent.from_trainer_path(RLLIB_TRAINER_PATH, trainer_params_to_override={"log_level" : 'ERROR'})
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
         ae = get_base_ae(self.mdp_params, self.env_params)
         actual_trajectory = ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
         

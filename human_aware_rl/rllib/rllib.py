@@ -10,15 +10,15 @@ from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
 from human_aware_rl.rllib.policies import UniformPolicy
-from human_aware_rl.rllib.utils import get_base_env, softmax, get_base_ae, get_required_arguments, iterable_equal
+from human_aware_rl.rllib.utils import get_base_env, softmax, get_base_ae, get_required_arguments, iterable_equal, move_ppo_agent
 from human_aware_rl.utils import recursive_dict_update
 from datetime import datetime
 import tempfile
 import gym
 import numpy as np
-import os, copy, dill
+import os, copy, dill, shutil
 import ray
-import logging
+import logging, warnings
 
 action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
 obs_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
@@ -40,7 +40,7 @@ class RlLibAgent(Agent):
         """
         self.policy = policy
         self.agent_index = agent_index
-        self.featurize = featurize_fn
+        self.featurize_fn = featurize_fn
         self.stochastic = stochastic
 
     def reset(self):
@@ -61,7 +61,7 @@ class RlLibAgent(Agent):
             - Normalized action probabilities determined by self.policy
         """
         # Preprocess the environment state
-        obs = self.featurize(state)
+        obs = self.featurize_fn(state)
         my_obs = obs[self.agent_index]
 
         # Compute non-normalized log probabilities from the underlying model
@@ -79,7 +79,7 @@ class RlLibAgent(Agent):
             - action_info (dict) that stores action probabilities under 'action_probs' key
         """
         # Preprocess the environment state
-        obs = self.featurize(state)
+        obs = self.featurize_fn(state)
         my_obs = obs[self.agent_index]
 
         # Use Rllib.Policy class to compute action argmax and action logits
@@ -102,6 +102,101 @@ class RlLibAgent(Agent):
 
         return agent_action, agent_action_info
 
+class PPOAgent(RlLibAgent):
+
+    supported_types = ['ppo', 'ppo_bc', 'ppo_bc_opt', 'bc_opt']
+    opt_name = 'opt_agent'
+    ppo_name = 'ppo_agent'
+    bc_name = 'bc_model_dir'
+    
+    def __init__(self, policy, agent_index, featurize_fn, stochastic=True, agent_type='ppo', trainer_path=None, trainer_params_to_override={}):
+        super(PPOAgent, self).__init__(policy, agent_index, featurize_fn, stochastic)
+
+        if not agent_type in self.supported_types:
+            raise ValueError("{} is not a supported type! Current supported types: {}".format(agent_type, self.supported_types))
+        self.agent_type = agent_type
+        self.trainer_path = trainer_path
+        self.trainer_params_to_override = trainer_params_to_override
+
+    @classmethod
+    def init_wrapper(cls, policy, agent_index, featurize_fn, stochastic=True, agent_type='ppo', trainer_path=None, trainer_params_to_override={}):
+        return cls(policy, agent_index, featurize_fn, stochastic, agent_type, trainer_path, trainer_params_to_override)
+
+    @classmethod
+    def from_trainer_path(cls, save_path, agent_type='ppo', agent_kwargs={'agent_index' : 0}, trainer_params_to_override={}):
+        trainer = load_trainer(save_path, **trainer_params_to_override)
+        return cls.from_trainer(trainer, agent_type, agent_kwargs, trainer_path=save_path, trainer_params_to_override=trainer_params_to_override)
+
+    @classmethod
+    def from_trainer(cls, trainer, agent_type="ppo", agent_kwargs={"agent_index" : 0}, trainer_path=None, trainer_params_to_override={}):
+        policy_id = 'ppo' if agent_type.startswith('ppo') else agent_type
+        policy = trainer.get_policy(policy_id)
+        dummy_env = trainer.env_creator(trainer.config['env_config'])
+        featurize_fn = dummy_env.featurize_fn_map[policy_id]
+        agent = cls.init_wrapper(policy, featurize_fn=featurize_fn, trainer_path=trainer_path, agent_type=agent_type, trainer_params_to_override=trainer_params_to_override, **agent_kwargs)
+        return agent
+
+    @property
+    def serializable(self):
+        return self.trainer_path and os.path.exists(self.trainer_path)
+
+    def __getstate__(self):
+        return {
+            "stochastic" : self.stochastic,
+            "agent_index" : self.agent_index,
+            "featurize_fn" : self.featurize_fn,
+            "agent_type" : self.agent_type,
+            "trainer_path" : self.trainer_path
+        }
+
+    def __setstate__(self, state):
+        for key, value in state.items():
+            setattr(self, key, value)
+    
+    def save(self, save_dir):
+        if not self.serializable:
+            raise IOError("This agent cannot be serialized!")
+        
+        # Basic type check
+        if os.path.isfile(save_dir):
+            raise IOError("Must specify a path to directory! Got: {}".format(save_dir))
+
+        # Create all needed directories
+        if not os.path.exists(save_dir):
+            os.path.os.makedirs(save_dir)
+
+        # Get trainer config
+        trainer_config = load_trainer_config(self.trainer_path, **self.trainer_params_to_override)
+
+        # Serialize BC model in well known relative spot and update path pointers, if necessary
+        if 'bc' in self.agent_type:
+            old_model_dir = trainer_config['policy_params']['bc']['config']['model_dir']
+            new_model_dir = os.path.join(save_dir, self.bc_name)
+            shutil.copytree(old_model_dir, new_model_dir)
+            trainer_config['policy_params']['bc']['config']['model_dir'] = new_model_dir
+
+        # Serialize OPT model in well known relative spot and update path pointers, if necessary
+        if 'opt' in self.agent_type:
+            old_opt_dir = os.path.dirname(trainer_config['policy_params']['bc_opt']['config']['off_dist_config']['opt_path'])
+            new_opt_path = move_ppo_agent(old_opt_dir, save_dir, basename=self.opt_name)
+            trainer_config['policy_params']['bc_opt']['config']['off_dist_config']['opt_path'] = new_opt_path
+
+        # Update Trainer config
+        save_trainer_config(trainer_config, self.trainer_path)
+
+        # Update PPO agent trainer serialization
+        old_trainer_dir = os.path.dirname(self.trainer_path)
+        new_trainer_path = move_ppo_agent(old_trainer_dir, save_dir, basename=self.ppo_name)
+        self.trainer_path = new_trainer_path
+
+        # Dump non-policy instance variables in pickle file
+        return super().save(save_dir)
+
+    @classmethod
+    def load(cls, save_path):
+        obj = super().load(save_path)
+        agent_kwargs = { "agent_index" : obj.agent_index, "stochastic" : obj.stochastic }
+        return cls.from_trainer_path(obj.trainer_path, obj.agent_type, agent_kwargs)
 
 class OvercookedMultiAgent(MultiAgentEnv):
     """
@@ -722,6 +817,16 @@ def gen_trainer_from_params(params):
 
 ### Serialization ###
 
+def save_trainer_config(params, save_path):
+    # Save params used to create trainer in /path/to/checkpoint_dir/config.pkl
+    config = copy.deepcopy(params)
+    config_path = os.path.join(os.path.dirname(save_path), "config.pkl")
+
+    # Note that we use dill (not pickle) here because it supports function serialization
+    with open(config_path, "wb") as f:
+        dill.dump(config, f)
+
+    return config_path
 
 def save_trainer(trainer, params, path=None):
     """
@@ -733,25 +838,11 @@ def save_trainer(trainer, params, path=None):
     # Save trainer
     save_path = trainer.save(path)
 
-    # Save params used to create trainer in /path/to/checkpoint_dir/config.pkl
-    config = copy.deepcopy(params)
-    config_path = os.path.join(os.path.dirname(save_path), "config.pkl")
-
-    # Note that we use dill (not pickle) here because it supports function serialization
-    with open(config_path, "wb") as f:
-        dill.dump(config, f)
+    # Save params
+    save_trainer_config(params, save_path)
     return save_path
 
-def load_trainer(save_path, **params_to_override):
-    """
-    Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
-    Note that `save_path` is the full path to the checkpoint FILE, not the checkpoint directory
-    """
-    # Ensure tf is executing in graph mode
-    import tensorflow as tf
-    if tf.executing_eagerly():
-        tf.compat.v1.disable_eager_execution()
-    # Read in params used to create trainer
+def load_trainer_config(save_path, **params_to_override):
     checkpoint_dir = os.path.dirname(save_path)
     experiment_dir = os.path.dirname(checkpoint_dir)
     config_path = os.path.join(checkpoint_dir, "config.pkl")
@@ -768,6 +859,21 @@ def load_trainer(save_path, **params_to_override):
         if not updated:
             print("WARNING, no value for specified bc argument {} found in schema. Adding as top level parameter".format(param))
 
+    return config
+
+def load_trainer(save_path, **params_to_override):
+    """
+    Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
+    Note that `save_path` is the full path to the checkpoint FILE, not the checkpoint directory
+    """
+    # Ensure tf is executing in graph mode
+    import tensorflow as tf
+    if tf.executing_eagerly():
+        tf.compat.v1.disable_eager_execution()
+    
+    # Read in params used to create trainer
+    config = load_trainer_config(save_path, **params_to_override)
+
     # Get un-trained trainer object with proper config
     trainer = gen_trainer_from_params(config)
 
@@ -776,6 +882,13 @@ def load_trainer(save_path, **params_to_override):
     return trainer
 
 def get_agent_from_trainer(trainer, policy_id="ppo", agent_kwargs={"agent_index" : 0}):
+    """
+    Deprecated
+    """
+    warnings.warn(
+        "`get_agent_from_train` is deprecated. Use `PPOAgent.from_trainer` instead",
+        DeprecationWarning
+    )
     policy = trainer.get_policy(policy_id)
     dummy_env = trainer.env_creator(trainer.config['env_config'])
     featurize_fn = dummy_env.featurize_fn_map[policy_id]
@@ -783,6 +896,10 @@ def get_agent_from_trainer(trainer, policy_id="ppo", agent_kwargs={"agent_index"
     return agent
 
 def get_agent_pair_from_trainer(trainer, policy_id_0='ppo', policy_id_1='ppo', agent_1_kwargs={}, agent_2_kwargs={}):
+    warnings.warn(
+        "`get_agent_from_train` is deprecated. Use `PPOAgent.from_trainer` + AgentPair class instead",
+        DeprecationWarning
+    )
     agent0 = get_agent_from_trainer(trainer, policy_id=policy_id_0, agent_kwargs=agent_1_kwargs)
     agent1 = get_agent_from_trainer(trainer, policy_id=policy_id_1, agent_kwargs=agent_2_kwargs)
     return AgentPair(agent0, agent1)
@@ -790,14 +907,22 @@ def get_agent_pair_from_trainer(trainer, policy_id_0='ppo', policy_id_1='ppo', a
 
 def load_agent_pair(save_path, policy_id_0='ppo', policy_id_1='ppo', agent_1_kwargs={"agent_index" : 0}, agent_2_kwargs={"agent_index" : 1}, trainer_params_to_override={}):
     """
+    Deprecated
+
     Returns an Overcooked AgentPair object that has as player 0 and player 1 policies with 
     ID policy_id_0 and policy_id_1, respectively
     """
+    warnings.warn(
+        "`load_agent_pair` is deprecated. Use `PPOAgent.from_trainer_path` + AgentPair class instead",
+        DeprecationWarning
+    )
     trainer = load_trainer(save_path, **trainer_params_to_override)
     return get_agent_pair_from_trainer(trainer, policy_id_0, policy_id_1, agent_1_kwargs, agent_2_kwargs)
 
 def load_agent(save_path, policy_id='ppo', agent_kwargs={"agent_index" : 0}, trainer_params_to_override={}):
     """
+    Deprecated
+
     Returns an RllibAgent (compatible with the Overcooked Agent API) from the `save_path` to a previously
     serialized trainer object created with `save_trainer`
 
@@ -807,6 +932,10 @@ def load_agent(save_path, policy_id='ppo', agent_kwargs={"agent_index" : 0}, tra
     Agent index indicates whether the agent is player zero or player one (or player n in the general case)
     as the featurization is not symmetric for both players
     """
+    warnings.warn(
+        "`load_agent` is deprecated. Use `PPOAgent.from_trainer_path` instead",
+        DeprecationWarning
+    )
     trainer = load_trainer(save_path, **trainer_params_to_override)
     return get_agent_from_trainer(trainer, policy_id=policy_id, agent_kwargs=agent_kwargs)
 

@@ -1,5 +1,5 @@
 import os, dill, copy
-from human_aware_rl.rllib.rllib import load_agent
+from human_aware_rl.rllib.rllib import PPOAgent
 from human_aware_rl.rllib.meta_policies import EnsemblePolicy
 
 def forward_port_config(config):
@@ -74,4 +74,4 @@ if __name__ == '__main__':
     forward_port_checkpoint(path)
 
     # Ensure agent loading works to verify we properly forward ported
-    load_agent(path)
+    PPOAgent.from_trainer_path(path)

@@ -1,5 +1,5 @@
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningAgent
-from human_aware_rl.rllib.rllib import load_agent, get_base_ae
+from human_aware_rl.rllib.rllib import get_base_ae, PPOAgent
 from overcooked_ai_py.agents.benchmarking import *
 from overcooked_ai_py.agents.agent import RandomAgent
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedState
@@ -12,14 +12,14 @@ ALL_LAYOUTS = ['soup_coordination', 'asymmetric_advantages_tomato']
 
 PATH_MAP = { layout : { agent_type : None for agent_type in ALL_AGENTS } for layout in ALL_LAYOUTS }
 
-PATH_MAP['soup_coordination']['bc_train'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_train_balanced_75_epochs_off_dist_weighted_False'
-PATH_MAP['soup_coordination']['bc_test'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/soup_coord_test_balanced_75_epochs_off_dist_weighted_False'
-PATH_MAP['soup_coordination']['ppo_bc'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_runs/weighted_bc_2/checkpoint-1667'
+PATH_MAP['soup_coordination']['bc_train'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/soup_coordination/soup_coord_train_balanced_75_epochs_off_dist_weighted_False'
+PATH_MAP['soup_coordination']['bc_test'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/soup_coordination/soup_coord_test_balanced_75_epochs_off_dist_weighted_False'
+PATH_MAP['soup_coordination']['ppo_bc'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_runs/soup_coordination/weighted_bc_2/checkpoint-1667'
 PATH_MAP['soup_coordination']['ppo_bc_opt'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/soup_coordination/bc_opt_unweighted_robost_1/checkpoint-1667'
-PATH_MAP['soup_coordination']['opt_fsp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_fsp_runs/fsp_50_N_1_K_prelim/checkpoint-1200'
-PATH_MAP['soup_coordination']['opt_robust'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/forward_port_hotfix/checkpoint-1200'
-PATH_MAP['soup_coordination']['opt_overfit'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/forward_port_upgraded_ray_960_return/checkpoint-1200'
-PATH_MAP['soup_coordination']['opt_overfit_1'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/upgraded_ray_915_return/checkpoint-1200'
+PATH_MAP['soup_coordination']['opt_fsp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_fsp_runs/soup_coordination/fsp_50_N_1_K_prelim/checkpoint-1200'
+PATH_MAP['soup_coordination']['opt_robust'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/soup_coordination/forward_port_hotfix/checkpoint-1200'
+PATH_MAP['soup_coordination']['opt_overfit'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/soup_coordination/forward_port_upgraded_ray_960_return/checkpoint-1200'
+PATH_MAP['soup_coordination']['opt_overfit_1'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/soup_coordination/upgraded_ray_915_return/checkpoint-1200'
 PATH_MAP['soup_coordination']['bc_opt'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/soup_coordination/bc_opt_unweighted_robost_1/checkpoint-1667'
 
 PATH_MAP['asymmetric_advantages_tomato']['bc_train'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/asymmetric_advantages_tomato/train_balanced_50_epochs_128_hidden_size'
@@ -45,7 +45,7 @@ def load_agent_by_type(agent_type, layout):
     if agent_type == 'rnd':
         return RandomAgent(all_actions=True)
     elif agent_type.startswith('opt'):
-        return load_agent(PATH_MAP[layout][agent_type])
+        return PPOAgent.from_trainer_path(PATH_MAP[layout][agent_type])
     elif agent_type == 'bc_train' or agent_type == 'bc_test':
         return BehaviorCloningAgent.from_model_dir(PATH_MAP[layout][agent_type], use_predict=False)
     elif agent_type == 'bc_opt' or agent_type == 'ppo_bc' or agent_type == 'ppo_bc_opt':
@@ -53,7 +53,7 @@ def load_agent_by_type(agent_type, layout):
             "model_dir" : PATH_MAP[layout]['bc_train'],
             "opt_path" : PATH_MAP[layout]['opt_fsp']
         }
-        return load_agent(PATH_MAP[layout][agent_type], policy_id=agent_type, trainer_params_to_override=bc_opt_trainer_params_to_override)
+        return PPOAgent.from_trainer_path(PATH_MAP[layout][agent_type], agent_type=agent_type, trainer_params_to_override=bc_opt_trainer_params_to_override)
 
 def load_pair_by_type(type_0, type_1, layout):
     # BC must load second to avoid having graph overriden by rllib loading routine

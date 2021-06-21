@@ -4,10 +4,11 @@ from human_aware_rl.ppo.ppo_rllib_client import ex
 from human_aware_rl.ppo.ppo_rllib_from_params_client import ex_fp
 from human_aware_rl.static import PPO_EXPECTED_DATA_PATH
 from human_aware_rl.data_dir import DATA_DIR
-from human_aware_rl.rllib.rllib import load_agent, load_agent_pair
+from human_aware_rl.rllib.rllib import PPOAgent
 from human_aware_rl.imitation.behavior_cloning_tf2 import train_bc_model, get_bc_params
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
+from overcooked_ai_py.agents.agent import AgentPair
 import tensorflow as tf
 import numpy as np
 
@@ -103,18 +104,19 @@ class TestPPORllib(unittest.TestCase):
         state = mdp.get_standard_start_state()
 
         # Ensure simple single-agent loading works
-        agent_0 = load_agent(load_path)
+        agent_0 = PPOAgent.from_trainer_path(load_path)
         agent_0.reset()
 
-        agent_1 = load_agent(load_path)
+        agent_1 = PPOAgent.from_trainer_path(load_path, agent_kwargs={"agent_index" : 1})
         agent_1.reset()
 
         # Ensure forward pass of policy network still works
         _, _ = agent_0.action(state)
         _, _ = agent_1.action(state)
 
-        # Now let's load an agent pair and evaluate it
-        agent_pair = load_agent_pair(load_path)
+        # Now let's load an SP agent pair and evaluate it
+        agent = PPOAgent.from_trainer_path(load_path)
+        agent_pair = AgentPair(agent, agent, allow_duplicate_agents=True)
         ae = AgentEvaluator.from_layout_name(mdp_params={"layout_name" : "cramped_room"}, env_params={"horizon" : 400})
 
         # We assume no runtime errors => success, no performance consistency check for now
