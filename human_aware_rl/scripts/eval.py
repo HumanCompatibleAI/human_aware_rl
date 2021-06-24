@@ -8,7 +8,7 @@ import numpy as np
 
 
 ALL_AGENTS = ['bc_test', 'ppo_bc', 'ppo_bc_opt', 'opt_fsp', 'rnd', 'opt_robust', 'opt_overfit', 'opt_overfit_1', 'bc_opt', 'bc_train']
-ALL_LAYOUTS = ['soup_coordination', 'asymmetric_advantages_tomato']
+ALL_LAYOUTS = ['soup_coordination', 'asymmetric_advantages_tomato', 'counter_circuit']
 
 PATH_MAP = { layout : { agent_type : None for agent_type in ALL_AGENTS } for layout in ALL_LAYOUTS }
 
@@ -24,6 +24,10 @@ PATH_MAP['soup_coordination']['bc_opt'] = '/Users/nathan/bair/overcooked/human_a
 
 PATH_MAP['asymmetric_advantages_tomato']['bc_train'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/asymmetric_advantages_tomato/train_balanced_50_epochs_128_hidden_size'
 PATH_MAP['asymmetric_advantages_tomato']['bc_test'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/bc_runs/asymmetric_advantages_tomato/test_balanced_50_epochs_128_hidden_size'
+PATH_MAP['asymmetric_advantages_tomato']['ppo_bc'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_runs/asymmetric_advantages_tomato/prelim_ppo_idx_0/checkpoint-1667'
+PATH_MAP['asymmetric_advantages_tomato']['ppo_bc_opt'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/asymmetric_advantages_tomato/ppo_bc_opt_prelim/checkpoint-1667'
+PATH_MAP['asymmetric_advantages_tomato']['bc_opt'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/asymmetric_advantages_tomato/ppo_bc_opt_prelim/checkpoint-1667'
+PATH_MAP['asymmetric_advantages_tomato']['opt_fsp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_fsp_runs/asymmeric_advantages_tomato/lr_7e-4_batch_6e4_N_per_check_41/checkpoint-833'
 
 OFF_DIST_STATE_PATHS = {
     'soup_coordination' : './off_dist_state.json',

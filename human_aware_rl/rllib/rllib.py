@@ -109,49 +109,99 @@ class PPOAgent(RlLibAgent):
     ppo_name = 'ppo_agent'
     bc_name = 'bc_model_dir'
     
-    def __init__(self, policy, agent_index, featurize_fn, stochastic=True, agent_type='ppo', trainer_path=None, trainer_params_to_override={}):
+    def __init__(self, policy, agent_index, featurize_fn, stochastic=True, agent_type='ppo', trainer_path=None, trainer_params_to_override={}, root_dir=None):
         super(PPOAgent, self).__init__(policy, agent_index, featurize_fn, stochastic)
 
         if not agent_type in self.supported_types:
             raise ValueError("{} is not a supported type! Current supported types: {}".format(agent_type, self.supported_types))
         self.agent_type = agent_type
-        self.trainer_path = trainer_path
+        self._trainer_path = trainer_path
         self.trainer_params_to_override = trainer_params_to_override
+        self.root_dir = root_dir
+        self._config_loaded = False
 
     @classmethod
-    def init_wrapper(cls, policy, agent_index, featurize_fn, stochastic=True, agent_type='ppo', trainer_path=None, trainer_params_to_override={}):
-        return cls(policy, agent_index, featurize_fn, stochastic, agent_type, trainer_path, trainer_params_to_override)
+    def init_wrapper(cls, policy, agent_index, featurize_fn, stochastic=True, agent_type='ppo', trainer_path=None, trainer_params_to_override={}, root_dir=None):
+        return cls(policy, agent_index, featurize_fn, stochastic, agent_type, trainer_path, trainer_params_to_override, root_dir)
 
     @classmethod
-    def from_trainer_path(cls, save_path, agent_type='ppo', agent_kwargs={'agent_index' : 0}, trainer_params_to_override={}):
+    def from_trainer_path(cls, save_path, agent_type='ppo', agent_kwargs={'agent_index' : 0}, trainer_params_to_override={}, root_dir=None):
         trainer = load_trainer(save_path, **trainer_params_to_override)
-        return cls.from_trainer(trainer, agent_type, agent_kwargs, trainer_path=save_path, trainer_params_to_override=trainer_params_to_override)
+        return cls.from_trainer(trainer, agent_type, agent_kwargs, trainer_path=save_path, trainer_params_to_override=trainer_params_to_override, root_dir=root_dir)
 
     @classmethod
-    def from_trainer(cls, trainer, agent_type="ppo", agent_kwargs={"agent_index" : 0}, trainer_path=None, trainer_params_to_override={}):
+    def from_trainer(cls, trainer, agent_type="ppo", agent_kwargs={"agent_index" : 0}, trainer_path=None, trainer_params_to_override={}, root_dir=None):
         policy_id = 'ppo' if agent_type.startswith('ppo') else agent_type
         policy = trainer.get_policy(policy_id)
         dummy_env = trainer.env_creator(trainer.config['env_config'])
         featurize_fn = dummy_env.featurize_fn_map[policy_id]
-        agent = cls.init_wrapper(policy, featurize_fn=featurize_fn, trainer_path=trainer_path, agent_type=agent_type, trainer_params_to_override=trainer_params_to_override, **agent_kwargs)
+        agent = cls.init_wrapper(policy, featurize_fn=featurize_fn, trainer_path=trainer_path, agent_type=agent_type, trainer_params_to_override=trainer_params_to_override, root_dir=root_dir, **agent_kwargs)
         return agent
+
+    @classmethod
+    def _update_paths(cls, obj, new_root_dir):
+        obj.root_dir = new_root_dir
+        obj.trainer_config['policy_params']['bc']['config']['model_dir'] = obj.model_dir
+        obj.trainer_config['policy_params']['bc_opt']['config']['off_dist_config']['opt_path'] = obj.opt_path
+        save_trainer_config(obj.trainer_config, obj.trainer_path)
+        obj.trainer_params_to_override = {}
+
+    @property
+    def trainer_config(self):
+        if not self._config_loaded:
+            self._trainer_config = load_trainer_config(self.trainer_path, **self.trainer_params_to_override)
+            self._config_loaded = True
+        return self._trainer_config
 
     @property
     def serializable(self):
         return self.trainer_path and os.path.exists(self.trainer_path)
 
+    @property
+    def model_dir(self):
+        if self.root_dir:
+            return os.path.join(self.root_dir, self.bc_name)
+        if self.serializable:
+            return self.trainer_config['policy_params']['bc']['config']['model_dir']
+        return None
+
+    @property
+    def opt_path(self):
+        if self.root_dir:
+            return os.path.join(self.root_dir, self.opt_name, self.opt_name)
+        if self.serializable:
+            return self.trainer_config['policy_params']['bc_opt']['config']['off_dist_config']['opt_path']
+        return None
+
+    @property
+    def trainer_path(self):
+        if self.root_dir:
+            return os.path.join(self.root_dir, self.ppo_name, self.ppo_name)
+        return self._trainer_path
+
     def __getstate__(self):
         return {
+            "opt_name" : self.opt_name,
+            "bc_name" : self.bc_name,
+            "ppo_name" : self.ppo_name,
+            "agent_file_name" : self.agent_file_name,
             "stochastic" : self.stochastic,
             "agent_index" : self.agent_index,
             "featurize_fn" : self.featurize_fn,
             "agent_type" : self.agent_type,
-            "trainer_path" : self.trainer_path
+            "_trainer_path" : self._trainer_path,
+            "root_dir" : self.root_dir,
+            "trainer_params_to_override" : self.trainer_params_to_override
         }
 
     def __setstate__(self, state):
         for key, value in state.items():
-            setattr(self, key, value)
+            try:
+                setattr(self, key, value)
+            except Exception as e:
+                print(key)
+                raise e
+        setattr(self, '_config_loaded', False)
     
     def save(self, save_dir):
         if not self.serializable:
@@ -165,37 +215,41 @@ class PPOAgent(RlLibAgent):
         if not os.path.exists(save_dir):
             os.path.os.makedirs(save_dir)
 
-        # Get trainer config
-        trainer_config = load_trainer_config(self.trainer_path, **self.trainer_params_to_override)
-
-        # Serialize BC model in well known relative spot and update path pointers, if necessary
-        if 'bc' in self.agent_type:
-            old_model_dir = trainer_config['policy_params']['bc']['config']['model_dir']
-            new_model_dir = os.path.join(save_dir, self.bc_name)
-            shutil.copytree(old_model_dir, new_model_dir)
-            trainer_config['policy_params']['bc']['config']['model_dir'] = new_model_dir
-
-        # Serialize OPT model in well known relative spot and update path pointers, if necessary
-        if 'opt' in self.agent_type:
-            old_opt_dir = os.path.dirname(trainer_config['policy_params']['bc_opt']['config']['off_dist_config']['opt_path'])
-            new_opt_path = move_ppo_agent(old_opt_dir, save_dir, basename=self.opt_name)
-            trainer_config['policy_params']['bc_opt']['config']['off_dist_config']['opt_path'] = new_opt_path
-
-        # Update Trainer config
-        save_trainer_config(trainer_config, self.trainer_path)
+        old_trainer_path = self.trainer_path
+        old_model_dir = self.model_dir
+        old_opt_path = self.opt_path
 
         # Update PPO agent trainer serialization
-        old_trainer_dir = os.path.dirname(self.trainer_path)
-        new_trainer_path = move_ppo_agent(old_trainer_dir, save_dir, basename=self.ppo_name)
-        self.trainer_path = new_trainer_path
+        old_trainer_dir = os.path.dirname(old_trainer_path)
+        move_ppo_agent(old_trainer_dir, save_dir, basename=self.ppo_name)
+
+        # Update Trainer config, plus all necessary path pointers
+        PPOAgent._update_paths(self, save_dir)
+
+        # Serialize BC model in well known relative spot
+        if 'bc' in self.agent_type:
+            shutil.copytree(old_model_dir, self.model_dir)
+
+        # Serialize OPT model in well known relative spot
+        if 'opt' in self.agent_type:
+            old_opt_dir = os.path.dirname(old_opt_path)
+            move_ppo_agent(old_opt_dir, save_dir, basename=self.opt_name)
+
+
 
         # Dump non-policy instance variables in pickle file
         return super().save(save_dir)
 
     @classmethod
-    def load(cls, save_path):
-        obj = super().load(save_path)
+    def load(cls, path):
+        if os.path.isfile(path):
+            path = os.path.dirname(path)
+        obj = super().load(path)
+        obj._config_loaded = False
         agent_kwargs = { "agent_index" : obj.agent_index, "stochastic" : obj.stochastic }
+
+        if path != obj.root_dir:
+            cls._update_paths(obj, path)
         return cls.from_trainer_path(obj.trainer_path, obj.agent_type, agent_kwargs)
 
 class OvercookedMultiAgent(MultiAgentEnv):

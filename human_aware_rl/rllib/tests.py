@@ -2,13 +2,13 @@ from overcooked_ai_py.agents.agent import AgentPair
 from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, RlLibAgent, PPOAgent
 from human_aware_rl.rllib.utils import get_base_ae, softmax, get_required_arguments, iterable_equal, get_base_env
-from human_aware_rl.static import RLLIB_TRAINER_PATH, TESTING_DATA_DIR
+from human_aware_rl.static import TESTING_DATA_DIR, PRE_TRAINED_PPO_BC, PRE_TRAINED_PPO_BC_OPT, PRE_TRAINED_PPO_SP, PRE_TRAINED_BC, RLLIB_TRAINER_DIR, RLLIB_AGENT_DIR
 from human_aware_rl.rllib.policies import ConstantPolicy
 from human_aware_rl.rllib.meta_policies import EnsemblePolicy
 from numpy.lib.stride_tricks import DummyArray
 from overcooked_ai_py.mdp.actions import Action
 from scipy.stats import norm
-import unittest, copy, pickle, os, ray, logging
+import unittest, copy, pickle, os, ray, logging, shutil, glob
 import numpy as np
 
 from human_aware_rl.utils import set_global_seed
@@ -326,24 +326,36 @@ class RllibPoliciesTest(unittest.TestCase):
 
 class RllibSerializationTest(unittest.TestCase):
 
+    # TODO: Ensure that loading agents from trainers doesn't modify the underlying trainer data
+
     def setUp(self):
         set_global_seed(0)
         ray.init(log_to_driver=False, logging_level=logging.CRITICAL)
-        mdp = OvercookedGridworld.from_layout_name("cramped_room")
+        mdp = OvercookedGridworld.from_layout_name("soup_coordination")
         self.dummy_state = mdp.get_standard_start_state()
-        self.mdp_params = {"layout_name" : "cramped_room"}
+        self.mdp_params = {"layout_name" : "soup_coordination"}
         self.env_params = {"horizon" : 400}
+        self.ae = get_base_ae(self.mdp_params, self.env_params)
         self.expected_path = os.path.join(TESTING_DATA_DIR, 'rllib', 'expected.pickle')
+        self.temp_agent_dir = os.path.join(os.path.abspath('.'), 'temp_agent_dir')
 
     def tearDown(self):
+        if os.path.exists(self.temp_agent_dir):
+            shutil.rmtree(self.temp_agent_dir)
+
+        tf_event_files = glob.glob(os.path.join(RLLIB_TRAINER_DIR, 'events.out.tfevents.*'))
+        rllib_metadata_files = list(glob.glob(os.path.join(RLLIB_TRAINER_DIR, 'params.*'))) + [os.path.join(RLLIB_TRAINER_DIR, 'progress.csv'), os.path.join(RLLIB_TRAINER_DIR, 'result.json')]
+        for file in tf_event_files + rllib_metadata_files:
+            if os.path.exists(file):
+                os.remove(file)
         ray.shutdown()
 
     def test_serialization_backwards_compat(self):
-        # Load agents from fixed pre-trained rllib trainer to ensure backwards compatibility
-        agent_0 = PPOAgent.from_trainer_path(RLLIB_TRAINER_PATH, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
+        # Load PPO-sp agents from fixed pre-trained rllib trainer to ensure backwards compatibility
+        agent_0 = PPOAgent.from_trainer_path(PRE_TRAINED_PPO_SP, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
         agent_0.reset()
 
-        agent_1 = PPOAgent.from_trainer_path(RLLIB_TRAINER_PATH, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
+        agent_1 = PPOAgent.from_trainer_path(PRE_TRAINED_PPO_SP, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
         agent_1.reset()
 
 
@@ -352,11 +364,19 @@ class RllibSerializationTest(unittest.TestCase):
         _, _ = agent_1.action(self.dummy_state)
 
         # Load SP agent pair for full rollout
-        agent = PPOAgent.from_trainer_path(RLLIB_TRAINER_PATH, trainer_params_to_override={"log_level" : 'ERROR'})
+        agent = PPOAgent.from_trainer_path(PRE_TRAINED_PPO_SP, trainer_params_to_override={"log_level" : 'ERROR'})
         pair = AgentPair(agent, agent, allow_duplicate_agents=True)
-        ae = get_base_ae(self.mdp_params, self.env_params)
-        actual_trajectory = ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+        actual_trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+
         
+        # # Uncomment this block if intentionally updating the expected serialized trainer trajectory. Use with caution!
+        # with open(self.expected_path, 'rb') as f:
+        #     expected = pickle.load(f)
+        # expected['test_serialization_backwards_compat'] = actual_trajectory
+        # with open(self.expected_path, 'wb') as f:
+        #     pickle.dump(expected, f)
+        
+
         # Ensure trajectory matches expected trajecotry
         with open(self.expected_path, 'rb') as f:
             expected = pickle.load(f)
@@ -364,7 +384,232 @@ class RllibSerializationTest(unittest.TestCase):
         expected_trajectory = expected['test_serialization_backwards_compat']
         self.assertTrue(np.array_equal(expected_trajectory, actual_trajectory))
 
+    def test_ppo_sp_save_load_from_trainer(self):
+        # Load in pre-trained agent from trainer
+        agent = PPOAgent.from_trainer_path(PRE_TRAINED_PPO_SP, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
+
+        # Run agent SP rollout
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
+        trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+
         
+        # # Uncomment this block if intentionally updating the expected serialized trainer trajectory. Use with caution!
+        # with open(self.expected_path, 'rb') as f:
+        #     expected = pickle.load(f)
+        # expected['test_ppo_sp_save_load_from_trainer'] = trajectory
+        # with open(self.expected_path, 'wb') as f:
+        #     pickle.dump(expected, f)
+        
+
+        # Ensure trajectory matches expected trajecotry
+        with open(self.expected_path, 'rb') as f:
+            expected = pickle.load(f)
+        
+        expected_trajectory = expected['test_ppo_sp_save_load_from_trainer']
+        self.assertTrue(np.array_equal(expected_trajectory, trajectory))
+
+        # Save the agent in temporary directory
+        save_path = agent.save(os.path.join(self.temp_agent_dir, 'ppo_sp_agent'))
+        del agent, pair
+
+        # Load the agent from whence it is stored
+        agent = PPOAgent.load(save_path)
+
+        # Run the newly loaded agent in SP
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
+        loaded_trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+
+        self.assertTrue(np.array_equal(trajectory, loaded_trajectory))
+
+    def test_ppo_bc_save_load_from_trainer(self):
+        # Load in pre-trained agent from trainer
+        agent = PPOAgent.from_trainer_path(PRE_TRAINED_PPO_BC, 'ppo_bc', trainer_params_to_override={'log_level' : 'ERROR', 'model_dir' : PRE_TRAINED_BC})
+
+        # Run agent SP rollout
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
+        trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+
+        
+        # # Uncomment this block if intentionally updating the expected serialized trainer trajectory. Use with caution!
+        # with open(self.expected_path, 'rb') as f:
+        #     expected = pickle.load(f)
+        # expected['test_ppo_bc_save_load_from_trainer'] = trajectory
+        # with open(self.expected_path, 'wb') as f:
+        #     pickle.dump(expected, f)
+        
+
+        # Ensure trajectory matches expected trajecotry
+        with open(self.expected_path, 'rb') as f:
+            expected = pickle.load(f)
+        
+        expected_trajectory = expected['test_ppo_bc_save_load_from_trainer']
+        self.assertTrue(np.array_equal(expected_trajectory, trajectory))
+
+        # Save the agent in temporary directory
+        save_path = agent.save(os.path.join(self.temp_agent_dir, 'ppo_bc_agent'))
+        del agent, pair
+
+        # Load the agent from whence it is stored
+        agent = PPOAgent.load(save_path)
+
+        # Run the newly loaded agent in SP
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
+        loaded_trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+
+        self.assertTrue(np.array_equal(trajectory, loaded_trajectory))
+
+    def test_ppo_bc_opt_save_load_from_trainer(self):
+        # Load in pre-trained agent from trainer
+        trainer_params_to_override = {
+            "log_level" : "ERROR",
+            "model_dir" : PRE_TRAINED_BC,
+            "opt_path" : PRE_TRAINED_PPO_SP
+        }
+        agent = PPOAgent.from_trainer_path(PRE_TRAINED_PPO_BC_OPT, 'ppo_bc_opt', trainer_params_to_override=trainer_params_to_override)
+
+        # Run agent SP rollout
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
+        trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+
+        
+        # # Uncomment this block if intentionally updating the expected serialized trainer trajectory. Use with caution!
+        # with open(self.expected_path, 'rb') as f:
+        #     expected = pickle.load(f)
+        # expected['test_ppo_bc_opt_save_load_from_trainer'] = trajectory
+        # with open(self.expected_path, 'wb') as f:
+        #     pickle.dump(expected, f)
+        
+
+        # Ensure trajectory matches expected trajecotry
+        with open(self.expected_path, 'rb') as f:
+            expected = pickle.load(f)
+        
+        expected_trajectory = expected['test_ppo_bc_opt_save_load_from_trainer']
+        self.assertTrue(np.array_equal(expected_trajectory, trajectory))
+
+        # Save the agent in temporary directory
+        save_path = agent.save(os.path.join(self.temp_agent_dir, 'ppo_bc_opt_agent'))
+        del agent, pair
+
+        # Load the agent from whence it is stored
+        agent = PPOAgent.load(save_path)
+
+        # Run the newly loaded agent in SP
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
+        loaded_trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+
+        self.assertTrue(np.array_equal(trajectory, loaded_trajectory))
+
+    def test_ppo_sp_load_from_agent(self):
+        # Load in pre-trained agent from trainer
+        agent = PPOAgent.load(os.path.join(RLLIB_AGENT_DIR, 'ppo_sp'))
+
+        # Run agent in SP
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
+        trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+
+        # # Uncomment this block if intentionally updating the expected serialized trainer trajectory. Use with caution!
+        # with open(self.expected_path, 'rb') as f:
+        #     expected = pickle.load(f)
+        # expected['test_ppo_sp_load_from_agent'] = trajectory
+        # with open(self.expected_path, 'wb') as f:
+        #     pickle.dump(expected, f)
+        
+
+        # Ensure trajectory matches expected trajecotry
+        with open(self.expected_path, 'rb') as f:
+            expected = pickle.load(f)
+        
+        expected_trajectory = expected['test_ppo_sp_load_from_agent']
+        self.assertTrue(np.array_equal(expected_trajectory, trajectory))
+
+    def test_ppo_bc_load_from_agent(self):
+        # Load in pre-trained agent from trainer
+        agent = PPOAgent.load(os.path.join(RLLIB_AGENT_DIR, 'ppo_bc'))
+
+        # Run agent in SP
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
+        trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+
+        # # Uncomment this block if intentionally updating the expected serialized trainer trajectory. Use with caution!
+        # with open(self.expected_path, 'rb') as f:
+        #     expected = pickle.load(f)
+        # expected['test_ppo_bc_load_from_agent'] = trajectory
+        # with open(self.expected_path, 'wb') as f:
+        #     pickle.dump(expected, f)
+        
+
+        # Ensure trajectory matches expected trajecotry
+        with open(self.expected_path, 'rb') as f:
+            expected = pickle.load(f)
+        
+        expected_trajectory = expected['test_ppo_bc_load_from_agent']
+        self.assertTrue(np.array_equal(expected_trajectory, trajectory))
+
+    def test_ppo_bc_opt_load_from_agent(self):
+        # Load in pre-trained agent from trainer
+        agent = PPOAgent.load(os.path.join(RLLIB_AGENT_DIR, 'ppo_bc_opt'))
+
+        # Run agent in SP
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
+        trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+
+        # # Uncomment this block if intentionally updating the expected serialized trainer trajectory. Use with caution!
+        # with open(self.expected_path, 'rb') as f:
+        #     expected = pickle.load(f)
+        # expected['test_ppo_bc_load_from_agent'] = trajectory
+        # with open(self.expected_path, 'wb') as f:
+        #     pickle.dump(expected, f)
+        
+
+        # Ensure trajectory matches expected trajecotry
+        with open(self.expected_path, 'rb') as f:
+            expected = pickle.load(f)
+        
+        expected_trajectory = expected['test_ppo_bc_load_from_agent']
+        self.assertTrue(np.array_equal(expected_trajectory, trajectory))
+
+    def test_ppo_bc_opt_load_isolation(self):
+        pretrained_agent_path = os.path.join(RLLIB_AGENT_DIR, 'ppo_bc_opt')
+        new_agent_path = os.path.join(self.temp_agent_dir, 'new_ppo_bc_opt')
+        copied_agent_path = os.path.join(self.temp_agent_dir, 'copy_ppo_bc_opt')
+
+        # Load in pre-trained agent and save it in new location
+        agent = PPOAgent.load(pretrained_agent_path)
+        agent.save(new_agent_path)
+
+        # Copy to third location and delete all files at second location
+        shutil.copytree(new_agent_path, copied_agent_path)
+        shutil.rmtree(new_agent_path)
+
+        # Ensure we can load agent from third location (no pointers to second location)
+        copied_agent = PPOAgent.load(copied_agent_path)
+
+        # Ensure both agents are the same policy
+        agent.stochastic = False
+        copied_agent.stochastic = False
+        pair = AgentPair(agent, agent, allow_duplicate_agents=True)
+        trajectory = self.ae.evaluate_agent_pair(pair, 1, info=False)['ep_states']
+        copied_pair = AgentPair(copied_agent, copied_agent, allow_duplicate_agents=True)
+        copied_trajectory = self.ae.evaluate_agent_pair(copied_pair, 1, info=False)['ep_states']
+        self.assertTrue(np.array_equal(trajectory, copied_trajectory))
 
 if __name__ == '__main__':
     unittest.main()
+
+    # ppo_sp_agent = PPOAgent.from_trainer_path(PRE_TRAINED_PPO_SP, 'ppo', trainer_params_to_override={'log_level' : 'ERROR'})
+    # ppo_bc_agent = PPOAgent.from_trainer_path(PRE_TRAINED_PPO_BC, 'ppo_bc', trainer_params_to_override={'log_level' : 'ERROR', 'model_dir' : PRE_TRAINED_BC})
+    # trainer_params_to_override = {
+    #     "log_level" : "ERROR",
+    #     "model_dir" : PRE_TRAINED_BC,
+    #     "opt_path" : PRE_TRAINED_PPO_SP
+    # }
+    # ppo_bc_opt_agent = PPOAgent.from_trainer_path(PRE_TRAINED_PPO_BC_OPT, 'ppo_bc_opt', trainer_params_to_override=trainer_params_to_override)
+
+    # ppo_sp_save_dir = os.path.join(RLLIB_AGENT_DIR, 'ppo_sp')
+    # ppo_bc_save_dir = os.path.join(RLLIB_AGENT_DIR, 'ppo_bc')
+    # ppo_bc_opt_save_dir = os.path.join(RLLIB_AGENT_DIR, 'ppo_bc_opt')
+
+    # ppo_sp_agent.save(ppo_sp_save_dir)
+    # ppo_bc_agent.save(ppo_bc_save_dir)
+    # ppo_bc_opt_agent.save(ppo_bc_opt_save_dir)

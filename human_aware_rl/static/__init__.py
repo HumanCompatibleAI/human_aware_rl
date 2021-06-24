@@ -31,7 +31,12 @@ DUMMY_2019_RAW_HUMAN_DATA_PATH = os.path.join(DUMMY_HUMAN_DATA_DIR, "dummy_2019_
 TESTING_DATA_DIR = os.path.join(_curr_directory, "testing_data")
 BC_EXPECTED_DATA_PATH = os.path.join(TESTING_DATA_DIR, "bc", "expected.pickle")
 PPO_EXPECTED_DATA_PATH = os.path.join(TESTING_DATA_DIR, "ppo", "expected.pickle")
-RLLIB_TRAINER_PATH = os.path.join(TESTING_DATA_DIR, 'serialization_forward_compat', 'checkpoint_000005', 'checkpoint-5')
+RLLIB_AGENT_DIR = os.path.join(TESTING_DATA_DIR, 'serialized_agents')
+RLLIB_TRAINER_DIR = os.path.join(TESTING_DATA_DIR, 'serialized_trainers')
+PRE_TRAINED_PPO_SP = os.path.join(RLLIB_TRAINER_DIR, 'ppo_sp', 'checkpoint-5')
+PRE_TRAINED_PPO_BC = os.path.join(RLLIB_TRAINER_DIR, 'ppo_bc', 'checkpoint-5')
+PRE_TRAINED_PPO_BC_OPT = os.path.join(RLLIB_TRAINER_DIR, 'ppo_bc_opt', 'checkpoint-5')
+PRE_TRAINED_BC = os.path.join(RLLIB_TRAINER_DIR, 'bc')
 
 
 # Human data constants
