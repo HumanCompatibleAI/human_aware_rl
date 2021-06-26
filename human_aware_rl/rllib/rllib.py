@@ -141,8 +141,11 @@ class PPOAgent(RlLibAgent):
     @classmethod
     def _update_paths(cls, obj, new_root_dir):
         obj.root_dir = new_root_dir
-        obj.trainer_config['policy_params']['bc']['config']['model_dir'] = obj.model_dir
-        obj.trainer_config['policy_params']['bc_opt']['config']['off_dist_config']['opt_path'] = obj.opt_path
+        params_to_update = {
+            "model_dir" : obj.model_dir,
+            "opt_path" : obj.opt_path
+        }
+        obj._trainer_config = override_dict(obj.trainer_config, **params_to_update)
         save_trainer_config(obj.trainer_config, obj.trainer_path)
         obj.trainer_params_to_override = {}
 

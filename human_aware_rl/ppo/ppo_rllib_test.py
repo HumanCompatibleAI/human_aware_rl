@@ -45,6 +45,7 @@ class TestPPORllib(unittest.TestCase):
         # Temporary disk space to store logging results from tests
         self.temp_results_dir = os.path.join(os.path.abspath('.'), 'results_temp')
         self.temp_model_dir = os.path.join(os.path.abspath('.'), 'model_temp')
+        self.temp_agent_dir = os.path.join(os.path.abspath('.'), 'agent_temp')
 
 
         # Make all necessary directories
@@ -67,8 +68,12 @@ class TestPPORllib(unittest.TestCase):
                 pickle.dump(self.expected, f)
         
         # Cleanup 
-        shutil.rmtree(self.temp_results_dir)
-        shutil.rmtree(self.temp_model_dir)
+        if os.path.exists(self.temp_results_dir):
+            shutil.rmtree(self.temp_results_dir)
+        if os.path.exists(self.temp_model_dir):
+            shutil.rmtree(self.temp_model_dir)
+        if os.path.exists(self.temp_agent_dir):
+            shutil.rmtree(self.temp_agent_dir)
         ray.shutdown()
 
     def test_save_load(self):
@@ -271,6 +276,7 @@ class TestPPORllib(unittest.TestCase):
     
         # Train rllib model
         config_updates = { 
+            "layout_name" : inverse_marshmallow_experiment,
             "results_dir" : self.temp_results_dir, 
             "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], 
             "num_training_iters" : 20, 
@@ -304,6 +310,7 @@ class TestPPORllib(unittest.TestCase):
 
         # Train sp "opt" model
         config_updates={
+            "layout_name" : "soup_coordination",
             "experiment_name" : "my_sp_opt",
             "results_dir": self.temp_results_dir,
             "num_workers": 2,
@@ -342,6 +349,7 @@ class TestPPORllib(unittest.TestCase):
 
         # Train sp "opt" model
         config_updates={
+            "layout_name" : "soup_coordination",
             "experiment_name" : "my_sp_opt",
             "results_dir": self.temp_results_dir,
             "num_workers": 2,
@@ -380,6 +388,7 @@ class TestPPORllib(unittest.TestCase):
 
         # Train sp "opt" model
         config_updates={
+            "layout_name" : "soup_coordination",
             "experiment_name" : "my_sp_opt",
             "results_dir": self.temp_results_dir,
             "num_workers": 2,
@@ -453,6 +462,120 @@ class TestPPORllib(unittest.TestCase):
         self.assertFalse(np.allclose(logits_2, logits_3, atol=0.001))
         self.assertFalse(np.allclose(logits_1, logits_3, atol=0.001))
 
+    def test_ppo_sp_agent_serialization(self):
+        # Train a self play agent for 2 iterations
+        results = ex.run(
+            config_updates={
+                "results_dir": self.temp_results_dir,
+                "num_workers": 2,
+                "num_training_iters": 2,
+                "evaluation_interval": 10,
+                "evaluation_display": False,
+                "verbose" : False
+            },
+            options={'--loglevel': 'ERROR'}
+        ).result
+
+        # Load agent from trainer and save in new location
+        agent_save_path = os.path.join(self.temp_agent_dir, 'my_agent')
+        trainer_save_path = results['save_paths'][0]
+        agent = PPOAgent.from_trainer_path(trainer_save_path, 'ppo')
+        agent.save(agent_save_path)
+
+        # Delete all previous PPO data
+        shutil.rmtree(self.temp_results_dir)
+
+        # Ensure agent loading still works
+        agent.load(agent_save_path)
+        
+    def test_ppo_bc_agent_serialization(self):
+        # Train bc model
+        model_dir = self.temp_model_dir
+        params_to_override = { 
+            "layouts" : ['soup_coordination'],
+            "data_path" : None,
+            "epochs" : 2
+        }
+        bc_params = get_bc_params(**params_to_override)
+        train_bc_model(model_dir, bc_params, verbose=False)
+    
+        # Train rllib model
+        config_updates = { 
+            "layout_name" : "soup_coordination",
+            "results_dir" : self.temp_results_dir, 
+            "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], 
+            "num_training_iters" : 20, 
+            "bc_model_dir" : model_dir, 
+            "evaluation_interval" : 5,
+            "verbose" : False
+        }
+        results = ex.run(config_updates=config_updates, options={'--loglevel': 'ERROR'}).result
+
+        # Load agent from trainer and save in new location
+        agent_save_path = os.path.join(self.temp_agent_dir, 'my_agent')
+        trainer_save_path = results['save_paths'][0]
+        agent = PPOAgent.from_trainer_path(trainer_save_path, 'ppo_bc')
+        agent.save(agent_save_path)
+
+        # Delete all previous PPO + BC data
+        shutil.rmtree(model_dir)
+        shutil.rmtree(self.temp_results_dir)
+
+        # Ensure agent loading still works
+        agent.load(agent_save_path)
+        
+    def test_ppo_bc_opt_agent_serialization(self):
+        # Train bc model
+        model_dir = self.temp_model_dir
+        params_to_override = { 
+            "layouts" : ['asymmetric_advantages_tomato'],
+            "data_path" : None,
+            "epochs" : 2
+        }
+        bc_params = get_bc_params(**params_to_override)
+        train_bc_model(model_dir, bc_params, verbose=False)
+
+        # Train sp "opt" model
+        config_updates={
+            "layout_name" : "asymmetric_advantages_tomato",
+            "experiment_name" : "my_sp_opt",
+            "results_dir": self.temp_results_dir,
+            "num_workers": 2,
+            "num_training_iters": 2,
+            "evaluation_interval": 10,
+            "evaluation_display": False,
+            "verbose" : False
+        }
+        results = ex.run(config_updates=config_updates, options={'--loglevel': 'ERROR'}).result
+        opt_path = results['save_paths'][0]
+
+        # Train rllib model
+        config_updates = {
+            "layout_name" : "asymmetric_advantages_tomato",
+            "bc_opt" : True,
+            "opt_path" : opt_path,
+            "bc_opt_cls_key" : "counters",
+            "results_dir" : self.temp_results_dir, 
+            "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], 
+            "num_training_iters" : 2, 
+            "bc_model_dir" : model_dir, 
+            "evaluation_interval" : 5,
+            "verbose" : False
+        }
+        results = ex.run(config_updates=config_updates, options={'--loglevel': 'ERROR'}).result
+
+        # Load agent from trainer and save in new location
+        agent_save_path = os.path.join(self.temp_agent_dir, 'my_agent')
+        trainer_save_path = results['save_paths'][0]
+        agent = PPOAgent.from_trainer_path(trainer_save_path, 'ppo_bc_opt')
+        agent.save(agent_save_path)
+
+        # Delete all previous PPO + BC + OPT data
+        shutil.rmtree(model_dir)
+        shutil.rmtree(self.temp_results_dir)
+
+        # Ensure agent loading still works
+        agent.load(agent_save_path)
 
 def _clear_pickle():
     # Write an empty dictionary to our static "expected" results location
@@ -491,6 +614,11 @@ if __name__ == '__main__':
 
     # Ficticious Self-play
     suite.addTest(TestPPORllib('test_ficticious_self_play', **args))
+
+    # Agent stuff
+    suite.addTest(TestPPORllib('test_ppo_sp_agent_serialization', **args))
+    suite.addTest(TestPPORllib('test_ppo_bc_agent_serialization', **args))
+    suite.addTest(TestPPORllib('test_ppo_bc_opt_agent_serialization', **args))
 
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)
