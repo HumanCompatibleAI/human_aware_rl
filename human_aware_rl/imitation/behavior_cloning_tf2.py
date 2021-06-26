@@ -11,7 +11,7 @@ from human_aware_rl.rllib.policies import StaticPolicy
 from human_aware_rl.rllib.policies import UniformPolicy as DummyOptPolicy
 from human_aware_rl.rllib.utils import get_base_env
 from human_aware_rl.data_dir import DATA_DIR
-from human_aware_rl.utils import recursive_dict_update, get_flattened_keys
+from human_aware_rl.utils import override_dict, get_flattened_keys
 from overcooked_ai_py.mdp.actions import Action
 from overcooked_ai_py.mdp.overcooked_env import DEFAULT_ENV_PARAMS
 
@@ -95,16 +95,12 @@ def get_bc_params(**args_to_override):
     if not _params_initalized:
         DEFAULT_BC_PARAMS['observation_shape'] = _get_observation_shape(DEFAULT_BC_PARAMS)
         _params_initalized = False
-    params = copy.deepcopy(DEFAULT_BC_PARAMS)
     
-    for arg, val in args_to_override.items():
-        updated = recursive_dict_update(params, arg, val)
-        if not updated:
-            print("WARNING, no value for specified bc argument {} found in schema. Adding as top level parameter".format(arg))
+    params = override_dict(DEFAULT_BC_PARAMS, **args_to_override)
     
     all_keys = get_flattened_keys(params)
     if len(all_keys) != len(set(all_keys)):
-        raise ValueError("Every key at every level must be distict for BC params!")
+        raise ValueError("Every key at every level must be distinct for BC params!")
     
     return params
 

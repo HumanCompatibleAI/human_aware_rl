@@ -11,7 +11,7 @@ from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
 from human_aware_rl.rllib.policies import UniformPolicy
 from human_aware_rl.rllib.utils import get_base_env, softmax, get_base_ae, get_required_arguments, iterable_equal, move_ppo_agent
-from human_aware_rl.utils import recursive_dict_update
+from human_aware_rl.utils import override_dict
 from datetime import datetime
 import tempfile
 import gym
@@ -908,10 +908,8 @@ def load_trainer_config(save_path, **params_to_override):
     config['training_params']['num_workers'] = 0
     config['logdir'] = experiment_dir
 
-    for param, val in params_to_override.items():
-        updated = recursive_dict_update(config, param, val)
-        if not updated:
-            print("WARNING, no value for specified bc argument {} found in schema. Adding as top level parameter".format(param))
+    # Override any other params specified by user
+    config = override_dict(config, **params_to_override)
 
     return config
 

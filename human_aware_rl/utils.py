@@ -1,6 +1,7 @@
 import os
 import re
 import git
+import copy
 import shutil
 import random
 import itertools
@@ -125,6 +126,14 @@ def get_flattened_keys(dictionary):
     if type(dictionary) != dict:
         return []
     return list(dictionary.keys()) + list(itertools.chain(*[get_flattened_keys(dictionary[key]) for key in dictionary]))
+
+def override_dict(map, **args_to_override):
+    map = copy.deepcopy(map)
+    for arg, val in args_to_override.items():
+        updated = recursive_dict_update(map, arg, val)
+        if not updated:
+            print("WARNING, no value for specified argument {} found in schema. Adding as top level parameter".format(arg))
+    return map
 
 def recursive_dict_update(map, key, value):
     if type(map) != dict:
