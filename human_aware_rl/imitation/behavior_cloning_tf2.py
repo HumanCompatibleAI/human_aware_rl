@@ -699,7 +699,7 @@ def main(epochs=75, dataset="train", layout='soup_coordination', hidden_size=64)
         "mdp_params": {'layout_name': layout},
         "epochs" : epochs,
         "num_games" : 25,
-        "every_nth" : 0,
+        "every_nth" : 25,
         "net_arch" : [hidden_size, hidden_size],
         "use_class_weights" : False, 
         "use_predict" : False
@@ -713,10 +713,10 @@ def main(epochs=75, dataset="train", layout='soup_coordination', hidden_size=64)
     return evaluate_bc_model(model, bc_params, verbose=True)
 
 if __name__ == "__main__":
-    epochs = [50]
-    datasets = ['train', 'test']
-    hidden_sizes = [128]
-    layouts = ['asymmetric_advantages_tomato']
+    epochs = [75, 100]
+    datasets = ['test']
+    hidden_sizes = [32, 256]
+    layouts = ['counter_circuit']
 
     params_combos = itertools.product(epochs, datasets, layouts, hidden_sizes)
     results = []

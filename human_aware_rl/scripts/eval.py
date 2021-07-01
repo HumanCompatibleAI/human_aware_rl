@@ -7,7 +7,7 @@ import json, argparse
 import numpy as np
 
 
-ALL_AGENTS = ['bc_test', 'ppo_bc', 'ppo_bc_opt', 'opt_fsp', 'rnd', 'opt_robust', 'opt_overfit', 'opt_overfit_1', 'bc_opt', 'bc_train']
+ALL_AGENTS = ['bc_test', 'ppo_bc', 'ppo_bc_opt', 'opt_fsp', 'rnd', 'opt_robust', 'opt_overfit', 'opt_overfit_1', 'bc_opt', 'bc_train', 'opt_sp']
 ALL_LAYOUTS = ['soup_coordination', 'asymmetric_advantages_tomato', 'counter_circuit']
 
 PATH_MAP = { layout : { agent_type : None for agent_type in ALL_AGENTS } for layout in ALL_LAYOUTS }
@@ -29,6 +29,8 @@ PATH_MAP['asymmetric_advantages_tomato']['ppo_bc_opt'] = '/Users/nathan/bair/ove
 PATH_MAP['asymmetric_advantages_tomato']['bc_opt'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_bc_opt_runs/asymmetric_advantages_tomato/ppo_bc_opt_prelim/checkpoint-1667'
 PATH_MAP['asymmetric_advantages_tomato']['opt_fsp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_fsp_runs/asymmeric_advantages_tomato/lr_7e-4_batch_6e4_N_per_check_41/checkpoint-833'
 
+PATH_MAP['counter_circuit']['opt_sp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/counter_circuit/gamma_0.98_lambda_0.90/checkpoint-416'
+
 OFF_DIST_STATE_PATHS = {
     'soup_coordination' : './off_dist_state.json',
     'asymmetric_advantages_tomato' : None
@@ -49,7 +51,8 @@ def load_agent_by_type(agent_type, layout):
     if agent_type == 'rnd':
         return RandomAgent(all_actions=True)
     elif agent_type.startswith('opt'):
-        return PPOAgent.from_trainer_path(PATH_MAP[layout][agent_type])
+        # return PPOAgent.from_trainer_path(PATH_MAP[layout][agent_type])
+        return PPOAgent.load('/Users/nathan/bair/overcooked/overcooked-demo/server/static/assets/agents/counter_circuit/ppo_sp')
     elif agent_type == 'bc_train' or agent_type == 'bc_test':
         return BehaviorCloningAgent.from_model_dir(PATH_MAP[layout][agent_type], use_predict=False)
     elif agent_type == 'bc_opt' or agent_type == 'ppo_bc' or agent_type == 'ppo_bc_opt':

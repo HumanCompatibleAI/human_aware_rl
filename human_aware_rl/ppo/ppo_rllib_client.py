@@ -27,11 +27,9 @@ if os.path.exists('slack.json') and not LOCAL_TESTING:
 # This is because rllib disables eager execution. Otherwise, it must be manually disabled
 import ray
 from ray.tune.result import DEFAULT_RESULTS_DIR
-from ray.tune.registry import register_env
-from ray.rllib.models import ModelCatalog
-from ray.rllib.agents.ppo.ppo import PPOTrainer
 from human_aware_rl.ppo.ppo_rllib import RllibPPOModel
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params
+from human_aware_rl.rllib.policies import UniformPolicy
 from human_aware_rl.rllib.meta_policies import EnsemblePolicy
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR, BernoulliBCSelfPlayOPTPolicy, OffDistCounterBCOPT
 
@@ -212,6 +210,7 @@ def my_config():
     # Rllib.Policy subclass to wrap BC_OPT policy in
     bc_opt_cls_key = 'counters'
 
+
     # Path to serialized pre-trained OPT agent
     opt_path = os.path.join(os.path.abspath("~"), 'ray_results', 'my_experiment')
 
@@ -272,6 +271,17 @@ def my_config():
     # value of bc_factor at timestep t_i. Values are linearly interpolated between points
     # The default listed below represents bc_factor=0 for all timesteps
     bc_schedule = OvercookedMultiAgent.self_play_bc_schedule
+
+    # sp_factor is the probability that ppo_fsp will be true sp for any given episode
+    # Encoded and interpreted the same way as bc_schedule
+    # Only valid when ficticious_self_play=True
+    sp_schedule = OvercookedMultiAgent.zero_schedule
+
+    # rnd_factor is the probability that any training run will include a random agent as part of the environment
+    # Encoded and interpreted the same way as bc_schedule
+    # Note: this is the fist schedule to be applied, that is, probability of an rnd agent is rnd_factor and probability of 
+    # a bc agent is (1 - rnd_factor) * bc_factor
+    rnd_schedule = OvercookedMultiAgent.zero_schedule
 
     # What index (0 or 1) the PPO agent should occupy for all episodes. -1 implies uniform sampling over possible indices
     ppo_idx = -1
@@ -356,7 +366,9 @@ def my_config():
             "potential_constants" : potential_constants,
             "bc_opt" : bc_opt,
             "ficticious_self_play" : ficticious_self_play,
-            "ppo_idx" : ppo_idx
+            "ppo_idx" : ppo_idx,
+            "sp_schedule" : sp_schedule,
+            "rnd_schedule" : rnd_schedule
         }
     }
 
@@ -416,11 +428,17 @@ def my_config():
         }
     }
 
+    rnd_params = {
+        "cls" : UniformPolicy,
+        "config" : {}
+    }
+
     policy_params = {
         "ppo" : ppo_params,
         "bc" : bc_params,
         "bc_opt" : bc_opt_params,
-        "ensemble_ppo" : ensemble_ppo_params
+        "ensemble_ppo" : ensemble_ppo_params,
+        "rnd" : rnd_params
     }
 
 

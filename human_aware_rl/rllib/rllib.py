@@ -261,7 +261,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
     """
 
     # List of all agent types currently supported
-    supported_agents = ['ppo', 'bc', 'bc_opt', 'ensemble_ppo']
+    supported_agents = ['ppo', 'bc', 'bc_opt', 'ensemble_ppo', 'rnd']
 
     # Default bc_schedule, includes no bc agent at any time
     bc_schedule = self_play_bc_schedule = zero_schedule = [(0, 0), (float('inf'), 0)]
@@ -298,7 +298,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
     def __init__(self, base_env, use_reward_shaping=False, reward_shaping_schedule=None,
                             use_potential_shaping=False, potential_shaping_schedule=None,
                             bc_schedule=None, gamma=0.99, potential_constants={},
-                            bc_opt=False, ficticious_self_play=False, ppo_idx=-1, **kwargs):
+                            bc_opt=False, ficticious_self_play=False, ppo_idx=-1, 
+                            sp_schedule=None, rnd_schedule=None, **kwargs):
         """
         base_env: OvercookedEnv
         reward_shaping_factor (float): Coefficient multiplied by dense reward before adding to sparse reward to determine shaped reward
@@ -309,6 +310,9 @@ class OvercookedMultiAgent(MultiAgentEnv):
         bc_opt (bool): Whether the BC agent (if present) is pure BC or BC_OPT meta-agent
         ficticious_self_play (bool): If True, other agent obs key titled 'ensemble_ppo'
         ppo_idx (int): Whether the ppo agent should be agent index 0 or 1. -1 indicates it should be shuffled each episode
+        sp_schedule (list[tuple]): List of (t_i, v_i) pairs where v_i represents the value of sp_factor at timestep t_i
+            Only relevant for ppo_fsp
+        TODO: convert all references of bc_schedule to 1 - sp_schedule
         """
         if use_reward_shaping and not reward_shaping_schedule:
             raise ValueError("must specify `reward_shaping_schedule` if `use_reward_shaping` is true")
@@ -320,10 +324,14 @@ class OvercookedMultiAgent(MultiAgentEnv):
         
         self.reward_shaping_schedule = reward_shaping_schedule if use_reward_shaping else self.zero_schedule
         self.potential_shaping_schedule = potential_shaping_schedule if use_potential_shaping else self.zero_schedule
+        self.sp_schedule = sp_schedule if sp_schedule else self.zero_schedule
+        self.rnd_schedule = rnd_schedule if rnd_schedule else self.zero_schedule
 
         self._validate_schedule(self.bc_schedule)
+        self._validate_schedule(self.sp_schedule)
         self._validate_schedule(self.reward_shaping_schedule)
         self._validate_schedule(self.potential_shaping_schedule)
+        self._validate_schedule(self.rnd_schedule)
         self.base_env = base_env
         self.gamma = gamma
         self.potential_constants = potential_constants
@@ -338,14 +346,13 @@ class OvercookedMultiAgent(MultiAgentEnv):
             "ensemble_ppo" : lambda state: self.base_env.lossless_state_encoding_mdp(state),
             "ppo": lambda state: self.base_env.lossless_state_encoding_mdp(state),
             "bc": lambda state: self.base_env.featurize_state_mdp(state),
+            "rnd" : lambda state : self.base_env.lossless_state_encoding_mdp(state),
             "bc_opt" : lambda state: OvercookedMultiAgent.bc_opt_featurize_fn(self.base_env, state)
         }
         self._validate_featurize_fns(self.featurize_fn_map)
         self._setup_observation_space()
         self.action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
-        self.anneal_bc_factor(0)
-        self.anneal_potential_shaping_factor(0)
-        self.anneal_reward_shaping_factor(0)
+        self.anneal_all_factors(0)
         self.reset()
 
     @classmethod
@@ -423,12 +430,17 @@ class OvercookedMultiAgent(MultiAgentEnv):
         ppo_idx = self.ppo_idx if self.ppo_idx >= 0 else np.random.randint(2)
         other_idx = 1 - ppo_idx
 
-        # Coin flip to determine whether other agent should be ppo or bc/bc_opt
+        # Coin flip to determine whether other agent should be ppo or bc/bc_opt | rnd
+        # Note, rnd check comes first
         include_bc = np.random.uniform() < self.bc_factor
-        if include_bc:
+        include_rnd = np.random.uniform() < self.rnd_factor
+        if include_rnd:
+            other_agent = 'rnd'
+        elif include_bc:
             other_agent = 'bc_opt' if self.bc_opt else 'bc'
         else:
-            other_agent = 'ensemble_ppo' if self.ficticious_self_play else 'ppo'
+            self_play = not self.ficticious_self_play or np.random.uniform() < self.sp_factor
+            other_agent = 'ppo' if self_play else 'ensemble_ppo'
         
         agents[ppo_idx] = 'ppo'
         agents[other_idx] = other_agent
@@ -526,6 +538,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.anneal_bc_factor(timesteps)
         self.anneal_potential_shaping_factor(timesteps)
         self.anneal_reward_shaping_factor(timesteps)
+        self.anneal_sp_factor(timesteps)
+        self.anneal_rnd_factor(timesteps)
     
     def anneal_reward_shaping_factor(self, timesteps):
         """
@@ -544,6 +558,22 @@ class OvercookedMultiAgent(MultiAgentEnv):
         new_factor = self._anneal_from_schedule(timesteps, self.bc_schedule)
         self.set_bc_factor(new_factor)
 
+    def anneal_sp_factor(self, timesteps):
+        """
+        Set self.sp_factor by linearly interpolating between points given in self.sp_schedule
+        """
+
+        new_factor = self._anneal_from_schedule(timesteps, self.sp_schedule)
+        self.set_sp_factor(new_factor)
+
+    def anneal_rnd_factor(self, timesteps):
+        """
+        Set self.rnd_factor by linearly interpolating between points given in self.rnd_schedule
+        """
+
+        new_factor = self._anneal_from_schedule(timesteps, self.rnd_schedule)
+        self.set_rnd_factor(new_factor)
+
     def anneal_potential_shaping_factor(self, timesteps):
         """
         Set the current potential shaping factor such that we anneal linearly according to self.potential_shaping_schedule
@@ -558,6 +588,12 @@ class OvercookedMultiAgent(MultiAgentEnv):
 
     def set_bc_factor(self, factor):
         self.bc_factor = factor
+
+    def set_sp_factor(self, factor):
+        self.sp_factor = factor
+
+    def set_rnd_factor(self, factor):
+        self.rnd_factor = factor
 
     def set_potential_shaping_factor(self, factor):
         self.potential_shaping_factor = factor
@@ -788,10 +824,6 @@ def gen_trainer_from_params(params):
     training_params = params['training_params']
     environment_params = params['environment_params']
     evaluation_params = params['evaluation_params']
-    # bc_params = params['bc_params']
-    # bc_opt_params = params['bc_opt_params']
-    # ppo_params = params['ppo_params']
-    # ensemble_ppo_params = params['ensemble_ppo_params']
     policy_params = params['policy_params']
     multi_agent_params = params['environment_params']['multi_agent_params']
 
@@ -811,6 +843,10 @@ def gen_trainer_from_params(params):
             policy_observation_space = env.ppo_observation_space
         elif policy_type == 'bc':
             policy_observation_space = env.bc_observation_space
+        elif policy_type == 'rnd':
+            # This doesn't really matter (should just be no-op), but ppo observations are already calculated 
+            # so it's more efficient than computing bc observations
+            policy_observation_space = env.ppo_observation_space 
         else:
             policy_observation_space = env.bc_opt_observation_space
         return (policy_cls, policy_observation_space, env.action_space, policy_config)
@@ -835,7 +871,7 @@ def gen_trainer_from_params(params):
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
-    all_policies = set(['ppo'])
+    all_policies = set(['ppo', 'rnd'])
     other_policy = 'ensemble_ppo' if multi_agent_params['ficticious_self_play'] else 'ppo'
 
     # Whether both agents should be learned
