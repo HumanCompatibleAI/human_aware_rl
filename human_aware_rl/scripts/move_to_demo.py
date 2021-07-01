@@ -10,8 +10,8 @@ def main(layout, agent_type, out_name):
     save_path = SAVE_PATH_TEMPLATE.format(layout, out_name)
     load_path = PATH_MAP[layout][agent_type]
     params_to_override = {
-        "model_dir" : PATH_MAP['soup_coordination']['bc_train'],
-        "opt_path" : PATH_MAP['soup_coordination']['opt_fsp']
+        "model_dir" : PATH_MAP[layout]['bc_train'],
+        "opt_path" : PATH_MAP[layout]['opt_fsp']
     }
 
     if agent_type.startswith('opt'):

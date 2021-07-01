@@ -8,7 +8,7 @@ import numpy as np
 
 
 ALL_AGENTS = ['bc_test', 'ppo_bc', 'ppo_bc_opt', 'opt_fsp', 'rnd', 'opt_robust', 'opt_overfit', 'opt_overfit_1', 'bc_opt', 'bc_train', 'opt_sp']
-ALL_LAYOUTS = ['soup_coordination', 'asymmetric_advantages_tomato', 'counter_circuit']
+ALL_LAYOUTS = ['soup_coordination', 'asymmetric_advantages_tomato', 'counter_circuit', 'you_shall_not_pass']
 
 PATH_MAP = { layout : { agent_type : None for agent_type in ALL_AGENTS } for layout in ALL_LAYOUTS }
 
@@ -30,6 +30,9 @@ PATH_MAP['asymmetric_advantages_tomato']['bc_opt'] = '/Users/nathan/bair/overcoo
 PATH_MAP['asymmetric_advantages_tomato']['opt_fsp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_fsp_runs/asymmeric_advantages_tomato/lr_7e-4_batch_6e4_N_per_check_41/checkpoint-833'
 
 PATH_MAP['counter_circuit']['opt_sp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/counter_circuit/gamma_0.98_lambda_0.90/checkpoint-416'
+
+PATH_MAP['you_shall_not_pass']['opt_sp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/you_shall_not_pass/lambda_0.9/checkpoint-416'
+PATH_MAP['you_shall_not_pass']['bc_train'] = None
 
 OFF_DIST_STATE_PATHS = {
     'soup_coordination' : './off_dist_state.json',

@@ -871,8 +871,12 @@ def gen_trainer_from_params(params):
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
-    all_policies = set(['ppo', 'rnd'])
+    all_policies = set(['ppo'])
     other_policy = 'ensemble_ppo' if multi_agent_params['ficticious_self_play'] else 'ppo'
+
+    needs_rnd = not iterable_equal(env.rnd_schedule, OvercookedMultiAgent.zero_schedule)
+    if needs_rnd:
+        all_policies.add('rnd')
 
     # Whether both agents should be learned
     self_play = iterable_equal(multi_agent_params['bc_schedule'], OvercookedMultiAgent.self_play_bc_schedule)
