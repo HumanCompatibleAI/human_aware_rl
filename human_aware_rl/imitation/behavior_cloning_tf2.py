@@ -45,7 +45,7 @@ DEFAULT_TRAINING_PARAMS = {
 
 DEFAULT_EVALUATION_PARAMS = {
     "ep_length" : 400,
-    "num_games" : 20,
+    "num_games" : 10,
     "display" : False
 }
 
@@ -141,8 +141,15 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
         inputs = preprocessed_data['inputs']
         seq_lens = preprocessed_data['seq_lens']
         targets = preprocessed_data['targets']
+        # whether to use test dataset
+        test_eval = True
+        inputs_test = preprocessed_data['inputs_test']
+        seq_lens_test = preprocessed_data['seq_lens_test']
+        targets_test = preprocessed_data['targets_test']
     else:
         inputs, seq_lens, targets = load_data(bc_params, verbose)
+        test_eval = False
+        inputs_test, seq_lens_test, targets_test = None, None, None
 
     training_params = bc_params["training_params"]
 
@@ -218,16 +225,36 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
 
     # Batch size doesn't include time dimension (seq_len) so it should be smaller for rnn model
     batch_size = 1 if bc_params['use_lstm'] else training_params['batch_size']
+    print("XXXXXXXXXXXXXXXXXXXXXXXXXXbatchsize", batch_size)
     best_eval_score_so_far = 0
     eval_scores = []
+    train_losses = []
+    train_accuracies = []
+    test_losses = []
+    test_accuracies = []
 
     for i in range(training_params['epochs']//training_params['slice_freq']):
         print("slice", i)
-        print(eval_scores)
-        model.fit(inputs, targets, callbacks=callbacks, batch_size=batch_size,
+        print("EVAL_SCORES", eval_scores)
+        print("TRAIN_LOSSES", train_losses)
+        print("TRAIN_ACCURACIES", train_accuracies)
+        print("TEST_LOSSES", test_losses)
+        print("TEST_ACCURACIES", test_accuracies)
+        train_history = model.fit(inputs, targets, callbacks=callbacks, batch_size=batch_size,
                     epochs=training_params['slice_freq'], validation_split=training_params["validation_split"],
                     class_weight=class_weights,
                     verbose=2 if verbose else 0)
+
+        train_losses.append(train_history.history['loss'][-1])
+        train_accuracies.append(train_history.history['sparse_categorical_accuracy'][-1])
+
+        # calculate losses on the test set if using test_eval
+        if test_eval:
+            test_res= model.evaluate(inputs_test, targets_test, verbose=0)
+            test_losses.append(test_res[0])
+            test_accuracies.append(test_res[1])
+
+        # run some evaluation games to get validation rewards
         eval_score = evaluate_bc_model(model, bc_params)
         # save the best bc model
         if eval_score > best_eval_score_so_far:
@@ -236,10 +263,26 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
             save_bc_model(model_dir, model, bc_params)
         best_eval_score_so_far = max(eval_score, best_eval_score_so_far)
         eval_scores.append(eval_score)
+
+
+
     print("FINAL EVAL_SCORES", eval_scores)
+    print("FINAL TRAIN_LOSSES", train_losses)
+    print("FINAL TRAIN_ACCURACIES", train_accuracies)
+    print("FINAL TEST_LOSSES", test_losses)
+    print("FINAL TEST_ACCURACIES", test_accuracies)
+
+    training_stats = {
+        "val_reward": eval_scores,
+        "train_losses": train_losses,
+        "train_accuracies": train_accuracies,
+        "test_losses": test_losses,
+        "test_accuracies": test_accuracies
+    }
+
     # save the eval scores as a pickle file
-    with open(model_dir + '/eval_scores.pickle', 'wb') as handle:
-        pickle.dump(eval_scores, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(model_dir + '/training_stats.pickle', 'wb') as handle:
+        pickle.dump(training_stats, handle, protocol=pickle.HIGHEST_PROTOCOL)
     best_model = load_bc_model(model_dir)
     return best_model
     
