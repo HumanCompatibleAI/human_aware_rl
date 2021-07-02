@@ -30,6 +30,7 @@ PATH_MAP['asymmetric_advantages_tomato']['bc_opt'] = '/Users/nathan/bair/overcoo
 PATH_MAP['asymmetric_advantages_tomato']['opt_fsp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_fsp_runs/asymmeric_advantages_tomato/lr_7e-4_batch_6e4_N_per_check_41/checkpoint-833'
 
 PATH_MAP['counter_circuit']['opt_sp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/counter_circuit/gamma_0.98_lambda_0.90/checkpoint-416'
+PATH_MAP['counter_circuit']['opt_fsp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_fsp_runs/counter_circuit/lambda_0.9/checkpoint-833'
 
 PATH_MAP['you_shall_not_pass']['opt_sp'] = '/Users/nathan/bair/overcooked/human_aware_rl/human_aware_rl/data/ppo_sp_runs/you_shall_not_pass/lambda_0.9/checkpoint-416'
 PATH_MAP['you_shall_not_pass']['bc_train'] = None
@@ -49,7 +50,7 @@ def eval(agent_0_type, agent_1_type, layout, num_games, off_dist_start):
     results = rollout(pair, layout, num_games, off_dist_start)
     analyze(results)
 
-def load_agent_by_type(agent_type, layout):
+def load_agent_by_type(agent_type, layout, use_predict=False):
     print("Loading {} agent".format(agent_type))
     if agent_type == 'rnd':
         return RandomAgent(all_actions=True)
@@ -57,7 +58,7 @@ def load_agent_by_type(agent_type, layout):
         # return PPOAgent.from_trainer_path(PATH_MAP[layout][agent_type])
         return PPOAgent.load('/Users/nathan/bair/overcooked/overcooked-demo/server/static/assets/agents/counter_circuit/ppo_sp')
     elif agent_type == 'bc_train' or agent_type == 'bc_test':
-        return BehaviorCloningAgent.from_model_dir(PATH_MAP[layout][agent_type], use_predict=False)
+        return BehaviorCloningAgent.from_model_dir(PATH_MAP[layout][agent_type], use_predict=use_predict)
     elif agent_type == 'bc_opt' or agent_type == 'ppo_bc' or agent_type == 'ppo_bc_opt':
         bc_opt_trainer_params_to_override = {
             "model_dir" : PATH_MAP[layout]['bc_train'],
@@ -66,13 +67,14 @@ def load_agent_by_type(agent_type, layout):
         return PPOAgent.from_trainer_path(PATH_MAP[layout][agent_type], agent_type=agent_type, trainer_params_to_override=bc_opt_trainer_params_to_override)
 
 def load_pair_by_type(type_0, type_1, layout):
+    bc_sp = type_0.startswith('bc') and type_1.startswith('bc')
     # BC must load second to avoid having graph overriden by rllib loading routine
     if type_0.startswith('bc'):
-        agent_1 = load_agent_by_type(type_1, layout)
-        agent_0 = load_agent_by_type(type_0, layout)
+        agent_1 = load_agent_by_type(type_1, layout, use_predict=not bc_sp)
+        agent_0 = load_agent_by_type(type_0, layout, use_predict=not bc_sp)
     else:
-        agent_0 = load_agent_by_type(type_0, layout)
-        agent_1 = load_agent_by_type(type_1, layout)
+        agent_0 = load_agent_by_type(type_0, layout, use_predict=not bc_sp)
+        agent_1 = load_agent_by_type(type_1, layout, use_predict=not bc_sp)
     pair = AgentPair(agent_0, agent_1)
     pair.reset()
     return pair

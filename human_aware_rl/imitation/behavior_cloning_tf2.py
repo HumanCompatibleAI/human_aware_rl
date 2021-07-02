@@ -618,12 +618,10 @@ class BehaviorCloningAgent(RlLibAgent):
 
     model_dir_name = 'model'
 
-    def __init__(self, policy, agent_index, featurize_fn, stochastic=True, **kwargs):
+    def __init__(self, policy, agent_index, featurize_fn, stochastic=True, model_dir=None, root_dir=None, **kwargs):
         super(BehaviorCloningAgent, self).__init__(policy, agent_index, featurize_fn, stochastic)
-        self.stochastic = stochastic
-
-    def __update_model_from_dir__(self, model_dir):
-        self.policy = BehaviorCloningPolicy.from_model_dir(model_dir, self.stochastic)
+        self.root_dir = root_dir
+        self._model_dir = model_dir
 
     @classmethod
     def from_model_dir(cls, model_dir, agent_index=0, stochastic=True, **kwargs):
@@ -631,7 +629,7 @@ class BehaviorCloningAgent(RlLibAgent):
         dummy_env = get_base_env(policy.bc_params['mdp_params'], policy.bc_params['env_params'])
         def featurize_fn(state):
             return dummy_env.featurize_state_mdp(state)
-        return cls(policy, agent_index, featurize_fn, stochastic)
+        return cls(policy, agent_index, featurize_fn, stochastic, model_dir, None)
 
     @classmethod
     def from_model(cls, model, bc_params, agent_index=0, stochastic=True):
@@ -645,11 +643,30 @@ class BehaviorCloningAgent(RlLibAgent):
             return dummy_env.featurize_state_mdp(state)
         return cls(policy, agent_index, featurize_fn, policy.stochastic)
 
+    @classmethod
+    def _update_paths(cls, obj, new_root_dir):
+        obj._model_dir = None
+        obj.root_dir = new_root_dir
+
+    @property
+    def model_dir(self):
+        if self._model_dir:
+            return self._model_dir
+        if self.root_dir:
+            return os.path.join(self.root_dir, self.model_dir_name)
+        return None
+
+    def _update_model_from_dir(self, model_dir):
+        self.policy = BehaviorCloningPolicy.from_model_dir(model_dir, self.stochastic)
+        return self
+
     def __getstate__(self):
         return {
             "stochastic" : self.stochastic,
             "agent_index" : self.agent_index,
-            "featurize_fn" : self.featurize_fn
+            "featurize_fn" : self.featurize_fn,
+            "root_dir" : self.root_dir,
+            "_model_dir" : self._model_dir
         }
 
     def __setstate__(self, state):
@@ -661,15 +678,16 @@ class BehaviorCloningAgent(RlLibAgent):
         # Basic type check
         if os.path.isfile(save_dir):
             raise IOError("Must specify a path to directory! Got: {}".format(save_dir))
-        # parse paths
-        new_model_dir = os.path.join(save_dir, self.model_dir_name)
+        
+        # Update all paths based on new root directory
+        BehaviorCloningAgent._update_paths(self, save_dir)
 
         # Create all needed directories
         if not os.path.exists(save_dir):
             os.path.os.makedirs(save_dir)
         
-        # Copy over serialized bc model + update path pointer
-        save_bc_model(new_model_dir, self.policy.my_model, self.policy.bc_params)
+        # Copy over serialized bc model
+        save_bc_model(self.model_dir, self.policy.my_model, self.policy.bc_params)
 
         # Dump instance variables in pickle file
         return super().save(save_dir)
@@ -677,16 +695,15 @@ class BehaviorCloningAgent(RlLibAgent):
     @classmethod
     def load(cls, path):
         # Super class loader, un-pickles all keys returns by __get_state__
-        obj = RlLibAgent.load(path)
+        if os.path.isfile(path):
+            path = os.path.dirname(path)
+        obj = super().load(path)
 
-        # BehaviorCloningAgents specifically require a little extra work
-        if isinstance(obj, BehaviorCloningAgent):
-            agent_dir = path if os.path.isdir(path) else os.path.dirname(path)
-            model_dir = os.path.join(agent_dir, cls.model_dir_name)
-            if not os.path.exists(model_dir):
-                raise IOError("BC Model dir {} not found!")
-            obj.__update_model_from_dir__(model_dir)
-        return obj
+        if path != obj.root_dir:
+            cls._update_paths(obj, path)
+
+        return obj._update_model_from_dir(obj.model_dir)
+        
         
 
 

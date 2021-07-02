@@ -1,8 +1,9 @@
 import unittest, os, shutil, copy, pickle, random, argparse, sys
 import numpy as np
+from overcooked_ai_py.agents.agent import AgentPair
 import tensorflow as tf
 from human_aware_rl.utils import set_global_seed
-from human_aware_rl.rllib.utils import get_base_env
+from human_aware_rl.rllib.utils import get_base_ae, get_base_env
 from human_aware_rl.rllib.rllib import OvercookedMultiAgent, RlLibAgent
 from human_aware_rl.imitation.behavior_cloning_tf2 import BC_SAVE_DIR, get_bc_params, train_bc_model, build_bc_model, save_bc_model, load_bc_model, evaluate_bc_model, DummyOffDistCounterBCOPT, BehaviorCloningAgent
 from human_aware_rl.human.process_dataframes import get_trajs_from_data
@@ -213,7 +214,7 @@ class TestBCAgent(unittest.TestCase):
         self.model_temp_dir = os.path.join(BC_SAVE_DIR, 'my_temp_model')
         self.agent_temp_dir = os.path.join(os.path.abspath('.'), 'my_temp_agent')
         self.bc_params = get_bc_params(**params_to_override)
-        self.base_env = get_base_env(self.bc_params['mdp_params'], self.bc_params['env_params'])
+        self.ae = get_base_ae(self.bc_params['mdp_params'], self.bc_params['env_params'])
 
     def tearDown(self):
         if os.path.exists(self.model_temp_dir):
@@ -221,36 +222,53 @@ class TestBCAgent(unittest.TestCase):
         if os.path.exists(self.agent_temp_dir):
             shutil.rmtree(self.agent_temp_dir)
 
+    def _assert_same_policy(self, agent_0, agent_1):
+        # Ensure both agents are the same policy
+        agent_0.stochastic = False
+        agent_1.stochastic = False
+        pair_0 = AgentPair(agent_0, agent_0, allow_duplicate_agents=True)
+        trajectory_0 = self.ae.evaluate_agent_pair(pair_0, 1, info=False)['ep_states']
+        pair_1 = AgentPair(agent_1, agent_1, allow_duplicate_agents=True)
+        trajectory_1 = self.ae.evaluate_agent_pair(pair_1, 1, info=False)['ep_states']
+        self.assertTrue(np.array_equal(trajectory_0, trajectory_1))
+
     
     def test_from_model_save_load(self):
         model = train_bc_model(self.model_temp_dir, self.bc_params)
         agent = BehaviorCloningAgent.from_model(model, self.bc_params, stochastic=False).reset()
         restored_agent = BehaviorCloningAgent.load(agent.save(self.agent_temp_dir)).reset()
 
-        state = self.base_env.reset()
-        done = False
-        while not done:
-            self.assertFalse(agent.stochastic)
-            self.assertFalse(restored_agent.stochastic)
-            self.assertEqual(0, agent.agent_index)
-            self.assertEqual(0, restored_agent.agent_index)
-            action, _ = agent.action(state)
-            restored_action, _ = restored_agent.action(state)
-            state, _, done, _ = self.base_env.step((action, restored_action))
-            self.assertEqual(action, restored_action)
+        self._assert_same_policy(agent, restored_agent)
 
     def test_from_model_dir_save_load(self):
         train_bc_model(self.model_temp_dir, self.bc_params)
         agent = BehaviorCloningAgent.from_model_dir(self.model_temp_dir, stochastic=False).reset()
         restored_agent = BehaviorCloningAgent.load(agent.save(self.agent_temp_dir)).reset()
 
-        state = self.base_env.reset()
-        done = False
-        while not done:
-            action, _ = agent.action(state)
-            restored_action, _ = restored_agent.action(state)
-            state, _, done, _ = self.base_env.step((action, restored_action))
-            self.assertEqual(action, restored_action)
+        self._assert_same_policy(agent, restored_agent)
+
+    def test_bc_load_isolation(self):
+        # Define some paths
+        pre_trained_model_dir = os.path.join(self.model_temp_dir, 'old')
+        agent_path = os.path.join(self.agent_temp_dir, 'old')
+        copied_agent_path = os.path.join(self.agent_temp_dir, 'copied')
+
+        # Train + load agent then save it in new location
+        train_bc_model(pre_trained_model_dir, self.bc_params)
+        agent = BehaviorCloningAgent.from_model_dir(pre_trained_model_dir, stochastic=False)
+        agent.save(agent_path)
+
+        # Copy agent to new location and delete all old files
+        shutil.copytree(agent_path, copied_agent_path)
+        shutil.rmtree(self.model_temp_dir)
+        shutil.rmtree(agent_path)
+
+        # Ensure we can load from copied location (no pointers to old location)
+        restored_agent = BehaviorCloningAgent.load(copied_agent_path)
+
+        self._assert_same_policy(agent, restored_agent)
+
+        
 
 def _clear_pickle():
     with open(BC_EXPECTED_DATA_PATH, 'wb') as f:
@@ -274,18 +292,19 @@ if __name__ == '__main__':
 
     suite = unittest.TestSuite()
 
-    # BC Model tests
-    suite.addTest(TestBCTraining('test_model_construction', **args))
-    suite.addTest(TestBCTraining('test_save_and_load', **args))
-    suite.addTest(TestBCTraining('test_training', **args))
-    suite.addTest(TestBCTraining('test_agent_evaluation', **args))
+    # # BC Model tests
+    # suite.addTest(TestBCTraining('test_model_construction', **args))
+    # suite.addTest(TestBCTraining('test_save_and_load', **args))
+    # suite.addTest(TestBCTraining('test_training', **args))
+    # suite.addTest(TestBCTraining('test_agent_evaluation', **args))
 
-    # BC_OPT Tests
-    suite.addTest(TestBCOpt('test_off_dist_mask', **args))
+    # # BC_OPT Tests
+    # suite.addTest(TestBCOpt('test_off_dist_mask', **args))
 
     # BC Agent tests
-    suite.addTest(TestBCAgent('test_from_model_save_load', **args))
-    suite.addTest(TestBCAgent('test_from_model_dir_save_load', **args))
+    # suite.addTest(TestBCAgent('test_from_model_save_load', **args))
+    # suite.addTest(TestBCAgent('test_from_model_dir_save_load', **args))
+    suite.addTest(TestBCAgent('test_bc_load_isolation', **args))
 
     # LSTM tests break on older versions of tensorflow so be careful with this
     if args['run_lstm_tests']:
