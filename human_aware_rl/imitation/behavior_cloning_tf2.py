@@ -40,7 +40,8 @@ DEFAULT_TRAINING_PARAMS = {
     "validation_split" : 0.15,
     "batch_size" : 64,
     "learning_rate" : 5e-4,
-    "use_class_weights" : False
+    "use_class_weights" : False,
+    "single_traj" : False
 }
 
 DEFAULT_EVALUATION_PARAMS = {
@@ -50,6 +51,7 @@ DEFAULT_EVALUATION_PARAMS = {
 }
 
 DEFAULT_BC_PARAMS = {
+    "lossless_feature": False,
     "eager" : True,
     "use_lstm" : False,
     "cell_size" : 256,
@@ -77,7 +79,10 @@ def _get_observation_shape(bc_params):
     base_ae = _get_base_ae(bc_params)
     base_env = base_ae.env
     dummy_state = base_env.mdp.get_standard_start_state()
-    obs_shape = base_env.featurize_state_mdp(dummy_state)[0].shape
+    if bc_params["lossless_feature"]:
+        obs_shape = base_env.lossless_state_encoding_mdp(dummy_state)[0].shape
+    else:
+        obs_shape = base_env.featurize_state_mdp(dummy_state)[0].shape
     return obs_shape
 
 # For lazing loading the default params. Prevents loading on every import of this module
@@ -122,13 +127,17 @@ def load_data(bc_params, verbose):
     else:
         return np.vstack(inputs), None, np.vstack(targets)
 
-def build_bc_model(use_lstm=True, eager=False, **kwargs):
+def build_bc_model(use_lstm=True, eager=False, lossless_feature=False, **kwargs):
     if not eager:
         tf.compat.v1.disable_eager_execution()
-    if use_lstm:
-        return _build_lstm_model(**kwargs)
+
+    if lossless_feature:
+        return _build_lossless_model(**kwargs)
     else:
-        return _build_model(**kwargs)
+        if use_lstm:
+            return _build_lstm_model(**kwargs)
+        else:
+            return _build_model(**kwargs)
 
 def initialized_bc_model(model_dir, bc_params):
     model = build_bc_model(**bc_params)
@@ -225,17 +234,35 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
 
     # Batch size doesn't include time dimension (seq_len) so it should be smaller for rnn model
     batch_size = 1 if bc_params['use_lstm'] else training_params['batch_size']
-    print("XXXXXXXXXXXXXXXXXXXXXXXXXXbatchsize", batch_size)
     best_eval_score_so_far = 0
+
     eval_scores = []
+    eval_scores_ses = []
     train_losses = []
     train_accuracies = []
     test_losses = []
     test_accuracies = []
 
+    initial_train_loss, initial_train_accuracy = model.evaluate(inputs, targets, verbose=0)
+    train_losses.append(initial_train_loss)
+    train_accuracies.append(initial_train_accuracy)
+
+    initial_eval_score, initial_eval_score_se = evaluate_bc_model(model, bc_params)
+    eval_scores.append(initial_eval_score)
+    eval_scores_ses.append(initial_eval_score_se)
+
+    if test_eval:
+        initial_test_loss, initial_test_accuracy = model.evaluate(inputs_test, targets_test, verbose=0)
+        test_losses.append(initial_test_loss)
+        test_accuracies.append(initial_test_accuracy)
+
+    # save the initial model so we always have something
+    save_bc_model(model_dir, model, bc_params)
+
     for i in range(training_params['epochs']//training_params['slice_freq']):
         print("slice", i)
         print("EVAL_SCORES", eval_scores)
+        print("EVAL_SCORES_SES", eval_scores_ses)
         print("TRAIN_LOSSES", train_losses)
         print("TRAIN_ACCURACIES", train_accuracies)
         print("TEST_LOSSES", test_losses)
@@ -255,7 +282,7 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
             test_accuracies.append(test_res[1])
 
         # run some evaluation games to get validation rewards
-        eval_score = evaluate_bc_model(model, bc_params)
+        eval_score, eval_score_se = evaluate_bc_model(model, bc_params)
         # save the best bc model
         if eval_score > best_eval_score_so_far:
             # Save the model
@@ -263,17 +290,21 @@ def train_bc_model(model_dir, bc_params, verbose=False, preprocessed_data=None):
             save_bc_model(model_dir, model, bc_params)
         best_eval_score_so_far = max(eval_score, best_eval_score_so_far)
         eval_scores.append(eval_score)
-
+        eval_scores_ses.append(eval_score_se)
 
 
     print("FINAL EVAL_SCORES", eval_scores)
+    print("FINAL EVAL_SCORES_SES", eval_scores_ses)
     print("FINAL TRAIN_LOSSES", train_losses)
     print("FINAL TRAIN_ACCURACIES", train_accuracies)
     print("FINAL TEST_LOSSES", test_losses)
     print("FINAL TEST_ACCURACIES", test_accuracies)
 
     training_stats = {
+        "seed": seed,
+        "slice_freq": training_params['slice_freq'],
         "val_reward": eval_scores,
+        "val_reward_se": eval_scores_ses,
         "train_losses": train_losses,
         "train_accuracies": train_accuracies,
         "test_losses": test_losses,
@@ -346,12 +377,17 @@ def evaluate_bc_model(model, bc_params):
     """
     evaluation_params = bc_params['evaluation_params']
     mdp_params = bc_params['mdp_params']
+    lossless_feature = bc_params['lossless_feature']
 
     # Get reference to state encoding function used by bc agents, with compatible signature
     base_ae = _get_base_ae(bc_params)
     base_env = base_ae.env
     def featurize_fn(state):
-        return base_env.featurize_state_mdp(state)
+        if lossless_feature:
+            o1, o2 = base_env.lossless_state_encoding_mdp(state)
+            return [np.cast['float16'](o1), np.cast['float16'](o2)]
+        else:
+            return base_env.featurize_state_mdp(state)
 
     # Wrap Keras models in rllib policies
     agent_0_policy = BehaviorCloningPolicy.from_model(model, bc_params, stochastic=True)
@@ -368,7 +404,8 @@ def evaluate_bc_model(model, bc_params):
 
     # Compute the average sparse return obtained in each rollout
     reward = np.mean(results['ep_returns'])
-    return reward
+    std = np.std(results['ep_returns'])/np.sqrt(len(results['ep_returns']))
+    return (reward, std)
 
 def _build_model(observation_shape, action_shape, mlp_params, **kwargs):
     ## Inputs
@@ -387,34 +424,99 @@ def _build_model(observation_shape, action_shape, mlp_params, **kwargs):
 
     return keras.Model(inputs=inputs, outputs=logits)
 
-def _build_lstm_model(observation_shape, action_shape, mlp_params, cell_size, max_seq_len=20, **kwargs):
+DEFAULT_LOSSLESS_BC_PARAMS = {
+    "NUM_HIDDEN_LAYERS": 3,
+    "SIZE_HIDDEN_LAYERS": 64,
+    "NUM_FILTERS": 25,
+    "NUM_CONV_LAYERS": 3
+}
+
+# largely the same as ppo_rllib. #TODO: merge the two function
+# If you are getting an cuDNN error, look into https://github.com/tensorflow/tensorflow/issues/24828
+# the best solution I found was https://github.com/tensorflow/tensorflow/issues/24828#issuecomment-742469380
+def _build_lossless_model(observation_shape, action_shape, **kwargs):
     ## Inputs
-    obs_in = keras.Input(shape=(None, *observation_shape), name="Overcooked_observation")
-    seq_in = keras.Input(shape=(), name="seq_in", dtype=tf.int32)
-    h_in = keras.Input(shape=(cell_size,), name="hidden_in")
-    c_in = keras.Input(shape=(cell_size,), name="memory_in")
-    x = obs_in
+    num_hidden_layers = DEFAULT_LOSSLESS_BC_PARAMS['NUM_HIDDEN_LAYERS']
+    size_hidden_layers = DEFAULT_LOSSLESS_BC_PARAMS['SIZE_HIDDEN_LAYERS']
+    num_filters = DEFAULT_LOSSLESS_BC_PARAMS['NUM_FILTERS']
+    num_convs = DEFAULT_LOSSLESS_BC_PARAMS['NUM_CONV_LAYERS']
 
-    ## Build fully connected layers
-    assert len(mlp_params["net_arch"]) == mlp_params["num_layers"], "Invalid Fully Connected params"
+    ## Create graph of custom network. It will under a shared tf scope such that all agents
+    ## use the same model
+    inputs = keras.Input(shape=observation_shape, name="Overcooked_observation") # matching this function's signature
+    out = inputs
 
-    for i in range(mlp_params["num_layers"]):
-        units = mlp_params["net_arch"][i]
-        x = keras.layers.TimeDistributed(keras.layers.Dense(units, activation="relu", name="fc_{0}".format(i)))(x)
+    # Apply initial conv layer with a larger kenel (why?)
+    if num_convs > 0:
+        out = keras.layers.Conv2D(
+            filters=num_filters,
+            kernel_size=[5, 5],
+            padding='same',
+            activation=tf.nn.leaky_relu,
+            name='conv_initial'
+        )(out)
 
-    mask = keras.layers.Lambda(lambda x : tf.sequence_mask(x, maxlen=max_seq_len))(seq_in)
+    # Apply remaining conv layers, if any
+    for i in range(0, num_convs - 1):
+        padding = 'same' if i < num_convs - 2 else 'valid'
+        out = keras.layers.Conv2D(
+            filters=num_filters,
+            kernel_size=[3, 3],
+            padding=padding,
+            activation=tf.nn.leaky_relu,
+            name='conv_{}'.format(i)
+        )(out)
 
-    ## LSTM layer
-    lstm_out, h_out, c_out = keras.layers.LSTM(cell_size, return_sequences=True, return_state=True, stateful=False, name="lstm")(
-        inputs=x,
-        mask=mask,
-        initial_state=[h_in, c_in]
-    )
+    # Apply dense hidden layers, if any
+    out = keras.layers.Flatten()(out)
+    for i in range(num_hidden_layers):
+        out = keras.layers.Dense(
+            size_hidden_layers,
+            name=f'dense_{i}',
+        )(out)
+        out = keras.layers.LeakyReLU()(out)
 
-    ## output layer
-    logits = keras.layers.TimeDistributed(keras.layers.Dense(action_shape[0]), name="logits")(lstm_out)
+    # Linear last layer for action distribution logits
+    layer_out = keras.layers.Dense(
+        action_shape[0], # matching this function's signature
+        name="logits",  # matching this function's signature
+    )(out)
 
-    return keras.Model(inputs=[obs_in, seq_in, h_in, c_in], outputs=[logits, h_out, c_out])
+    # Linear last layer for value function branch of model, never used here
+    value_out = keras.layers.Dense(1, name='value_head')(out)
+
+    base_model = keras.Model(inputs=inputs, outputs=layer_out)
+    return base_model
+
+# # temporarily deprecated due to uncentainty about compatibility
+# def _build_lstm_model(observation_shape, action_shape, mlp_params, cell_size, max_seq_len=20, **kwargs):
+#     ## Inputs
+#     obs_in = keras.Input(shape=(None, *observation_shape), name="Overcooked_observation")
+#     seq_in = keras.Input(shape=(), name="seq_in", dtype=tf.int32)
+#     h_in = keras.Input(shape=(cell_size,), name="hidden_in")
+#     c_in = keras.Input(shape=(cell_size,), name="memory_in")
+#     x = obs_in
+#
+#     ## Build fully connected layers
+#     assert len(mlp_params["net_arch"]) == mlp_params["num_layers"], "Invalid Fully Connected params"
+#
+#     for i in range(mlp_params["num_layers"]):
+#         units = mlp_params["net_arch"][i]
+#         x = keras.layers.TimeDistributed(keras.layers.Dense(units, activation="relu", name="fc_{0}".format(i)))(x)
+#
+#     mask = keras.layers.Lambda(lambda x : tf.sequence_mask(x, maxlen=max_seq_len))(seq_in)
+#
+#     ## LSTM layer
+#     lstm_out, h_out, c_out = keras.layers.LSTM(cell_size, return_sequences=True, return_state=True, stateful=False, name="lstm")(
+#         inputs=x,
+#         mask=mask,
+#         initial_state=[h_in, c_in]
+#     )
+#
+#     ## output layer
+#     logits = keras.layers.TimeDistributed(keras.layers.Dense(action_shape[0]), name="logits")(lstm_out)
+#
+#     return keras.Model(inputs=[obs_in, seq_in, h_in, c_in], outputs=[logits, h_out, c_out])
 
 
 
