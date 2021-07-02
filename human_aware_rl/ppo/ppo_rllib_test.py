@@ -276,7 +276,7 @@ class TestPPORllib(unittest.TestCase):
     
         # Train rllib model
         config_updates = { 
-            "layout_name" : inverse_marshmallow_experiment,
+            "layout_name" : "inverse_marshmallow_experiment",
             "results_dir" : self.temp_results_dir, 
             "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], 
             "num_training_iters" : 20, 
@@ -324,6 +324,7 @@ class TestPPORllib(unittest.TestCase):
 
         # Train rllib model
         config_updates = {
+            "layout_name" : "soup_coordination",
             "bc_opt" : True,
             "opt_path" : opt_path,
             "bc_opt_cls_key" : 'bernoulli',
