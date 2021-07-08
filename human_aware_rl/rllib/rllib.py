@@ -704,6 +704,13 @@ def save_trainer(trainer, params, path=None):
     # Note that we use dill (not pickle) here because it supports function serialization
     with open(config_path, "wb") as f:
         dill.dump(config, f)
+
+    # also saving the weights from the trainer in dictionary form
+    weights = trainer.get_weights(["ppo"])
+    weights_path = os.path.join(os.path.dirname(save_path), "weights.pkl")
+    with open(weights_path, "wb") as f:
+        dill.dump(weights, f)
+
     return save_path
 
 def load_trainer(save_path, custom_config=None, load_only=False):
