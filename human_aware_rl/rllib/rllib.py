@@ -4,6 +4,7 @@ from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, EVENT_TYPES
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.layout_generator import DEFAILT_PARAMS_SCHEDULE_FN
 from overcooked_ai_py.agents.agent import Agent, AgentPair
+from overcooked_ai_py.utils import save_as_json
 from ray.tune.registry import register_env
 from ray.tune.logger import UnifiedLogger
 from ray.tune.result import DEFAULT_RESULTS_DIR
@@ -683,7 +684,7 @@ def gen_trainer_from_params(params, load_only=False):
 ### Serialization ###
 
 
-def save_trainer(trainer, params, path=None):
+def save_trainer(trainer, params, path=None, early_stopping_info=None):
     """
     Saves a serialized trainer checkpoint at `path`. If none provided, the default path is
     ~/ray_results/<experiment_results_dir>/checkpoint_<i>/checkpoint-<i>
@@ -710,6 +711,10 @@ def save_trainer(trainer, params, path=None):
     weights_path = os.path.join(os.path.dirname(save_path), "weights.pkl")
     with open(weights_path, "wb") as f:
         dill.dump(weights, f)
+
+    if early_stopping_info:
+        early_stopping_info_path = os.path.join(os.path.dirname(save_path), "early_stopping_info")
+        save_as_json(early_stopping_info, early_stopping_info_path)
 
     return save_path
 
