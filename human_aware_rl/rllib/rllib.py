@@ -4,7 +4,7 @@ from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, EVENT_TYPES
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai_py.mdp.layout_generator import DEFAILT_PARAMS_SCHEDULE_FN
 from overcooked_ai_py.agents.agent import Agent, AgentPair
-from overcooked_ai_py.utils import save_as_json
+from overcooked_ai_py.utils import save_as_json, save_pickle, load_pickle
 from ray.tune.registry import register_env
 from ray.tune.logger import UnifiedLogger
 from ray.tune.result import DEFAULT_RESULTS_DIR
@@ -207,8 +207,12 @@ class OvercookedMultiAgent(MultiAgentEnv):
                 return lambda state: self.base_env.lossless_state_encoding_mdp(state)
             else:
                 return lambda state: self.base_env.featurize_state_mdp(state)
+        # TODO: allow this to be different from the ppo case
         elif agent_id.startswith('bc'):
-            return self.featurize_fn_map['bc']
+            if self.featurization_type == "lossless":
+                return lambda state: self.base_env.lossless_state_encoding_mdp(state)
+            else:
+                return lambda state: self.base_env.featurize_state_mdp(state)
         elif agent_id.startswith('tom'):
             return self.featurize_fn_map['tom']
         else:
@@ -502,7 +506,20 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         if 'bc' in policies:
             base_ae = get_base_ae(eval_mdp_params, env_params)
             base_env = base_ae.env
-            bc_featurize_fn = lambda state : base_env.featurize_state_mdp(state)
+
+            # specified bc_featurization_type
+            if 'bc_featurization_type' in eval_params:
+                bc_featurization_type = eval_params['bc_featurization_type']
+                print("bc_featurization_type is specified in the eval_params, so using %s" % bc_featurization_type)
+                if bc_featurization_type == "lossless":
+                    bc_featurize_fn = lambda state: base_env.lossless_state_encoding_mdp(state)
+                elif bc_featurization_type == "handcrafted":
+                    bc_featurize_fn = lambda state: base_env.featurize_state_mdp(state)
+                else:
+                    raise NotImplementedError("Unseen bc_featurization type %s" % bc_featurization_type)
+            else:
+                bc_featurize_fn = lambda state: base_env.featurize_state_mdp(state)
+
             if policies[0] == 'bc':
                 agent_0_feat_fn = bc_featurize_fn
             if policies[1] == 'bc':
@@ -706,11 +723,20 @@ def save_trainer(trainer, params, path=None, early_stopping_info=None):
     with open(config_path, "wb") as f:
         dill.dump(config, f)
 
-    # also saving the weights from the trainer in dictionary form
-    weights = trainer.get_weights(["ppo"])
-    weights_path = os.path.join(os.path.dirname(save_path), "weights.pkl")
-    with open(weights_path, "wb") as f:
-        dill.dump(weights, f)
+    # also saving the ppo and bc weights from the trainer in dictionary form
+    weights = trainer.get_policy("ppo").get_weights()
+    weights_path = os.path.join(os.path.dirname(save_path), "weights")
+    save_pickle(weights, weights_path)
+
+    # also saving the bc weight for sanity checks
+    bc_weights = trainer.get_policy("bc").get_weights()
+    bc_weights_path = os.path.join(os.path.dirname(save_path), "bc_weights")
+    save_pickle(bc_weights, bc_weights_path)
+
+    # also keep track of model params
+    model_params = params["model_params"]
+    model_params_path = os.path.join(os.path.dirname(save_path), "model_params")
+    save_pickle(model_params, model_params_path)
 
     if early_stopping_info:
         early_stopping_info_path = os.path.join(os.path.dirname(save_path), "early_stopping_info")
