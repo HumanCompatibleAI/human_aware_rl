@@ -504,7 +504,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
 
         agent_0_feat_fn = agent_1_feat_fn = None
         if 'bc' in policies:
-            base_ae = get_base_ae(eval_mdp_params, env_params)
+            base_ae = get_base_ae(eval_mdp_params, env_params, outer_shape=outer_shape)
             base_env = base_ae.env
 
             # specified bc_featurization_type
