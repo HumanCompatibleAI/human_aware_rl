@@ -12,7 +12,7 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
-from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal, DEFAULT_BC_DATA_DIR, DEFAULT_TOM_PARAMS
+from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal, DEFAULT_BC_DATA_DIR
 from datetime import datetime
 import tempfile
 import gym
@@ -95,13 +95,16 @@ class OvercookedMultiAgent(MultiAgentEnv):
     """
 
     # List of all agent types currently supported
-    supported_agents = ['ppo', 'bc', 'tom']
+    supported_agents = ['ppo', 'bc', 'tom', 'greedy']
 
     # Default bc_schedule, includes no bc agent at any time
     bc_schedule = self_play_bc_schedule = [(0, 0), (float('inf'), 0)]
 
     # Default tom_schedule, includes no tom agent at any time
     tom_schedule = self_play_tom_schedule = [(0, 0), (float('inf'), 0)]
+
+    # Default greedy_schedule, includes no tom agent at any time
+    greedy_schedule = self_play_greedy_schedule = [(0, 0), (float('inf'), 0)]
 
     # Default environment params used for creation
     DEFAULT_CONFIG = {
@@ -125,7 +128,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
     }
 
     def __init__(self, base_env, reward_shaping_factor=0.0, reward_shaping_horizon=0,
-                            bc_schedule=None, tom_schedule=None, use_phi=True, featurization_type='lossless'):
+                            bc_schedule=None, tom_schedule=None, greedy_schedule=None, use_phi=True, featurization_type='lossless'):
         """
         base_env: OvercookedEnv
         reward_shaping_factor (float): Coefficient multiplied by dense reward before adding to sparse reward to determine shaped reward
@@ -141,6 +144,9 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.tom_schedule = tom_schedule if tom_schedule else OvercookedMultiAgent.self_play_tom_schedule
         self._validate_schedule(self.tom_schedule)
 
+        self.greedy_schedule = greedy_schedule if greedy_schedule else OvercookedMultiAgent.self_play_greedy_schedule
+        self._validate_schedule(self.greedy_schedule)
+
         self.base_env = base_env
         # since we are not passing featurize_fn in as an argument, we create it here and check its validity
         assert featurization_type in ["lossless", "handcrafted"]
@@ -150,6 +156,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
             "ppo": ppo_featurize_fn,
             "bc": lambda state: self.base_env.featurize_state_mdp(state),
             "tom": lambda state: self.base_env.lossless_state_encoding_mdp(state),
+            "greedy": lambda state: self.base_env.lossless_state_encoding_mdp(state),
         }
         self._validate_featurize_fns(self.featurize_fn_map)
         self._initial_reward_shaping_factor = reward_shaping_factor
@@ -160,6 +167,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
         self.anneal_bc_factor(0)
         self.anneal_tom_factor(0)
+        self.anneal_greedy_factor(0)
         self.reset()
     
     def _validate_featurize_fns(self, mapping):
@@ -215,6 +223,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
                 return lambda state: self.base_env.featurize_state_mdp(state)
         elif agent_id.startswith('tom'):
             return self.featurize_fn_map['tom']
+        elif agent_id.startswith('greedy'):
+            return self.featurize_fn_map['greedy']
         else:
             raise ValueError("Unsupported agent type {0}".format(agent_id))
 
@@ -225,11 +235,12 @@ class OvercookedMultiAgent(MultiAgentEnv):
         return ob_p0, ob_p1
 
     def _normalize_factors(self):
-        if self.bc_factor + self.tom_factor > 1:
-            normalization = 1/(self.bc_factor + self.tom_factor)
+        if self.bc_factor + self.tom_factor + self.greedy_factor > 1:
+            normalization = 1/(self.bc_factor + self.tom_factor + self.greedy_factor)
             self.bc_factor *= normalization
             self.tom_factor *= normalization
-        assert self.bc_factor + self.tom_factor <= 1
+            self.greedy_factor *= normalization
+        assert (self.bc_factor + self.tom_factor + self.greedy_factor) <= 1
 
     def _populate_agents(self):
         # Always include at least one ppo agent (i.e. bc_sp not supported for simplicity)
@@ -238,11 +249,13 @@ class OvercookedMultiAgent(MultiAgentEnv):
         # Coin flip to determine whether other agent should be ppo or bc or tom
         rd = np.random.uniform()
         self._normalize_factors()
-        if rd <= self.bc_factor + self.tom_factor:
+        if rd <= self.bc_factor + self.tom_factor + self.greedy_factor:
             if rd < self.bc_factor:
                 other_agent = 'bc'
-            else:
+            elif rd <= self.bc_factor + self.tom_factor:
                 other_agent = 'tom'
+            else:
+                other_agent = 'greedy'
         else:
             other_agent = 'ppo'
 
@@ -364,6 +377,26 @@ class OvercookedMultiAgent(MultiAgentEnv):
 
     def set_tom_factor(self, factor):
         self.tom_factor = factor
+
+    def anneal_greedy_factor(self, timesteps):
+        """
+        Set the current bc factor such that we anneal linearly until self.tom_factor_horizon
+        timesteps, given that we are currently at timestep "timesteps"
+        """
+        p_0 = self.greedy_schedule[0]
+        p_1 = self.greedy_schedule[1]
+        i = 2
+        while timesteps > p_1[0] and i < len(self.greedy_schedule):
+            p_0 = p_1
+            p_1 = self.greedy_schedule[i]
+            i += 1
+        start_t, start_v = p_0
+        end_t, end_v = p_1
+        new_factor = self._anneal(start_v, timesteps, end_t, end_v, start_t)
+        self.set_greedy_factor(new_factor)
+
+    def set_greedy_factor(self, factor):
+        self.greedy_factor = factor
 
     def set_reward_shaping_factor(self, factor):
         self.reward_shaping_factor = factor
