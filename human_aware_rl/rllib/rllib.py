@@ -13,6 +13,7 @@ from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
 from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal, DEFAULT_BC_DATA_DIR
+from human_aware_rl.rllib.default_params import DEFAULT_TOM_PARAMS
 from datetime import datetime
 import tempfile
 import gym

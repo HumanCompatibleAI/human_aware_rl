@@ -1,4 +1,4 @@
-from human_aware_rl_adaption.tom.tom_policy import ToMPolicy, GreedyPolicy
+from human_aware_rl_adaption.traditional.traditional_policy import ToMPolicy, GreedyPolicy
 
 DEFAULT_TOM_PARAMS = {
     "tom_policy_cls": ToMPolicy,
@@ -23,13 +23,15 @@ DEFAULT_TOM_PARAMS = {
 
 }
 
-
 DEFAULT_GREEDY_PARAMS = {
     "greedy_policy_cls": GreedyPolicy,
     "greedy_config": {
         "greedy_attributes": {
+            "hl_boltzmann_rational": False,
+            "ll_boltzmann_rational": False,
             "hl_temp": 1,
             "ll_temp": 1,
+            "auto_unstuck": True,
             "prob_wait": 0.5
         }
     }
