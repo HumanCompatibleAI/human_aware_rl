@@ -129,7 +129,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
     }
 
     def __init__(self, base_env, reward_shaping_factor=0.0, reward_shaping_horizon=0,
-                            bc_schedule=None, tom_schedule=None, greedy_schedule=None, use_phi=True, featurization_type='lossless'):
+                            bc_schedule=None, tom_schedule=None, greedy_schedule=None, use_phi=True, featurization_type='lossless', bc_featurization_type='lossless'):
         """
         base_env: OvercookedEnv
         reward_shaping_factor (float): Coefficient multiplied by dense reward before adding to sparse reward to determine shaped reward
@@ -151,11 +151,18 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.base_env = base_env
         # since we are not passing featurize_fn in as an argument, we create it here and check its validity
         assert featurization_type in ["lossless", "handcrafted"]
-        self.featurization_type = featurization_type
-        ppo_featurize_fn = lambda state: self.base_env.lossless_state_encoding_mdp(state) if featurization_type == "lossless" else lambda state: self.base_env.featurize_state_mdp(state)
+        self.ppo_featurization_type = featurization_type
+        ppo_featurize_fn = lambda state: self.base_env.lossless_state_encoding_mdp(
+            state) if featurization_type == "lossless" else lambda state: self.base_env.featurize_state_mdp(state)
+
+        assert bc_featurization_type in ["lossless", "handcrafted"]
+        self.bc_featurization_type = bc_featurization_type
+        bc_featurize_fn = lambda state: self.base_env.lossless_state_encoding_mdp(
+            state) if bc_featurization_type == "lossless" else lambda state: self.base_env.featurize_state_mdp(state)
+
         self.featurize_fn_map = {
             "ppo": ppo_featurize_fn,
-            "bc": lambda state: self.base_env.featurize_state_mdp(state),
+            "bc": bc_featurize_fn,
             "tom": lambda state: self.base_env.lossless_state_encoding_mdp(state),
             "greedy": lambda state: self.base_env.lossless_state_encoding_mdp(state),
         }
@@ -212,13 +219,12 @@ class OvercookedMultiAgent(MultiAgentEnv):
 
     def _get_featurize_fn(self, agent_id):
         if agent_id.startswith('ppo'):
-            if self.featurization_type == "lossless":
+            if self.ppo_featurization_type == "lossless":
                 return lambda state: self.base_env.lossless_state_encoding_mdp(state)
             else:
                 return lambda state: self.base_env.featurize_state_mdp(state)
-        # TODO: allow this to be different from the ppo case
         elif agent_id.startswith('bc'):
-            if self.featurization_type == "lossless":
+            if self.bc_featurization_type == "lossless":
                 return lambda state: self.base_env.lossless_state_encoding_mdp(state)
             else:
                 return lambda state: self.base_env.featurize_state_mdp(state)
@@ -587,8 +593,10 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
     evaluator = get_base_ae(mdp_params, {"horizon" : eval_params['ep_length'], "num_mdp":1}, outer_shape)
 
     # Override pre-processing functions with defaults if necessary
-    agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else evaluator.env.lossless_state_encoding_mdp
-    agent_1_featurize_fn = agent_1_featurize_fn if agent_1_featurize_fn else evaluator.env.lossless_state_encoding_mdp
+    agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else \
+        evaluator.env.lossless_state_encoding_mdp if agent_0_policy.model.use_lossless else evaluator.env.featurize_state_mdp
+    agent_1_featurize_fn = agent_1_featurize_fn if agent_1_featurize_fn else \
+        evaluator.env.lossless_state_encoding_mdp if agent_1_policy.model.use_lossless else evaluator.env.featurize_state_mdp
 
     # Wrap rllib policies in overcooked agents to be compatible with Evaluator code
     agent0 = RlLibAgent(agent_0_policy, agent_index=0, featurize_fn=agent_0_featurize_fn)
