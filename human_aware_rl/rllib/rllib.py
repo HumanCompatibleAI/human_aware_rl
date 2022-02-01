@@ -193,8 +193,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
     def _get_obs(self, state):
         ob_p0 = self._get_featurize_fn(self.curr_agents[0])(state)[0]
         ob_p1 = self._get_featurize_fn(self.curr_agents[1])(state)[1]
-
-        return ob_p0, ob_p1
+        return ob_p0.astype(np.float32), ob_p1.astype(np.float32)
 
     def _populate_agents(self):
         # Always include at least one ppo agent (i.e. bc_sp not supported for simplicity)
