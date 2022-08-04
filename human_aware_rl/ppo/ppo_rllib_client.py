@@ -57,6 +57,9 @@ def _env_creator(env_config):
 
 @ex.config
 def my_config():
+    ### Resume chekpoint_path ###
+    resume_checkpoint_path = None
+
     ### Model params ###
 
     # Whether dense reward should come from potential function or not
@@ -317,6 +320,7 @@ def my_config():
         "seeds" : seeds,
         "results_dir" : results_dir,
         "ray_params" : ray_params,
+        "resume_checkpoint_path": resume_checkpoint_path,
         "verbose" : verbose
     }
 
