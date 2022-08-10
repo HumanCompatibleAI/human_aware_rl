@@ -32,7 +32,7 @@ from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from human_aware_rl.ppo.ppo_rllib import RllibPPOModel, RllibLSTMPPOModel
-from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params
+from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params, load_trainer
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR
 
 
@@ -83,6 +83,9 @@ def naive_params_schedule_fn(outside_information):
 
 @ex_fp.config
 def my_config():
+    ### Resume chekpoint_path ###
+    resume_checkpoint_path = None
+
     ### Model params ###
 
     # whether to use recurrence in ppo model
@@ -368,6 +371,7 @@ def my_config():
         "temp_dir" : temp_dir,
         "results_dir" : results_dir,
         "ray_params" : ray_params,
+        "resume_checkpoint_path": resume_checkpoint_path,
         "verbose" : verbose
     }
 
@@ -377,8 +381,14 @@ def _env_creater(env_config):
 
 
 def run(params):
-    # Retrieve the tune.Trainable object that is used for the experiment
-    trainer = gen_trainer_from_params(params)
+
+    # Check if any resume checkpoint given
+    saved_path = params["resume_checkpoint_path"]
+    if saved_path:
+        trainer = load_trainer(save_path=saved_path, true_num_workers=True)
+    else:
+        # Retrieve the tune.Trainable object that is used for the experiment
+        trainer = gen_trainer_from_params(params)
 
     # Object to store training results in
     result = {}
