@@ -10,6 +10,7 @@ from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import tensorflow as tf
 import numpy as np
+import json
 
 # Note: using the same seed across architectures can still result in differing values
 def set_global_seed(seed):
@@ -35,7 +36,7 @@ class TestPPORllib(unittest.TestCase):
         self.compute_pickle = compute_pickle
         self.strict = strict
         self.min_performance = min_performance
-    
+
     def setUp(self):
         set_global_seed(0)
 
@@ -57,13 +58,13 @@ class TestPPORllib(unittest.TestCase):
 
     def tearDown(self):
         # Write results of this test to disk for future reproducibility tests
-        # Note: This causes unit tests to have a side effect (generally frowned upon) and only works because 
+        # Note: This causes unit tests to have a side effect (generally frowned upon) and only works because
         #   unittest is single threaded. If tests were run concurrently this could result in a race condition!
         if self.compute_pickle:
             with open(PPO_EXPECTED_DATA_PATH, 'wb') as f:
                 pickle.dump(self.expected, f)
-        
-        # Cleanup 
+
+        # Cleanup
         shutil.rmtree(self.temp_results_dir)
         shutil.rmtree(self.temp_model_dir)
         ray.shutdown()
@@ -144,7 +145,7 @@ class TestPPORllib(unittest.TestCase):
 
         if self.compute_pickle:
             self.expected['test_ppo_sp_no_phi'] = results
-        
+
         # Reproducibility test
         if self.strict:
             self.assertDictEqual(results, self.expected['test_ppo_sp_no_phi'])
@@ -249,34 +250,62 @@ class TestPPORllib(unittest.TestCase):
     def test_ppo_bc(self):
         # Train bc model
         model_dir = self.temp_model_dir
-        params_to_override = { 
+        params_to_override = {
             "layouts" : ['inverse_marshmallow_experiment'],
             "data_path" : None,
             "epochs" : 10
         }
         bc_params = get_bc_params(**params_to_override)
         train_bc_model(model_dir, bc_params)
-    
+
         # Train rllib model
-        config_updates = { 
-            "results_dir" : self.temp_results_dir, 
-            "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)], 
-            "num_training_iters" : 20, 
-            "bc_model_dir" : model_dir, 
+        config_updates = {
+            "results_dir" : self.temp_results_dir,
+            "bc_schedule" : [(0.0, 0.0), (8e3, 1.0)],
+            "num_training_iters" : 20,
+            "bc_model_dir" : model_dir,
             "evaluation_interval" : 5,
             "verbose" : False
         }
         results = ex.run(config_updates=config_updates, options={'--loglevel': 'ERROR'}).result
-    
+
         # Sanity check
         self.assertGreaterEqual(results['average_total_reward'], self.min_performance)
-    
+
         if self.compute_pickle:
             self.expected['test_ppo_bc'] = results
-    
+
         # Reproducibility test
         if self.strict:
             self.assertDictEqual(results, self.expected['test_ppo_bc'])
+
+    def test_resume_functionality(self):
+        load_path = os.path.join(os.path.abspath('.'), 'trained_example/cramped_room/checkpoint-500')
+        # Load and train an agent for another iteration
+        results = ex_fp.run(
+            config_updates={
+                "results_dir": self.temp_results_dir,
+                "num_workers": 1,
+                "num_training_iters": 1,
+                "resume_checkpoint_path": load_path,
+                "verbose": False
+            },
+            options={'--loglevel': 'ERROR'}
+        ).result
+
+        #Test that the rewards from 1 additional iteration are not too different from the original model
+        #performance
+
+        threshold = 0.1
+
+        with open('trained_example/cramped_room/result.json') as f:
+            j = json.loads(f.readlines()[-1])
+            #Test total reward
+            self.assertAlmostEqual(j['episode_reward_mean'], results['average_total_reward'],
+                                   delta=threshold * j['episode_reward_mean'])
+            #Test sparse reward
+            self.assertAlmostEqual(j['custom_metrics']['sparse_reward_mean'], results['average_sparse_reward'],
+                                   delta=threshold * j['custom_metrics']['sparse_reward_mean'])
 
 def _clear_pickle():
     # Write an empty dictionary to our static "expected" results location
@@ -302,6 +331,8 @@ if __name__ == '__main__':
     suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
     suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
     suite.addTest(TestPPORllib('test_ppo_bc', **args))
+    suite.addTest(TestPPORllib('test_resume_functionality', **args))
+
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
     sys.exit(not success)
         
