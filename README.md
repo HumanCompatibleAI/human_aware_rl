@@ -120,8 +120,8 @@ You can also try to train agents for 5 classical layouts
 (harl_rllib) ppo $ bash run_experiments.sh
 ```
 
-Please select the correct `num_workers` parameter, otherwise the training of the agents wouldn't be able to start.
-
+Please choose the `num_workers` parameters to be less than the number of CPUs on your machine. For more information
+check the ray [documentation](https://docs.ray.io/en/latest/rllib/rllib-training.html)
 
 # Repo Structure Overview
 

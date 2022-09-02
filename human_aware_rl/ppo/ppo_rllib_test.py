@@ -10,7 +10,7 @@ from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import tensorflow as tf
 import numpy as np
-import json
+from human_aware_rl.utils import get_last_episode_rewards
 
 # Note: using the same seed across architectures can still result in differing values
 def set_global_seed(seed):
@@ -298,14 +298,14 @@ class TestPPORllib(unittest.TestCase):
 
         threshold = 0.1
 
-        with open('trained_example/cramped_room/result.json') as f:
-            j = json.loads(f.readlines()[-1])
-            #Test total reward
-            self.assertAlmostEqual(j['episode_reward_mean'], results['average_total_reward'],
-                                   delta=threshold * j['episode_reward_mean'])
-            #Test sparse reward
-            self.assertAlmostEqual(j['custom_metrics']['sparse_reward_mean'], results['average_sparse_reward'],
-                                   delta=threshold * j['custom_metrics']['sparse_reward_mean'])
+        rewards = get_last_episode_rewards('trained_example/cramped_room/result.json')
+
+        #Test total reward
+        self.assertAlmostEqual(rewards['episode_reward_mean'], results['average_total_reward'],
+                                   delta=threshold * rewards['episode_reward_mean'])
+        #Test sparse reward
+        self.assertAlmostEqual(rewards['sparse_reward_mean'], results['average_sparse_reward'],
+                                   delta=threshold * rewards['sparse_reward_mean'])
 
 def _clear_pickle():
     # Write an empty dictionary to our static "expected" results location
