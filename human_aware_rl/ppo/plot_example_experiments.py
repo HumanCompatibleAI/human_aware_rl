@@ -18,7 +18,7 @@ def get_list_experiments(path):
 
 def get_statistics(dict):
     for env in dict:
-        rewards = [get_last_episode_rewards(file+'/result.json')['episode_reward_mean'] for file in dict[env]['files']]
+        rewards = [get_last_episode_rewards(file+'/result.json')['sparse_reward_mean'] for file in dict[env]['files']]
         dict[env]['rewards'] = rewards
         dict[env]['std'] = np.std(rewards)
         dict[env]['mean'] = np.mean(rewards)
@@ -44,11 +44,10 @@ def plot_statistics(dict):
 
     # Save the figure and show
     plt.tight_layout()
-    plt.savefig('rewards.png')
+    plt.savefig('example_rewards.png')
     plt.show()
 
 if __name__ == "__main__":
     experiments = get_list_experiments('results')
     experiments_results = get_statistics(experiments)
-    print(experiments_results['cramped_room']['std'])
     plot_statistics(experiments_results)
