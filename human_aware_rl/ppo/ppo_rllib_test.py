@@ -282,6 +282,7 @@ class TestPPORllib(unittest.TestCase):
     def test_resume_functionality(self):
 
         load_path = os.path.join(os.path.abspath('.'), 'trained_example/cramped_room/checkpoint-500')
+        print(load_path)
         # Load and train an agent for another iteration
         results = ex_fp.run(
             config_updates={
@@ -327,12 +328,12 @@ if __name__ == '__main__':
         _clear_pickle()
 
     suite = unittest.TestSuite()
-    suite.addTest(TestPPORllib('test_save_load', **args))
-    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
-    suite.addTest(TestPPORllib('test_ppo_bc', **args))
+    # suite.addTest(TestPPORllib('test_save_load', **args))
+    # suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
+    # suite.addTest(TestPPORllib('test_ppo_bc', **args))
     suite.addTest(TestPPORllib('test_resume_functionality', **args))
 
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
