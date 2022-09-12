@@ -284,6 +284,8 @@ class TestPPORllib(unittest.TestCase):
         load_path = os.path.join(os.path.abspath('.'), 'trained_example/cramped_room/checkpoint-500')
         print(load_path)
         # Load and train an agent for another iteration
+        os.environ["TUNE_DISABLE_AUTO_CALLBACK_LOGGERS"] = "1"
+
         results = ex_fp.run(
             config_updates={
                 "results_dir": self.temp_results_dir,
@@ -291,6 +293,7 @@ class TestPPORllib(unittest.TestCase):
                 "num_training_iters": 1,
                 "resume_checkpoint_path": load_path,
                 "verbose": False,
+                "log_to_driver": False,
                 "evaluation_display": False
             },
             options={'--loglevel': 'ERROR'}
