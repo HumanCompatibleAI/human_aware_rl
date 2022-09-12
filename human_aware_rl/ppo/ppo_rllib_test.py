@@ -280,6 +280,8 @@ class TestPPORllib(unittest.TestCase):
             self.assertDictEqual(results, self.expected['test_ppo_bc'])
 
     def test_resume_functionality(self):
+        if not os.path.exists(self.temp_results_dir):
+            os.makedirs(self.temp_results_dir)
         load_path = os.path.join(os.path.abspath('.'), 'trained_example/cramped_room/checkpoint-500')
         # Load and train an agent for another iteration
         results = ex_fp.run(
