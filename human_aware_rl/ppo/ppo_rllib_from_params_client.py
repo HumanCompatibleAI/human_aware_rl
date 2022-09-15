@@ -32,7 +32,7 @@ from ray.tune.registry import register_env
 from ray.rllib.models import ModelCatalog
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from human_aware_rl.ppo.ppo_rllib import RllibPPOModel, RllibLSTMPPOModel
-from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params, load_trainer
+from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params, load_trainer, load_trainer_unittest
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR
 
 
@@ -384,8 +384,14 @@ def run(params):
 
     # Check if any resume checkpoint given
     saved_path = params["resume_checkpoint_path"]
+    # Check if we load from unit test
+    unit_test = params["unit_test"]
+
     if saved_path:
-        trainer = load_trainer(save_path=saved_path, true_num_workers=True)
+        if unit_test:
+            trainer = load_trainer(save_path=saved_path, true_num_workers=True, unit_test=True)
+        else:
+            trainer = load_trainer(save_path=saved_path, true_num_workers=True)
     else:
         # Retrieve the tune.Trainable object that is used for the experiment
         trainer = gen_trainer_from_params(params)

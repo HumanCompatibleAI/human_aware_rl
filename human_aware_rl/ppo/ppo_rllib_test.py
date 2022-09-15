@@ -41,15 +41,11 @@ class TestPPORllib(unittest.TestCase):
         set_global_seed(0)
 
         # Temporary disk space to store logging results from tests
-        self.temp_dir = os.path.join(os.path.abspath('.'), 'temp_dir')
         self.temp_results_dir = os.path.join(os.path.abspath('.'), 'results_temp')
         self.temp_model_dir = os.path.join(os.path.abspath('.'), 'model_temp')
 
 
         # Make all necessary directories
-        if not os.path.exists(self.temp_dir):
-            os.makedirs(self.temp_dir)
-
         if not os.path.exists(self.temp_model_dir):
             os.makedirs(self.temp_model_dir)
 
@@ -69,7 +65,6 @@ class TestPPORllib(unittest.TestCase):
                 pickle.dump(self.expected, f)
 
         # Cleanup
-        shutil.rmtree(self.temp_dir)
         shutil.rmtree(self.temp_results_dir)
         shutil.rmtree(self.temp_model_dir)
         ray.shutdown()
@@ -296,9 +291,10 @@ class TestPPORllib(unittest.TestCase):
                 "results_dir": self.temp_results_dir,
                 "num_workers": 1,
                 "num_training_iters": 1,
-                # "resume_checkpoint_path": load_path,
+                "resume_checkpoint_path": load_path,
                 "verbose": False,
-                "evaluation_display": False
+                "evaluation_display": False,
+                "unit_test": True
             },
             options={'--loglevel': 'ERROR'}
         ).result
