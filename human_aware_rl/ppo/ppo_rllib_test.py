@@ -291,8 +291,7 @@ class TestPPORllib(unittest.TestCase):
                 "results_dir": self.temp_results_dir,
                 "num_workers": 1,
                 "num_training_iters": 1,
-                "resume_checkpoint_path": load_path,
-                "bc_model_dir": load_path,
+                # "resume_checkpoint_path": load_path,
                 "verbose": False,
                 "evaluation_display": False
             },
