@@ -551,12 +551,14 @@ def gen_trainer_from_params(params):
                 """Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
                 """
                 results_dir = params['results_dir']
+                print(results_dir)
                 if not os.path.exists(results_dir):
                     try:
                         os.makedirs(results_dir)
                     except Exception as e:
                         print("error creating custom logging dir. Falling back to default logdir {}".format(DEFAULT_RESULTS_DIR))
                         results_dir = DEFAULT_RESULTS_DIR
+                        print(results_dir)
                 logdir = tempfile.mkdtemp(
                     prefix=logdir_prefix, dir=results_dir)
                 logger = UnifiedLogger(config, logdir, loggers=None)
