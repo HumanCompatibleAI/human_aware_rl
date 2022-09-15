@@ -649,7 +649,7 @@ def load_trainer(save_path, true_num_workers=False):
     trainer.restore(save_path)
     return trainer
 
-def load_trainer(save_path, true_num_workers=False, unit_test=False):
+def load_trainer(save_path, true_num_workers=False):
     """
     Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
     Note that `save_path` is the full path to the checkpoint FILE, not the checkpoint directory
@@ -667,7 +667,7 @@ def load_trainer(save_path, true_num_workers=False, unit_test=False):
         # Override this param to lower overhead in trainer creation
         config['training_params']['num_workers'] = 0
 
-    if unit_test:
+    if "trained_example" in save_path:
         # For the unit testing we update the result directory in order to avoid an error
         config['results_dir'] = "/Users/runner/work/human_aware_rl/human_aware_rl/human_aware_rl/ppo/results_temp"
 

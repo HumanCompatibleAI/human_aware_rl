@@ -384,14 +384,9 @@ def run(params):
 
     # Check if any resume checkpoint given
     saved_path = params["resume_checkpoint_path"]
-    # Check if we load from unit test
-    unit_test = params["unit_test"]
 
     if saved_path:
-        if unit_test:
-            trainer = load_trainer(save_path=saved_path, true_num_workers=True, unit_test=True)
-        else:
-            trainer = load_trainer(save_path=saved_path, true_num_workers=True)
+        trainer = load_trainer(save_path=saved_path, true_num_workers=True)
     else:
         # Retrieve the tune.Trainable object that is used for the experiment
         trainer = gen_trainer_from_params(params)

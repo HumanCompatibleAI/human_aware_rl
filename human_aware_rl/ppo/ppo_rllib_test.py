@@ -294,7 +294,6 @@ class TestPPORllib(unittest.TestCase):
                 "resume_checkpoint_path": load_path,
                 "verbose": False,
                 "evaluation_display": False,
-                "unit_test": True
             },
             options={'--loglevel': 'ERROR'}
         ).result
