@@ -41,11 +41,15 @@ class TestPPORllib(unittest.TestCase):
         set_global_seed(0)
 
         # Temporary disk space to store logging results from tests
+        self.temp_dir = os.path.join(os.path.abspath('.'), 'temp_dir')
         self.temp_results_dir = os.path.join(os.path.abspath('.'), 'results_temp')
         self.temp_model_dir = os.path.join(os.path.abspath('.'), 'model_temp')
 
 
         # Make all necessary directories
+        if not os.path.exists(self.temp_dir):
+            os.makedirs(self.temp_dir)
+
         if not os.path.exists(self.temp_model_dir):
             os.makedirs(self.temp_model_dir)
 
@@ -65,6 +69,7 @@ class TestPPORllib(unittest.TestCase):
                 pickle.dump(self.expected, f)
 
         # Cleanup
+        shutil.rmtree(self.temp_dir)
         shutil.rmtree(self.temp_results_dir)
         shutil.rmtree(self.temp_model_dir)
         ray.shutdown()
@@ -281,7 +286,7 @@ class TestPPORllib(unittest.TestCase):
 
     def test_resume_functionality(self):
 
-        load_path = os.path.join(os.path.abspath('.'), 'trained_example/cramped_room/checkpoint-500')
+        load_path = os.path.join(os.path.abspath('.'), 'trained_example/PPO_cramped_room_False_nw=0_vf=0.000100_es=0.200000_en=0.000500_kl=0.200000/checkpoint-500')
         print(load_path)
         # Load and train an agent for another iteration
         os.environ["TUNE_DISABLE_AUTO_CALLBACK_LOGGERS"] = "1"
@@ -291,7 +296,7 @@ class TestPPORllib(unittest.TestCase):
                 "results_dir": self.temp_results_dir,
                 "num_workers": 1,
                 "num_training_iters": 1,
-                # "resume_checkpoint_path": load_path,
+                "resume_checkpoint_path": load_path,
                 "verbose": False,
                 "evaluation_display": False
             },
@@ -303,7 +308,7 @@ class TestPPORllib(unittest.TestCase):
 
         threshold = 0.1
 
-        rewards = get_last_episode_rewards('trained_example/cramped_room/result.json')
+        rewards = get_last_episode_rewards('trained_example/PPO_cramped_room_False_nw=0_vf=0.000100_es=0.200000_en=0.000500_kl=0.200000/result.json')
 
         #Test total reward
         self.assertAlmostEqual(rewards['episode_reward_mean'], results['average_total_reward'],
