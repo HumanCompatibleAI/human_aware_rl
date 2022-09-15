@@ -512,11 +512,10 @@ def gen_trainer_from_params(params):
             "log_to_driver" : params['verbose'],
             "logging_level" : logging.INFO if params['verbose'] else logging.CRITICAL
         }
-        print(init_params)
         ray.init(**init_params)
     register_env("overcooked_multi_agent", params['ray_params']['env_creator'])
     ModelCatalog.register_custom_model(params['ray_params']['custom_model_id'], params['ray_params']['custom_model_cls'])
-
+    print(params)
     # Parse params
     model_params = params['model_params']
     training_params = params['training_params']
@@ -636,7 +635,7 @@ def load_trainer(save_path, true_num_workers=False):
     with open(config_path, "rb") as f:
         # We use dill (instead of pickle) here because we must deserialize functions
         config = dill.load(f)
-        print(config)
+
     if not true_num_workers:
         # Override this param to lower overhead in trainer creation
         config['training_params']['num_workers'] = 0
