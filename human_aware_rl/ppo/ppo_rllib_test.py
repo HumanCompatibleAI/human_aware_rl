@@ -280,12 +280,8 @@ class TestPPORllib(unittest.TestCase):
             self.assertDictEqual(results, self.expected['test_ppo_bc'])
 
     def test_resume_functionality(self):
-
         load_path = os.path.join(os.path.abspath('.'), 'trained_example/PPO_cramped_room_False_nw=0_vf=0.000100_es=0.200000_en=0.000500_kl=0.200000/checkpoint-500')
-        print(load_path)
         # Load and train an agent for another iteration
-        os.environ["TUNE_DISABLE_AUTO_CALLBACK_LOGGERS"] = "1"
-
         results = ex_fp.run(
             config_updates={
                 "results_dir": self.temp_results_dir,
@@ -330,12 +326,12 @@ if __name__ == '__main__':
         _clear_pickle()
 
     suite = unittest.TestSuite()
-    # suite.addTest(TestPPORllib('test_save_load', **args))
-    # suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
-    # suite.addTest(TestPPORllib('test_ppo_bc', **args))
+    suite.addTest(TestPPORllib('test_save_load', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_no_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_fp_sp_yes_phi', **args))
+    suite.addTest(TestPPORllib('test_ppo_bc', **args))
     suite.addTest(TestPPORllib('test_resume_functionality', **args))
 
     success = unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful()
