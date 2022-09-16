@@ -6,6 +6,7 @@ import random
 import itertools
 import numpy as np
 import tensorflow as tf
+import json
 
 
 def delete_dir_if_exists(dir_path, verbose=False):
@@ -167,3 +168,12 @@ def get_dict_stats(d):
             'n': len(v)
         }
     return new_d
+
+def get_last_episode_rewards(filename):
+    with open(filename) as f:
+        j = json.loads(f.readlines()[-1])
+        result = {
+            'episode_reward_mean' : j['episode_reward_mean'],
+            'sparse_reward_mean' : j['custom_metrics']['sparse_reward_mean']
+        }
+        return result

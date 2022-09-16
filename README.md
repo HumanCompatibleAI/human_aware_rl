@@ -111,6 +111,18 @@ You should see all tests passing.
 
 Note: the tests are broken up into separate files because they rely on different tensorflow execution states (i.e. the bc tests run tf in eager mode, while rllib requires tensorflow to be running symbollically). Going forward, it would probably be best to standardize the tensorflow execution state, or re-write the code such that it is robust to execution state.
 
+## Training examples
+
+You can also try to train agents for 5 classical layouts
+
+```bash
+(harl_rllib) $ cd ppo
+(harl_rllib) ppo $ bash run_experiments.sh
+```
+
+Please choose the `num_workers` parameters to be less than the number of CPUs on your machine. For more information
+check the ray [documentation](https://docs.ray.io/en/latest/rllib/rllib-training.html)
+
 # Repo Structure Overview
 
 `ppo/`:
@@ -118,6 +130,9 @@ Note: the tests are broken up into separate files because they rely on different
 - `ppo_rllib_client.py` Driver code for configuing and launching the training of an agent. More details about usage below
 - `ppo_rllib_from_params_client.py`: train one agent with PPO in Overcooked with variable-MDPs 
 - `ppo_rllib_test.py` Reproducibility tests for local sanity checks
+- `run_experiments.sh` Script for training agents on 5 classical layouts
+- `trained_example/` Pretrained model for testing purposes
+
 
 `rllib/`:
 - `rllib.py`: rllib agent and training utils that utilize Overcooked APIs

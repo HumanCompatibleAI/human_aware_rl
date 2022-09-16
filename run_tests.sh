@@ -4,7 +4,7 @@ cd ./human_aware_rl
 
 # Create a dummy data_dir.py if the file does not already exist
 [ ! -f data_dir.py ] && echo "import os; DATA_DIR = os.path.abspath('.')" >> data_dir.py
-
+#
 # Human data tests
 cd ./human
 python tests.py

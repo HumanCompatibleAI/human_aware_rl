@@ -384,6 +384,7 @@ def run(params):
 
     # Check if any resume checkpoint given
     saved_path = params["resume_checkpoint_path"]
+
     if saved_path:
         trainer = load_trainer(save_path=saved_path, true_num_workers=True)
     else:
