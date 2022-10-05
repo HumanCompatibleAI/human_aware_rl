@@ -4,9 +4,14 @@ from math import isclose
 import unittest, copy
 import numpy as np
 
-class RllibEnvTest(unittest.TestCase):
 
+class RllibEnvTest(unittest.TestCase):
     def setUp(self):
+        print(
+            "\nIn Class {}, in Method {}".format(
+                self.__class__.__name__, self._testMethodName
+            )
+        )
         self.params = copy.deepcopy(OvercookedMultiAgent.DEFAULT_CONFIG)
         self.timesteps = [0, 10, 100, 500, 1000, 1500, 2000, 2500]
 
@@ -18,7 +23,7 @@ class RllibEnvTest(unittest.TestCase):
             self.assertAlmostEqual(a, b, places=places)
 
     def _test_bc_schedule(self, bc_schedule, expected_bc_factors):
-        self.params['multi_agent_params']['bc_schedule'] = bc_schedule
+        self.params["multi_agent_params"]["bc_schedule"] = bc_schedule
         env = OvercookedMultiAgent.from_config(self.params)
         actual_bc_factors = []
 
@@ -33,30 +38,37 @@ class RllibEnvTest(unittest.TestCase):
         tot_bc = 0
         for _ in range(trials):
             env.reset(regen_mdp=False)
-            num_bc = sum(map(lambda agent : int(agent.startswith('bc')), env.curr_agents))
+            num_bc = sum(
+                map(lambda agent: int(agent.startswith("bc")), env.curr_agents)
+            )
             self.assertLessEqual(num_bc, 1)
             tot_bc += num_bc
         actual_factor = tot_bc / trials
         self.assertAlmostEqual(actual_factor, factor, places=1)
 
-
     def test_env_creation(self):
         # Valid creation
         env = OvercookedMultiAgent.from_config(self.params)
-        for param, expected in self.params['multi_agent_params'].items():
+        for param, expected in self.params["multi_agent_params"].items():
             self.assertEqual(expected, getattr(env, param))
 
         # Invalid bc_schedules
-        invalid_schedules = [[(-1, 0.0), (1.0, 1e5)], [(0.0, 0.0), (10, 1),  (5, 0.5)], [(0, 0), (5, 1), (10, 1.5)]]
+        invalid_schedules = [
+            [(-1, 0.0), (1.0, 1e5)],
+            [(0.0, 0.0), (10, 1), (5, 0.5)],
+            [(0, 0), (5, 1), (10, 1.5)],
+        ]
         for sched in invalid_schedules:
-            self.params['multi_agent_params']['bc_schedule'] = sched
-            self.assertRaises(AssertionError, OvercookedMultiAgent.from_config, self.params)
+            self.params["multi_agent_params"]["bc_schedule"] = sched
+            self.assertRaises(
+                AssertionError, OvercookedMultiAgent.from_config, self.params
+            )
 
     def test_reward_shaping_annealing(self):
-        self.params['multi_agent_params']['reward_shaping_factor'] = 1
-        self.params['multi_agent_params']['reward_shaping_horizon'] = 1e3
+        self.params["multi_agent_params"]["reward_shaping_factor"] = 1
+        self.params["multi_agent_params"]["reward_shaping_horizon"] = 1e3
 
-        expected_rew_factors = [1, 990/1e3, 900/1e3, 500/1e3, 0.0, 0.0, 0.0, 0.0]
+        expected_rew_factors = [1, 990 / 1e3, 900 / 1e3, 500 / 1e3, 0.0, 0.0, 0.0, 0.0]
         actual_rew_factors = []
 
         env = OvercookedMultiAgent.from_config(self.params)
@@ -69,11 +81,13 @@ class RllibEnvTest(unittest.TestCase):
 
     def test_bc_annealing(self):
         # Test no annealing
-        self._test_bc_schedule(OvercookedMultiAgent.self_play_bc_schedule, [0.0]*len(self.timesteps))
+        self._test_bc_schedule(
+            OvercookedMultiAgent.self_play_bc_schedule, [0.0] * len(self.timesteps)
+        )
 
         # Test annealing
         anneal_bc_schedule = [(0, 0.0), (1e3, 1.0), (2e3, 0.0)]
-        expected_bc_factors = [0.0, 10/1e3, 100/1e3, 500/1e3, 1.0, 500/1e3, 0.0, 0.0]
+        expected_bc_factors = [0.0, 10 / 1e3, 100 / 1e3, 500 / 1e3, 1.0, 500 / 1e3, 0.0, 0.0]
         self._test_bc_schedule(anneal_bc_schedule, expected_bc_factors)
 
     def test_agent_creation(self):
@@ -91,22 +105,34 @@ class RllibEnvTest(unittest.TestCase):
 
 
 class RllibUtilsTest(unittest.TestCase):
-
     def setUp(self):
+        print(
+            "\nIn Class {}, in Method {}".format(
+                self.__class__.__name__, self._testMethodName
+            )
+        )
         pass
 
     def tearDown(self):
         pass
 
     def test_softmax(self):
-        logits = np.array([[0.1, 0.1, 0.1],
-                           [-0.1, 0.0, 0.1],
-                           [0.5, -1.2, 3.2],
-                           [-1.6, -2.0, -1.5]])
-        expected = np.array([[0.33333333, 0.33333333, 0.33333333],
-                             [0.30060961, 0.33222499, 0.3671654 ],
-                             [0.06225714, 0.01137335, 0.92636951],
-                             [0.36029662, 0.24151404, 0.39818934]])
+        logits = np.array(
+            [
+                [0.1, 0.1, 0.1], 
+                [-0.1, 0.0, 0.1], 
+                [0.5, -1.2, 3.2], 
+                [-1.6, -2.0, -1.5],
+            ]
+        )
+        expected = np.array(
+            [
+                [0.33333333, 0.33333333, 0.33333333],
+                [0.30060961, 0.33222499, 0.3671654],
+                [0.06225714, 0.01137335, 0.92636951],
+                [0.36029662, 0.24151404, 0.39818934],
+            ]
+        )
 
         actual = softmax(logits)
 
@@ -124,16 +150,19 @@ class RllibUtilsTest(unittest.TestCase):
         self.assertFalse(iterable_equal(a, b))
 
     def test_get_required_arguments(self):
-        
         def foo1(a):
             pass
+
         def foo2(a, b):
             pass
+
         def foo3(a, b, c):
             pass
-        def foo4(a, b, c='bar'):
+
+        def foo4(a, b, c="bar"):
             pass
-        def foo5(a, b='bar', d='baz', **kwargs):
+
+        def foo5(a, b="bar", d="baz", **kwargs):
             pass
 
         fns = [foo1, foo2, foo3, foo4, foo5]
@@ -143,6 +172,5 @@ class RllibUtilsTest(unittest.TestCase):
             self.assertEqual(expected, len(get_required_arguments(fn)))
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

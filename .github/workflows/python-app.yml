@@ -8,31 +8,20 @@ on:
 
 jobs:
   build_osx:
-
     runs-on: macos-latest
 
     steps:
-    - uses: actions/checkout@v2
-      with:
-        submodules: true
-    - name: Python + Conda setup
-      uses: conda-incubator/setup-miniconda@v2
-      with:
-        python-version: 3.7
-    - name: Install dependencies
-      run: |
-        conda init bash
-        source ~/.bash_profile
-        conda create -n harl python=3.7
-        conda activate harl
-        python -m pip install --upgrade pip
-        ./install.sh
-        pip install tensorflow==2.0.2
-    - name: Test with unittest
-      run: |
-        conda init bash
-        source ~/.bash_profile
-        conda activate harl
-        sudo chmod 777 ./run_tests.sh
-        ./run_tests.sh
-    
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Python setup #removed conda setup
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.7
+          cache: "pip"
+      - name: Installing dependencies
+        run: pip install -r requirements.txt
+      - name: Test with unittest
+        run: |
+          sudo chmod 777 ./run_tests.sh
+          ./run_tests.sh

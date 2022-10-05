@@ -31,6 +31,9 @@ $ git clone --single-branch --branch BRANCH_NAME --recursive https://github.com/
 
 
 ## CUDA 10.0 Installation on Ubuntu 18.04
+
+**Note:**: The CUDA installation is **_NOT REQUIRED_**, feel free to skip this section if you are only planning on running on CPUs
+
 For Ubuntu 18.04, follow the direction [here](https://www.pugetsystems.com/labs/hpc/How-To-Install-CUDA-10-together-with-9-2-on-Ubuntu-18-04-with-support-for-NVIDIA-20XX-Turing-GPUs-1236/)
 
 The only difference being the very last step. 
@@ -49,6 +52,8 @@ $ sudo apt-get install cuda-10-0
 
 ## Conda Environment Setup
 
+While not strictly required, creating a conda environment simplifies the setup and can help avoid dependency conflicts
+
 Create a new conda environment and run the install script as before
 
 [Optional Conda Installation for 18.04](https://www.digitalocean.com/community/tutorials/how-to-install-the-anaconda-python-distribution-on-ubuntu-18-04)
@@ -56,14 +61,10 @@ Create a new conda environment and run the install script as before
 ```bash
 $ conda create -n harl_rllib python=3.7
 $ conda activate harl_rllib
-(harl_rllib) $ ./install.sh
+(harl_rllib) $ pip install -r requirements.txt
 ```
 
-Finally, install the latest stable version of tensorflow compatible with rllib
-```bash
-(harl_rllib) $ pip install tensorflow==2.0.2
-```
-Or, if working with gpus, install a version of tensorflow 2.*.* and cuDNN that is compatible with the available Cuda drivers. The following example works for Cuda 10.0.0. You can verify what version of Cuda is installed by running `nvcc --version`. For a full list of driver compatibility, refer [here](https://www.tensorflow.org/install/source#gpu)
+If working with gpus, install a version of tensorflow 2.*.* and cuDNN that is compatible with the available Cuda drivers. The following example works for Cuda 10.0.0. You can verify what version of Cuda is installed by running `nvcc --version`. For a full list of driver compatibility, refer [here](https://www.tensorflow.org/install/source#gpu)
 ```bash
 (harl_rllib) $ pip install tensorflow-gpu==2.0.0
 (harl_rllib) $ conda install -c anaconda cudnn=7.6.0
@@ -81,6 +82,10 @@ Note: if you ever get an import error, please first check if you activated the c
 
 If set-up was successful, all unit tests and local reproducibility tests should pass. They can be run as follows
 
+**NOTE**: Existing tests **_DOES NOT_** guarantee reproducibility. It is an known issue with version of ray\[rllib\] in use, and we are working on updating to the newest version, which should solve this problem. As a temporary fix, setting sgd-minibatch-size = training-batch-size increases stability
+
+Due to the randomess there is a slight chance that some tests can fail intermittently by not getting the expected total reward. This is an unlikely scenario and can usually be fixed by rerunning the test. 
+
 You can run all the tests with 
 ```bash
 (harl_rllib) $ ./run_tests.sh
@@ -92,19 +97,31 @@ Highest level integration tests that combine self play, bc training, and ppo_bc 
 (harl_rllib) $ cd human_aware_rl/ppo
 (harl_rllib) human_aware_rl/ppo $ python ppo_rllib_test.py
 ```
+or 
+```bash
+(harl_rllib) $ python -m unittest human_aware_rl.ppo.ppo_rllib_test
+```
 
 ## BC Tests
 All tests involving creation, training, and saving of bc models. No dependency on rllib
+There are 2 test classes depending on whether the model is trained with LSTM, the run_tests.sh file by default only tests model without LSTM 
 ```bash
 (harl_rllib) $ cd imitation
-(harl_rllib) imitation $ python behavior_cloning_tf2_test.py
+(harl_rllib) imitation $ python behavior_cloning_tf2_test.py TestBCTraining
 ```
-
+or 
+```bash
+(harl_rllib) $ python -m unittest human_aware_rl.imitation.behavior_cloning_tf2_test.TestBCTraining
+```
 ## Rllib Tests
 Tests rllib environments and models, as well as various utility functions. Does not actually test rllib training
 ```bash
 (harl_rllib) $ cd rllib
 (harl_rllib) rllib $ python tests.py
+```
+or 
+```bash
+(harl_rllib) $ python -m unittest human_aware_rl.rllib.tests
 ```
 
 You should see all tests passing. 
@@ -215,10 +232,12 @@ ModuleNotFoundError: No module named 'human_aware_rl.data_dir'
 , please run 
 
 ```
-./run_tests.sh
+pip install -r requirements.txt
 ``` 
 
 to initiate those variables
+
+The reason this is needed is because code files refer to the subdirectories as modules, and we decided to use pip to automatically add the submodules paths.  This command invokes the `setup.py` file, which looks for packages in the _human_aware_rl_ directory through the `find_packages()` call, and register modules found so they can be referrenced. 
 
 # Reproducing Results
 
