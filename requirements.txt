@@ -1,0 +1,17 @@
+#this file provides an alternative to set up via install.sh
+#mainly used to speed up github workflow by taking advantage of pip cache action 
+GitPython
+memory_profiler
+sacred
+pymongo
+dill
+matplotlib
+requests
+numpy==1.19.5
+seaborn==0.9.0
+pygame==1.9.5
+ray==0.8.5
+protobuf
+tensorflow==2.0.2
+-e ./overcooked_ai
+-e . 

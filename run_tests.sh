@@ -4,22 +4,14 @@ cd ./human_aware_rl
 
 # Create a dummy data_dir.py if the file does not already exist
 [ ! -f data_dir.py ] && echo "import os; DATA_DIR = os.path.abspath('.')" >> data_dir.py
-#
+
 # Human data tests
-cd ./human
-python tests.py
-cd ..
-
-# BC tests
-cd ./imitation
-python behavior_cloning_tf2_test.py
-cd ..
-
+python -m unittest human.tests
+# BC tests, skipping the LSTM tests by default
+python -m unittest imitation.behavior_cloning_tf2_test.TestBCTraining
 # rllib tests
-cd ./rllib
-python tests.py
-cd ..
-
+python -m unittest rllib.tests
 # PPO tests
-cd ./ppo
-python ppo_rllib_test.py
+python -m unittest ppo.ppo_rllib_test
+
+
