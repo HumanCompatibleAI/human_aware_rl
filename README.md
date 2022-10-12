@@ -82,7 +82,7 @@ Note: if you ever get an import error, please first check if you activated the c
 
 If set-up was successful, all unit tests and local reproducibility tests should pass. They can be run as follows
 
-**NOTE**: Existing tests **_DOES NOT_** guarantee reproducibility. It is an known issue with version of ray\[rllib\] in use, and we are working on updating to the newest version, which should solve this problem. As a temporary fix, setting sgd-minibatch-size = training-batch-size increases stability
+**NOTE**: Existing tests **_DOES NOT_** guarantee reproducibility. It is a known issue with version of ray\[rllib\] in use. We are working on updating to the newest version, which should solve this problem. As a temporary fix, setting sgd-minibatch-size = training-batch-size can increase output stability.
 
 Due to the randomess there is a slight chance that some tests can fail intermittently by not getting the expected total reward. This is an unlikely scenario and can usually be fixed by rerunning the test. 
 
@@ -237,7 +237,7 @@ pip install -r requirements.txt
 
 to initiate those variables
 
-The reason this is needed is because code files refer to the subdirectories as modules, and we decided to use pip to automatically add the submodules paths.  This command invokes the `setup.py` file, which looks for packages in the _human_aware_rl_ directory through the `find_packages()` call, and register modules found so they can be referrenced. 
+The reason this is needed is because code files refer to the subdirectories as modules, and we decided to use pip to automatically add the submodules paths. The requirements.txt file allows pip to register the current directory as a packege. Pip will look for and invoke the `setup.py` file, which looks for packages in the _human_aware_rl_ directory through the `find_packages()` call, and register modules found so they can be referrenced. 
 
 # Reproducing Results
 
