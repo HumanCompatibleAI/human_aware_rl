@@ -41,7 +41,6 @@ class TestPPORllib(unittest.TestCase):
 
     def __init__(self, test_name):
         super(TestPPORllib, self).__init__(test_name)
-        # changing the cwd to where the test file is
         # default parameters, feel free to change
         self.compute_pickle = False
         # Reproducibility test
@@ -61,10 +60,8 @@ class TestPPORllib(unittest.TestCase):
             )
         )
         # unittest generates a lot of warning msgs due to third-party dependencies (e.g. ray[rllib] using outdated np methods)
-        # not a problem when directly ran, but when using -m unittest this helps filter out the warnings
-        warnings.simplefilter("ignore", ResourceWarning)
-        warnings.simplefilter("ignore", DeprecationWarning)
-
+        # not a problem when directly ran, but when using -m unittest this helps filter out the warnings  
+        warnings.filterwarnings("ignore")
         # Setting CWD 
         os.chdir(os.path.dirname(os.path.abspath(__file__)))
         # Temporary disk space to store logging results from tests
@@ -121,10 +118,11 @@ class TestPPORllib(unittest.TestCase):
         ray.shutdown()
 
         # Where the agent is stored (this is kind of hardcoded, would like for it to be more easily obtainable)
+        # 2 checkpoints(checkpoint_000001 and checkpoint_000002) are saved
+        # since we are only interested in reproducing the same actions, either one should be fine
         load_path = os.path.join(
             glob.glob(os.path.join(self.temp_results_dir, "save_load_test*"))[0],
-            "checkpoint_2",
-            "checkpoint-2",
+            "checkpoint_000002",
         )
 
         # Load a dummy state
@@ -187,7 +185,7 @@ class TestPPORllib(unittest.TestCase):
                 # Please feel free to modify the parameters below
                 "results_dir": self.temp_results_dir,
                 "num_workers": 2,
-                "train_batch_size": 800,
+                "train_batch_size": 1600,
                 "sgd_minibatch_size": 800,
                 "num_training_iters": 30,
                 "evaluation_interval": 10,
@@ -199,7 +197,6 @@ class TestPPORllib(unittest.TestCase):
             },
             options={"--loglevel": "ERROR"},
         ).result
-
         # Sanity check (make sure it begins to learn to receive dense reward)
         self.assertGreaterEqual(results["average_total_reward"], self.min_performance)
 
@@ -215,8 +212,8 @@ class TestPPORllib(unittest.TestCase):
         results = ex_fp.run(
             config_updates={
                 "results_dir": self.temp_results_dir,
-                "num_workers": 1,
-                "train_batch_size": 1600,
+                "num_workers": 2,
+                "train_batch_size": 2400,
                 "sgd_minibatch_size": 800,
                 "num_training_iters": 30,
                 "evaluation_interval": 10,
@@ -246,7 +243,7 @@ class TestPPORllib(unittest.TestCase):
         results = ex_fp.run(
             config_updates={
                 "results_dir": self.temp_results_dir,
-                "num_workers": 1,
+                "num_workers": 2,
                 "train_batch_size": 1600,
                 "sgd_minibatch_size": 800,
                 "num_training_iters": 30,
@@ -262,6 +259,8 @@ class TestPPORllib(unittest.TestCase):
             },
             options={"--loglevel": "ERROR"},
         ).result
+        print(results["average_total_reward"])
+
 
         # Sanity check (make sure it begins to learn to receive dense reward)
         self.assertGreaterEqual(results["average_total_reward"], self.min_performance)
@@ -309,7 +308,7 @@ class TestPPORllib(unittest.TestCase):
     def test_resume_functionality(self):
         load_path = os.path.join(
             os.path.abspath("."),
-            "trained_example/PPO_cramped_room_False_nw=0_vf=0.000100_es=0.200000_en=0.000500_kl=0.200000/checkpoint-500",
+            "trained_example/checkpoint_000500",
         )
         # Load and train an agent for another iteration
         results = ex_fp.run(
@@ -323,13 +322,14 @@ class TestPPORllib(unittest.TestCase):
             },
             options={"--loglevel": "ERROR"},
         ).result
+
         # Test that the rewards from 1 additional iteration are not too different from the original model
         # performance
 
         threshold = 0.1
 
         rewards = get_last_episode_rewards(
-            "trained_example/PPO_cramped_room_False_nw=0_vf=0.000100_es=0.200000_en=0.000500_kl=0.200000/result.json"
+            "trained_example/result.json"
         )
 
         # Test total reward
@@ -347,5 +347,6 @@ class TestPPORllib(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    warnings.filterwarnings("ignore")
     unittest.main()
 

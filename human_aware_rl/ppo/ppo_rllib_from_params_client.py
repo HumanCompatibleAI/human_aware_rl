@@ -291,7 +291,7 @@ def my_config():
         "seed" : seed,
         "evaluation_interval" : evaluation_interval,
         "entropy_coeff_schedule" : [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
-        "eager" : eager
+        "eager_tracing" : eager
     }
 
     # To be passed into AgentEvaluator constructor and _evaluate function
@@ -386,7 +386,7 @@ def run(params):
     saved_path = params["resume_checkpoint_path"]
 
     if saved_path:
-        trainer = load_trainer(save_path=saved_path, true_num_workers=True)
+        trainer = load_trainer(save_path=saved_path, true_num_workers=False)
     else:
         # Retrieve the tune.Trainable object that is used for the experiment
         trainer = gen_trainer_from_params(params)
@@ -418,8 +418,8 @@ def main(params):
     # All ray environment set-up
     init_params = {
             "ignore_reinit_error" : True,
-            "include_webui" : False,
-            "temp_dir" : params['ray_params']['temp_dir'],
+            "include_dashboard" : False,
+            "_temp_dir" : params['ray_params']['temp_dir'],
             "log_to_driver" : params['verbose'],
             "logging_level" : logging.INFO if params['verbose'] else logging.CRITICAL
     }
