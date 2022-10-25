@@ -7,8 +7,8 @@ from ray.tune.registry import register_env
 from ray.tune.logger import UnifiedLogger
 from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
-from ray.rllib.agents.callbacks import DefaultCallbacks
-from ray.rllib.agents.ppo.ppo import PPOTrainer
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from ray.rllib.agents.ppo import PPOTrainer
 from ray.rllib.models import ModelCatalog
 from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal
 from datetime import datetime
@@ -140,10 +140,13 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.reward_shaping_factor = reward_shaping_factor
         self.reward_shaping_horizon = reward_shaping_horizon
         self.use_phi = use_phi
-        self._setup_observation_space()
-        self.action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
         self.anneal_bc_factor(0)
-        self.reset()
+        self._agent_ids = set(self.reset().keys())
+        #fixes deprecation warnings
+        self._spaces_in_preferred_format = True
+
+        
+
     
     def _validate_featurize_fns(self, mapping):
         assert 'ppo' in mapping, "At least one ppo agent must be specified"
@@ -166,12 +169,19 @@ class OvercookedMultiAgent(MultiAgentEnv):
         if (schedule[-1][0] < float('inf')):
             schedule.append((float('inf'), schedule[-1][1]))
 
-    def _setup_observation_space(self):
-        dummy_state = self.base_env.mdp.get_standard_start_state()
+    def _setup_action_space(self,agents):
+        action_sp = {}
+        for agent in agents:
+            action_sp[agent] = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
+        self.action_space = gym.spaces.Dict(action_sp)
+        self.shared_action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
 
+    def _setup_observation_space(self,agents):
+        dummy_state = self.base_env.mdp.get_standard_start_state()
         #ppo observation
         featurize_fn_ppo = lambda state: self.base_env.lossless_state_encoding_mdp(state)
         obs_shape = featurize_fn_ppo(dummy_state)[0].shape
+
         high = np.ones(obs_shape) * float("inf")
         low = np.ones(obs_shape) * 0
         self.ppo_observation_space = gym.spaces.Box(np.float32(low), np.float32(high), dtype=np.float32)
@@ -182,6 +192,16 @@ class OvercookedMultiAgent(MultiAgentEnv):
         high = np.ones(obs_shape) * 100
         low = np.ones(obs_shape) * -100
         self.bc_observation_space = gym.spaces.Box(np.float32(low), np.float32(high), dtype=np.float32)
+        #hardcode mapping between action space and agent
+        ob_space = {}
+        for agent in agents:
+            if agent.startswith("ppo"):
+                ob_space[agent] = self.ppo_observation_space
+            else:
+                ob_space[agent] = self.bc_observation_space
+        self.observation_space = gym.spaces.Dict(ob_space)
+
+
 
     def _get_featurize_fn(self, agent_id):
         if agent_id.startswith('ppo'):
@@ -209,7 +229,11 @@ class OvercookedMultiAgent(MultiAgentEnv):
         # Ensure agent names are unique
         agents[0] = agents[0] + '_0'
         agents[1] = agents[1] + '_1'
-        
+
+        #logically the action_space and the observation_space should be set along with the generated agents
+        #the agents are also randomized in each iteration if bc agents are allowed, which requires reestablishing the action & observation space
+        self._setup_action_space(agents)
+        self._setup_observation_space(agents)
         return agents
 
     def _anneal(self, start_v, curr_t, end_t, end_v=0, start_t=0):
@@ -233,7 +257,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
             observation: formatted to be standard input for self.agent_idx's policy
         """
         action = [action_dict[self.curr_agents[0]], action_dict[self.curr_agents[1]]]
-        assert all(self.action_space.contains(a) for a in action), "%r (%s) invalid"%(action, type(action))
+
+        assert all(self.action_space[agent].contains(action_dict[agent]) for agent in action_dict), "%r (%s) invalid"%(action, type(action))
         joint_action = [Action.INDEX_TO_ACTION[a] for a in action]
         # take a step in the current base environment
 
@@ -362,7 +387,7 @@ class TrainingCallbacks(DefaultCallbacks):
         shaped_reward (int) - total reward shaping reward the agent earned this episode
         """
         # Get rllib.OvercookedMultiAgentEnv refernce from rllib wraper
-        env = base_env.get_unwrapped()[0]
+        env = base_env.get_sub_environments()[0]
         # Both agents share the same info so it doesn't matter whose we use, just use 0th agent's
         info_dict = episode.last_info_for(env.curr_agents[0])
 
@@ -507,8 +532,8 @@ def gen_trainer_from_params(params):
     if not ray.is_initialized():
         init_params = {
             "ignore_reinit_error" : True,
-            "include_webui" : False,
-            "temp_dir" : params['ray_params']['temp_dir'],
+            "include_dashboard" : False,
+            "_temp_dir" : params['ray_params']['temp_dir'],
             "log_to_driver" : params['verbose'],
             "logging_level" : logging.INFO if params['verbose'] else logging.CRITICAL
         }
@@ -533,16 +558,16 @@ def gen_trainer_from_params(params):
         if policy_type == "ppo":
             config = {
                 "model" : {
-                    "custom_options" : model_params,
+                    'custom_model_config' : model_params,
                     
                     "custom_model" : "MyPPOModel"
                 }
             }
-            return (None, env.ppo_observation_space, env.action_space, config)
+            return (None, env.ppo_observation_space, env.shared_action_space, config)
         elif policy_type == "bc":
             bc_cls = bc_params['bc_policy_cls']
             bc_config = bc_params['bc_config']
-            return (bc_cls, env.bc_observation_space, env.action_space, bc_config)
+            return (bc_cls, env.bc_observation_space, env.shared_action_space, bc_config)
 
     # Rllib compatible way of setting the directory we store agent checkpoints in
     logdir_prefix = "{0}_{1}_{2}".format(params["experiment_name"], params['training_params']['seed'], timestr)
@@ -572,13 +597,13 @@ def gen_trainer_from_params(params):
 
     multi_agent_config['policies'] = { policy : gen_policy(policy) for policy in all_policies }
 
-    def select_policy(agent_id):
+    def select_policy(agent_id, episode, worker, **kwargs):
         if agent_id.startswith('ppo'):
             return 'ppo'
         if agent_id.startswith('bc'):
             return 'bc'
     multi_agent_config['policy_mapping_fn'] = select_policy
-    multi_agent_config['policies_to_train'] = 'ppo'
+    multi_agent_config['policies_to_train'] = {'ppo'}
 
     if "outer_shape" not in environment_params:
         environment_params["outer_shape"] = None
@@ -592,7 +617,7 @@ def gen_trainer_from_params(params):
                                         environment_params["outer_shape"], 'ppo', 'ppo' if self_play else 'bc',
                                         verbose=params['verbose']),
         "env_config" : environment_params,
-        "eager" : False,
+        "eager_tracing" : False,
         **training_params
     }, logger_creator=custom_logger_creator)
     return trainer
@@ -605,8 +630,7 @@ def gen_trainer_from_params(params):
 def save_trainer(trainer, params, path=None):
     """
     Saves a serialized trainer checkpoint at `path`. If none provided, the default path is
-    ~/ray_results/<experiment_results_dir>/checkpoint_<i>/checkpoint-<i>
-
+    ~/ray_results/<experiment_results_dir>/checkpoint_<i>
     Note that `params` should follow the same schema as the dict passed into `gen_trainer_from_params`
     """
     # Save trainer
@@ -624,7 +648,7 @@ def save_trainer(trainer, params, path=None):
 def load_trainer(save_path, true_num_workers=False):
     """
     Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
-    Note that `save_path` is the full path to the checkpoint FILE, not the checkpoint directory
+    Note that `save_path` is the full path to the checkpoint directory
     Additionally we decide if we want to use the same number of remote workers (see ray library Training APIs)
     as we store in the previous configuration, by default = False, we use only the local worker
     (see ray library API)
@@ -634,35 +658,13 @@ def load_trainer(save_path, true_num_workers=False):
     with open(config_path, "rb") as f:
         # We use dill (instead of pickle) here because we must deserialize functions
         config = dill.load(f)
-
     if not true_num_workers:
         # Override this param to lower overhead in trainer creation
         config['training_params']['num_workers'] = 0
 
-    # Get un-trained trainer object with proper config
-    trainer = gen_trainer_from_params(config)
-
-    # Load weights into dummy object
-    trainer.restore(save_path)
-    return trainer
-
-def load_trainer(save_path, true_num_workers=False):
-    """
-    Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
-    Note that `save_path` is the full path to the checkpoint FILE, not the checkpoint directory
-    Additionally we decide if we want to use the same number of remote workers (see ray library Training APIs)
-    as we store in the previous configuration, by default = False, we use only the local worker
-    (see ray library API)
-    """
-    # Read in params used to create trainer
-    config_path = os.path.join(os.path.dirname(save_path), "config.pkl")
-    with open(config_path, "rb") as f:
-        # We use dill (instead of pickle) here because we must deserialize functions
-        config = dill.load(f)
-
-    if not true_num_workers:
-        # Override this param to lower overhead in trainer creation
-        config['training_params']['num_workers'] = 0
+    if config["training_params"]["num_gpus"] == 1:
+        #all other configs for the server can be kept for local testing 
+        config["training_params"]["num_gpus"] = 0
 
     if "trained_example" in save_path:
         # For the unit testing we update the result directory in order to avoid an error
@@ -670,7 +672,6 @@ def load_trainer(save_path, true_num_workers=False):
 
     # Get un-trained trainer object with proper config
     trainer = gen_trainer_from_params(config)
-
     # Load weights into dummy object
     trainer.restore(save_path)
     return trainer

@@ -1,7 +1,9 @@
 from ray.rllib.models.tf.tf_modelv2 import TFModelV2
-from ray.rllib.models.tf.recurrent_tf_modelv2 import RecurrentTFModelV2
+from ray.rllib.models.tf.recurrent_net import RecurrentNetwork
 import numpy as np
 import tensorflow as tf
+
+
 
 
 
@@ -11,11 +13,9 @@ class RllibPPOModel(TFModelV2):
     Model that will map environment states to action probabilities. Will be shared across agents
     """
     def __init__(self, obs_space, action_space, num_outputs, model_config, name, **kwargs):
-
         super(RllibPPOModel, self).__init__(obs_space, action_space, num_outputs, model_config, name)
-
         # params we got to pass in from the call to "run"
-        custom_params = model_config["custom_options"]
+        custom_params = model_config['custom_model_config']
 
 
         ## Parse custom network params
@@ -33,13 +33,14 @@ class RllibPPOModel(TFModelV2):
 
         # Apply initial conv layer with a larger kenel (why?)
         if num_convs > 0:
-            out = tf.keras.layers.Conv2D(
+            y = tf.keras.layers.Conv2D(
                 filters=num_filters,
                 kernel_size=[5, 5],
                 padding="same",
                 activation=tf.nn.leaky_relu,
                 name="conv_initial"
-            )(out)
+            )
+            out = y(out)
 
         # Apply remaining conv layers, if any
         for i in range(0, num_convs-1):
@@ -68,7 +69,6 @@ class RllibPPOModel(TFModelV2):
         value_out = tf.keras.layers.Dense(1)(out)
 
         self.base_model = tf.keras.Model(self.inputs, [layer_out, value_out])
-        self.register_variables(self.base_model.variables)
 
 
     def forward(self, input_dict, state=None, seq_lens=None):
@@ -79,7 +79,7 @@ class RllibPPOModel(TFModelV2):
         return tf.reshape(self._value_out, [-1])
 
 
-class RllibLSTMPPOModel(RecurrentTFModelV2):
+class RllibLSTMPPOModel(RecurrentNetwork):
     """
     Model that will map encoded environment observations to action logits
 
@@ -96,7 +96,7 @@ class RllibLSTMPPOModel(RecurrentTFModelV2):
         super(RllibLSTMPPOModel, self).__init__(obs_space, action_space, num_outputs, model_config, name)
 
         # params we passed in from rllib client
-        custom_params = model_config["custom_options"]
+        custom_params = model_config['custom_model_config']
 
         ## Parse custom network params
         num_hidden_layers = custom_params["NUM_HIDDEN_LAYERS"]
@@ -129,6 +129,7 @@ class RllibLSTMPPOModel(RecurrentTFModelV2):
                 activation=tf.nn.leaky_relu,
                 name="conv_initial"
             ))(out)
+
 
         # Apply remaining conv layers, if any
         for i in range(0, num_convs-1):
@@ -173,7 +174,6 @@ class RllibLSTMPPOModel(RecurrentTFModelV2):
             inputs=[flattened_obs_inputs, seq_in, lstm_h_in, lstm_c_in],
             outputs=[layer_out, value_out, h_out, c_out]
         )
-        self.register_variables(self.base_model.variables)
 
 
     def forward_rnn(self, inputs, state, seq_lens):

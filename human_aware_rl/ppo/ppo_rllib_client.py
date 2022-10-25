@@ -2,6 +2,8 @@
 import argparse, os, sys
 from overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import numpy as np
+import warnings
+warnings.simplefilter("ignore")
 
 # environment variable that tells us whether this code is running on the server or not
 LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
@@ -258,7 +260,7 @@ def my_config():
         "seed" : seed,
         "evaluation_interval" : evaluation_interval,
         "entropy_coeff_schedule" : [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
-        "eager" : eager,
+        "eager_tracing" : eager,
         "log_level" : "WARN" if verbose else "ERROR"
     }
 
@@ -328,7 +330,6 @@ def my_config():
 def run(params):
     # Retrieve the tune.Trainable object that is used for the experiment
     trainer = gen_trainer_from_params(params)
-
     # Object to store training results in
     result = {}
 
@@ -340,11 +341,14 @@ def run(params):
 
         if i % params['save_every'] == 0:
             save_path = save_trainer(trainer, params)
+
             if params['verbose']:
                 print("saved trainer at", save_path)
 
     # Save the state of the experiment at end
     save_path = save_trainer(trainer, params)
+
+
     if params['verbose']:
         print("saved trainer at", save_path)
 
