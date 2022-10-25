@@ -20,7 +20,7 @@ setup(
         "numpy",
         "seaborn==0.9.0",
         "pygame==1.9.5",
-        "ray[rllib]==2.0.0",
+        "ray[rllib]>=2.0.0",
         "protobuf",
         "tensorflow==2.10",
     ],
