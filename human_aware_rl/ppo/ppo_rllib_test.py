@@ -154,6 +154,7 @@ class TestPPORllib(unittest.TestCase):
         results = ex.run(
             config_updates={
                 # Please feel free to modify the parameters below
+                "lr": 5e-3,
                 "results_dir": self.temp_results_dir,
                 "num_workers": 2,
                 "train_batch_size": 800,
@@ -169,7 +170,8 @@ class TestPPORllib(unittest.TestCase):
             options={"--loglevel": "ERROR"},
         ).result
         # Sanity check (make sure it begins to learn to receive dense reward)
-        self.assertGreaterEqual(results["average_total_reward"], self.min_performance)
+        # performance benchmark hardcoded by comparing exp runs with and without SGD enabled 
+        self.assertGreaterEqual(results["average_total_reward"], 8)
 
         if self.compute_pickle:
             self.expected["test_ppo_sp_no_phi"] = results
@@ -183,6 +185,7 @@ class TestPPORllib(unittest.TestCase):
         results = ex.run(
             config_updates={
                 # Please feel free to modify the parameters below
+                "lr": 5e-3,
                 "results_dir": self.temp_results_dir,
                 "num_workers": 2,
                 "train_batch_size": 1600,
@@ -198,7 +201,8 @@ class TestPPORllib(unittest.TestCase):
             options={"--loglevel": "ERROR"},
         ).result
         # Sanity check (make sure it begins to learn to receive dense reward)
-        self.assertGreaterEqual(results["average_total_reward"], self.min_performance)
+        # performance benchmark hardcoded by comparing exp runs with and without SGD enabled 
+        self.assertGreaterEqual(results["average_total_reward"], 15)
 
         if self.compute_pickle:
             self.expected["test_ppo_sp_yes_phi"] = results
@@ -220,7 +224,7 @@ class TestPPORllib(unittest.TestCase):
                 "use_phi": False,
                 "entropy_coeff_start": 0.0002,
                 "entropy_coeff_end": 0.00005,
-                "lr": 7e-4,
+                "lr": 5e-3,
                 "seeds": [0],
                 "outer_shape": (5, 4),
                 "evaluation_display": False,
@@ -229,7 +233,8 @@ class TestPPORllib(unittest.TestCase):
             options={"--loglevel": "ERROR"},
         ).result
         # Sanity check (make sure it begins to learn to receive dense reward)
-        self.assertGreaterEqual(results["average_total_reward"], self.min_performance)
+        # performance benchmark hardcoded by comparing exp runs with and without SGD enabled
+        self.assertGreaterEqual(results["average_total_reward"], 7.5)
 
         if self.compute_pickle:
             self.expected["test_ppo_fp_sp_no_phi"] = results
@@ -242,6 +247,7 @@ class TestPPORllib(unittest.TestCase):
         # Train a self play agent for 20 iterations
         results = ex_fp.run(
             config_updates={
+                "lr": 7e-4,
                 "results_dir": self.temp_results_dir,
                 "num_workers": 2,
                 "train_batch_size": 1600,
@@ -251,7 +257,6 @@ class TestPPORllib(unittest.TestCase):
                 "use_phi": True,
                 "entropy_coeff_start": 0.0002,
                 "entropy_coeff_end": 0.00005,
-                "lr": 7e-4,
                 "seeds": [0],
                 "outer_shape": (5, 4),
                 "evaluation_display": False,
@@ -259,11 +264,9 @@ class TestPPORllib(unittest.TestCase):
             },
             options={"--loglevel": "ERROR"},
         ).result
-        print(results["average_total_reward"])
-
 
         # Sanity check (make sure it begins to learn to receive dense reward)
-        self.assertGreaterEqual(results["average_total_reward"], self.min_performance)
+        self.assertGreaterEqual(results["average_total_reward"], 14)
 
         if self.compute_pickle:
             self.expected["test_ppo_fp_sp_yes_phi"] = results
