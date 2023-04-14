@@ -10,12 +10,12 @@ from overcooked_ai_py.mdp.layout_generator import LayoutGenerator
 from overcooked_ai_py.agents.agent import AgentFromPolicy, AgentPair
 from overcooked_ai_py.utils import load_pickle, save_pickle, load_dict_from_file
 
-from human_aware_rl.utils import create_dir_if_not_exists, num_tf_params, get_max_iter
+# from human_aware_rl.utils import create_dir_if_not_exists, num_tf_params, get_max_iter
 
-from baselines.ppo2.ppo2 import learn
+# from baselines.ppo2.ppo2 import learn
 from baselines.common.vec_env import VecEnvWrapper
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
-from baselines.common.models import register
+# from baselines.common.models import register
         
 
 class RewardShapingEnv(VecEnvWrapper):
@@ -101,56 +101,56 @@ class DummyEnv(object):
 # UTILS AND HELPER FNS #
 ########################
 
-@register("conv_and_mlp")
-def conv_network_fn(**kwargs):
-    """Used to register custom network type used by Baselines for Overcooked"""
-
-    if "network_kwargs" in kwargs.keys():
-        params = kwargs["network_kwargs"]
-    else:
-        params = kwargs
-
-    num_hidden_layers = params["NUM_HIDDEN_LAYERS"]
-    size_hidden_layers = params["SIZE_HIDDEN_LAYERS"]
-    num_filters = params["NUM_FILTERS"]
-    num_convs = params["NUM_CONV_LAYERS"]
-
-    def network_fn(X):
-        print(X.shape)
-        
-        conv_out = tf.layers.conv2d(
-            inputs=X, 
-            filters=num_filters, 
-            kernel_size=[5, 5],
-            padding="same",
-            activation=tf.nn.leaky_relu,
-            name="conv_initial"
-        )
-
-        for i in range(0, num_convs - 1):
-            padding = "same" if i < num_convs - 2 else "valid"
-            conv_out = tf.layers.conv2d(
-                inputs=conv_out,
-                filters=num_filters,
-                kernel_size=[3, 3],
-                padding=padding,
-                activation=tf.nn.leaky_relu,
-                name="conv_{}".format(i)
-            )
-        
-        out = tf.layers.flatten(conv_out)
-        for _ in range(num_hidden_layers):
-            out = tf.layers.dense(out, size_hidden_layers, activation=tf.nn.leaky_relu)
-        
-        print("Last layer conv network output shape", out.shape)
-        
-        # NOTE: not sure if not supposed to add linear layer. I think it is though, 
-        # as things work and similar to code in baseline/models.py? Maybe double check later.
-
-        # To check how many parameters uncomment next line
-        # num_tf_params()
-        return out
-    return network_fn
+# @register("conv_and_mlp")
+# def conv_network_fn(**kwargs):
+#     """Used to register custom network type used by Baselines for Overcooked"""
+#
+#     if "network_kwargs" in kwargs.keys():
+#         params = kwargs["network_kwargs"]
+#     else:
+#         params = kwargs
+#
+#     num_hidden_layers = params["NUM_HIDDEN_LAYERS"]
+#     size_hidden_layers = params["SIZE_HIDDEN_LAYERS"]
+#     num_filters = params["NUM_FILTERS"]
+#     num_convs = params["NUM_CONV_LAYERS"]
+#
+#     def network_fn(X):
+#         print(X.shape)
+#
+#         conv_out = tf.layers.conv2d(
+#             inputs=X,
+#             filters=num_filters,
+#             kernel_size=[5, 5],
+#             padding="same",
+#             activation=tf.nn.leaky_relu,
+#             name="conv_initial"
+#         )
+#
+#         for i in range(0, num_convs - 1):
+#             padding = "same" if i < num_convs - 2 else "valid"
+#             conv_out = tf.layers.conv2d(
+#                 inputs=conv_out,
+#                 filters=num_filters,
+#                 kernel_size=[3, 3],
+#                 padding=padding,
+#                 activation=tf.nn.leaky_relu,
+#                 name="conv_{}".format(i)
+#             )
+#
+#         out = tf.layers.flatten(conv_out)
+#         for _ in range(num_hidden_layers):
+#             out = tf.layers.dense(out, size_hidden_layers, activation=tf.nn.leaky_relu)
+#
+#         print("Last layer conv network output shape", out.shape)
+#
+#         # NOTE: not sure if not supposed to add linear layer. I think it is though,
+#         # as things work and similar to code in baseline/models.py? Maybe double check later.
+#
+#         # To check how many parameters uncomment next line
+#         # num_tf_params()
+#         return out
+#     return network_fn
 
 def get_vectorized_gym_env(base_env, gym_env_name, featurize_fn=None, **kwargs):
     """
